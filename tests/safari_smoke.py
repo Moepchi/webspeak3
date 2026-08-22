@@ -29,7 +29,7 @@ def check_page(driver: webdriver.Safari, width: int, height: int, label: str) ->
     assert client_link.is_displayed()
     assert demo_link.is_displayed()
 
-    english_button = driver.find_element(By.CSS_SELECTOR, ".lang-switch button:last-child")
+    english_button = driver.find_element(By.CSS_SELECTOR, ".language-switch button:last-child")
     driver.execute_script("arguments[0].click()", english_button)
     WebDriverWait(driver, 10).until(
         lambda current: any(
