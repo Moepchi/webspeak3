@@ -29,10 +29,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -58,19 +58,19 @@ jobs:
       - name: Prepare Safari automation
         run: |
           sudo safaridriver --enable
-          python3 -m pip install selenium
+          python3 -m venv .venv-safari
+          .venv-safari/bin/python -m pip install selenium
 
       - name: Test landing page in Safari
         env:
           BASE_URL: http://127.0.0.1:4173/landing/
-        run: python3 tests/safari_smoke.py
+        run: .venv-safari/bin/python tests/safari_smoke.py
 
       - name: Upload Safari screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: safari-screenshots
           path: test-results/safari-*.png
           if-no-files-found: ignore
           retention-days: 14
-
