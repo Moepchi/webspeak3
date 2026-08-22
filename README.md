@@ -9,7 +9,8 @@
   <a href="Dockerfile"><img src="https://img.shields.io/badge/docker-build%20passing-2496ED?logo=docker&logoColor=white" alt="Docker Build"></a>
   <a href="gateway/package.json"><img src="https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white" alt="Node Version"></a>
   <a href="connector/Cargo.toml"><img src="https://img.shields.io/badge/rust-2021-000000?logo=rust&logoColor=white" alt="Rust Version"></a>
-  <img src="https://img.shields.io/badge/status-beta%20%2F%20prototype-yellow" alt="Project Status">
+  <a href="https://github.com/Moepchi/webspeak3/releases"><img src="https://img.shields.io/github/v/release/Moepchi/webspeak3?include_prereleases&label=release" alt="Latest Release"></a>
+  <img src="https://img.shields.io/badge/status-public%20beta-f0b429" alt="Project Status">
 </p>
 
 <p align="center">
@@ -20,8 +21,9 @@
   <a href="https://webspeak3.de">🌐 Website</a> ·
   <a href="https://client.webspeak3.de">💬 Open Client</a> ·
   <a href="https://demo.webspeak3.de">🕹️ Live Demo</a> ·
-  <a href="#-installation">🚀 Quick Start</a> ·
+  <a href="#-quick-start">🚀 Quick Start</a> ·
   <a href="#-installation">📖 Installation</a> ·
+  <a href="ROADMAP.md">🗺️ Roadmap</a> ·
   <a href="https://github.com/Moepchi/webspeak3/issues">🐛 Report Bug</a>
 </p>
 
@@ -33,14 +35,29 @@
 
 <table>
   <tr>
-    <th>Dark Mode</th>
-    <th>Light Mode</th>
+    <th>Desktop</th>
+    <th>Mobile</th>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/webspeak_dark.png" width="100%" alt="Dark mode screenshot"></td>
-    <td><img src="docs/screenshots/webspeak_light.png" width="100%" alt="Light mode screenshot"></td>
+    <td width="72%"><img src="web/public/screenshots/webspeak_current.png" width="100%" alt="WebSpeak3 desktop client connected to a TeamSpeak server"></td>
+    <td width="28%" align="center"><img src="web/public/screenshots/webspeak_mobile.png" width="260" alt="WebSpeak3 mobile client connected to a TeamSpeak server"></td>
   </tr>
 </table>
+
+## 🚀 Quick Start
+
+Run the ready-made container and open **http://localhost:8080**:
+
+```bash
+docker run -d --name webspeak3 --restart unless-stopped -p 8080:8080 moepchi/webspeak3:latest
+```
+
+Enter the address and port of **any reachable TeamSpeak 3 or TeamSpeak 6
+server** in the connection dialog. The TeamSpeak server does not need to be
+installed on the same machine, modified, or operated by you.
+
+> Voice requires a secure context. Microphone access works on `localhost`; for
+> access from other devices, place WebSpeak3 behind an HTTPS reverse proxy.
 
 ## ✨ Features
 
@@ -99,6 +116,19 @@ Browser (web/)  <--WebSocket-->  Gateway (gateway/)  <--stdin/stdout JSON-->  Ru
   and Opus-encoded voice.
 
 </details>
+
+## 🌐 Browser Support
+
+| Browser | Status | Notes |
+|---|---|---|
+| Chrome / Edge / Chromium | ✅ Primary target | Recommended for the most complete audio and device support |
+| Firefox | ✅ Supported | Core client and voice functionality are supported |
+| Safari | 🧪 Experimental | Audio and microphone behavior still needs broader real-device testing |
+| Mobile Chromium | ✅ Supported | Responsive client with microphone support over HTTPS |
+| Mobile Safari | 🧪 Experimental | UI is responsive; audio behavior remains under active validation |
+
+WebSpeak3 is a public beta. See the [beta roadmap](ROADMAP.md) for the current
+scope, known limitations, and the next milestones.
 
 ## 🚀 Installation
 
