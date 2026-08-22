@@ -87,3 +87,8 @@
 @media(max-width:900px){.connect-layout,.github-inner{grid-template-columns:1fr}.github-inner{gap:35px}.github-metrics{grid-template-columns:repeat(3,1fr)}.browser-table article{grid-template-columns:44px 1fr 130px}.browser-table small{grid-column:2/-1}}
 @media(max-width:600px){.connect-layout{gap:18px}.connect-demo{padding:18px}.github-live{padding:70px 0}.github-metrics{grid-template-columns:1fr}.github-metrics article{min-height:110px}.install-tabs{grid-template-columns:1fr 1fr}.browser-table article{grid-template-columns:38px 1fr;gap:10px;padding:16px}.browser-table b{grid-column:2}.browser-table small{grid-column:2}}
 @media(prefers-reduced-motion:reduce){.typed-server{width:19ch}.is-visible .typed-server,.fake-input b,.is-visible .connect-demo>button,.is-visible .progress-connecting,.is-visible .progress-connected{animation:none}.progress-connecting{display:none}.progress-connected{opacity:1}}
+
+/* Keep the animated connection indicator beside its label. */
+.connect-progress>i{display:none}
+.connect-progress span{display:flex;align-items:center;gap:8px}
+.progress-connecting:before{content:"";flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#38d89e;box-shadow:0 0 10px #38d89e}
