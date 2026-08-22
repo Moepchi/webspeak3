@@ -1,0 +1,76 @@
+name: Safari landing page check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "web/src/landing.tsx"
+      - "web/src/landing.css"
+      - "web/landing/**"
+      - "web/public/**"
+      - ".github/workflows/safari-check.yml"
+      - "tests/safari_smoke.py"
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: safari-landing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  safari:
+    name: Safari on macOS
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install and build landing page
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start local preview
+        working-directory: web
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/webspeak3-preview.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:4173/landing/ > /dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/webspeak3-preview.log
+          exit 1
+
+      - name: Prepare Safari automation
+        run: |
+          sudo safaridriver --enable
+          python3 -m pip install selenium
+
+      - name: Test landing page in Safari
+        env:
+          BASE_URL: http://127.0.0.1:4173/landing/
+        run: python3 tests/safari_smoke.py
+
+      - name: Upload Safari screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-screenshots
+          path: test-results/safari-*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
