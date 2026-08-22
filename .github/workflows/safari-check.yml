@@ -1,13 +1,12 @@
-name: Safari landing page check
+name: Safari WebSpeak3 client check
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - "web/src/landing.tsx"
-      - "web/src/landing.css"
-      - "web/landing/**"
+      - "web/src/**"
+      - "web/index.html"
       - "web/public/**"
       - ".github/workflows/safari-check.yml"
       - "tests/safari_smoke.py"
@@ -49,7 +48,7 @@ jobs:
         run: |
           npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/webspeak3-preview.log 2>&1 &
           for attempt in {1..30}; do
-            curl --fail --silent http://127.0.0.1:4173/landing/ > /dev/null && exit 0
+            curl --fail --silent http://127.0.0.1:4173/ > /dev/null && exit 0
             sleep 1
           done
           cat /tmp/webspeak3-preview.log
@@ -63,14 +62,14 @@ jobs:
 
       - name: Test landing page in Safari
         env:
-          BASE_URL: http://127.0.0.1:4173/landing/
+          BASE_URL: http://127.0.0.1:4173/
         run: .venv-safari/bin/python tests/safari_smoke.py
 
       - name: Upload Safari screenshots
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: safari-screenshots
-          path: test-results/safari-*.png
+          name: safari-client-screenshots
+          path: test-results/safari-client-*.png
           if-no-files-found: ignore
           retention-days: 14
