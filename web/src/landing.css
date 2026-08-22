@@ -110,3 +110,7 @@
 @media(prefers-reduced-motion:reduce){.nav .brand img,.nav nav a:after,.nav-github,.connect-steps article,.github-metrics article,.browser-table article,.community-grid>a,.github-metrics article>span,.browser-logo,.community.is-visible:before,.community-note span{animation:none;transition:none}.connect-steps article,.github-metrics article,.browser-table article,.community-grid>a{opacity:1;transform:none}}
 
 body{overflow-x:hidden}.landing{overflow:visible}.is-visible .community-grid>a:hover{transform:translateY(-6px)}
+
+/* Keep the floating header clean and fit the expanded section navigation. */
+.landing{background-image:linear-gradient(90deg,#ffffff05 1px,transparent 1px)}.nav nav{gap:19px}.nav nav a{font-size:12px;white-space:nowrap}
+@media(max-width:1080px){.nav nav{gap:12px}.nav nav a{font-size:11px}.nav{padding-inline:13px}.nav .brand{font-size:19px}.nav-actions{gap:6px}.nav-github{padding-inline:10px}}
