@@ -135,14 +135,21 @@ function Landing() {
     const sections = ["features", "architecture", "install"]
       .map(id => document.getElementById(id))
       .filter((section): section is HTMLElement => section !== null);
-    const observer = new IntersectionObserver(
-      entries => entries.forEach(entry => {
-        if (entry.isIntersecting) setActiveNav(entry.target.id);
-      }),
-      { rootMargin: "-28% 0px -58%", threshold: 0 },
-    );
-    sections.forEach(section => observer.observe(section));
-    return () => observer.disconnect();
+    const updateActiveSection = () => {
+      const marker = window.innerHeight * 0.34;
+      let current = "";
+      sections.forEach(section => {
+        if (section.getBoundingClientRect().top <= marker) current = section.id;
+      });
+      setActiveNav(current);
+    };
+    updateActiveSection();
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("resize", updateActiveSection);
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("resize", updateActiveSection);
+    };
   }, []);
 
   return <div className="landing">
