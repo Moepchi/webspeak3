@@ -37,7 +37,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Install and build landing page
+      - name: Install and build WebSpeak3 client
         working-directory: web
         run: |
           npm ci
@@ -60,7 +60,7 @@ jobs:
           python3 -m venv .venv-safari
           .venv-safari/bin/python -m pip install selenium
 
-      - name: Test landing page in Safari
+      - name: Test WebSpeak3 client in Safari
         env:
           BASE_URL: http://127.0.0.1:4173/
         run: .venv-safari/bin/python tests/safari_smoke.py
