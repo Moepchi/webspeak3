@@ -86,6 +86,7 @@ function Landing() {
   const [copied, setCopied] = useState(false);
   const [phoneStyle] = useState<PhoneStyle>(detectPhoneStyle);
   const [installMethod, setInstallMethod] = useState(0);
+  const [activeNav, setActiveNav] = useState("");
   const [githubStats, setGithubStats] = useState<GitHubStats>({ stars: null, release: null, updated: null });
 
   const copyInstallCommand = () => {
@@ -130,11 +131,25 @@ function Landing() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const sections = ["features", "architecture", "install"]
+      .map(id => document.getElementById(id))
+      .filter((section): section is HTMLElement => section !== null);
+    const observer = new IntersectionObserver(
+      entries => entries.forEach(entry => {
+        if (entry.isIntersecting) setActiveNav(entry.target.id);
+      }),
+      { rootMargin: "-28% 0px -58%", threshold: 0 },
+    );
+    sections.forEach(section => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
   return <div className="landing">
     <div className="ambient ambient-one"></div><div className="ambient ambient-two"></div>
     <header className="nav shell">
       <a className="brand" href="#top"><img src="../logo.png" alt=""/><span>WebSpeak<span>3</span></span></a>
-      <nav aria-label={lang === "de" ? "Hauptnavigation" : "Main navigation"}><a href="#features">{t.nav[0]}</a><a href="#architecture">{t.nav[1]}</a><a href="#install">{t.nav[2]}</a></nav>
+      <nav aria-label={lang === "de" ? "Hauptnavigation" : "Main navigation"}>{["features", "architecture", "install"].map((id, index) => <a key={id} className={activeNav === id ? "active" : ""} href={`#${id}`} onClick={() => setActiveNav(id)}>{t.nav[index]}</a>)}</nav>
       <div className="nav-actions"><div className="language-switch" role="group" aria-label={lang === "de" ? "Sprache wählen" : "Choose language"}><button className={lang === "de" ? "active" : ""} onClick={() => setLang("de")} aria-pressed={lang === "de"}>DE</button><button className={lang === "en" ? "active" : ""} onClick={() => setLang("en")} aria-pressed={lang === "en"}>EN</button></div><a className="nav-github" href={github} target="_blank" rel="noreferrer">GitHub <span>↗</span></a></div>
     </header>
 
