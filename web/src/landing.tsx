@@ -25,7 +25,7 @@ const copy = {
     architectureKicker: "UNTER DER HAUBE", architectureTitle: "Vom Tab zu jedem Server.", architectureText: "Dein selbst gehostetes Gateway übersetzt WebSocket-Nachrichten in das echte TeamSpeak-Protokoll und verbindet dich mit dem gewünschten Server.",
     screenKicker: "FÜR JEDEN BILDSCHIRM", screenTitle: ["Desktop-Komfort.", "Mobile Freiheit."], screenText: "Dark oder Light, großer Monitor oder Smartphone: WebSpeak3 passt sich an, ohne Kernfunktionen zu verstecken.",
     statusKicker: "OFFEN ENTWICKELT", statusTitle: "Beta, aber schon ziemlich gesprächig.", statusText: "WebSpeak3 ist ein aktiver Prototyp. Diese Übersicht zeigt transparent, was heute bereits funktioniert und wo noch Feinschliff folgt.", statusLabels: ["Verfügbar", "In Arbeit", "Als Nächstes"], statusCards: [["Voice, Chat & Channel Tree", "Echte TS3/TS6-Verbindungen, Opus-Audio, Whisper, Chats und Live-Status."], ["Browser-Kompatibilität", "Audioausgabe und Mikrofonverhalten werden für weitere Browser und Geräte verfeinert."], ["Mehr Komfort", "Weitere Desktop-Client-Details, stabilere Randfälle und Community-Feedback."]], roadmap: "Roadmap und Issues ansehen",
-    githubKicker: "LIVE VON GITHUB", githubTitle: "Offen entwickelt. Öffentlich nachvollziehbar.", githubText: "Aktuelle Projektdaten direkt aus dem öffentlichen Repository.", githubLabels: ["GitHub Stars", "Aktueller Release", "Zuletzt aktualisiert"], githubFallback: "Beta",
+    githubKicker: "LIVE VON GITHUB", githubTitle: "Offen entwickelt. Öffentlich nachvollziehbar.", githubText: "Aktuelle Projektdaten direkt aus dem öffentlichen Repository.", githubLabels: ["GitHub Stars", "Aktueller Release", "Zuletzt aktualisiert"], githubFallback: "Beta", releaseKicker: "WAS NEU IST", releaseTitle: "Die letzten Updates.", releaseText: "Releases und Änderungen direkt aus GitHub – automatisch aktuell.", releaseAction: "Alle Releases", releaseEmpty: "Noch keine veröffentlichten Release-Notizen. Die aktuelle Entwicklung kannst du auf GitHub verfolgen.", releaseFallback: "Aktuelle Entwicklung",
     tourKicker: "LIVE ERKUNDEN", tourTitle: "Der Client, erklärt im Kontext.", tourText: "Wähle einen Bereich und sieh direkt, wo die wichtigsten Funktionen im WebSpeak3-Client sitzen.", tourItems: [["tree", "Channel Tree", "Channels, Nutzer und Status wechseln in Echtzeit."], ["chat", "Chat & Events", "Server-, Channel- und Direktnachrichten bleiben übersichtlich getrennt."], ["voice", "Voice Controls", "Mikrofon, Lautsprecher, Aktivierung und Pegel immer griffbereit."], ["whisper", "Whisper", "Gezielt einzelne Nutzer oder komplette Channels ansprechen."]],
     installKicker: "IN MINUTEN STARTKLAR", installTitle: "Dein WebSpeak3. Jeder Server.", installText: "Hoste den Browser-Client selbst und verbinde dich anschließend mit jedem erreichbaren TeamSpeak-Server.", installSteps: [["01", "WebSpeak3 starten", "Passende Installationsart auswählen."], ["02", "Browser öffnen", "WebSpeak3 lokal oder über deine Domain aufrufen."], ["03", "Server frei wählen", "Beliebige TS-Adresse und deinen Nickname eingeben – fertig."]], installTabs: ["Docker Run", "Docker Compose", "Reverse Proxy", "Entwicklung"], installGuide: "Installationsanleitung", copyCommand: "Befehl kopieren", copied: "Kopiert!",
     browserKicker: "BROWSER-CHECK", browserTitle: "Bereit für deinen Browser.", browserText: "WebSpeak3 nutzt moderne Web-Audio-APIs. Die Kernfunktionen laufen browserübergreifend; einzelne Gerätefunktionen können abweichen.", browserRows: [["Edge", "Voll unterstützt", "Empfohlen unter Windows"], ["Chrome / Chromium", "Voll unterstützt", "Desktop und Android"], ["Firefox", "Unterstützt", "Audioausgabe kann je nach System abweichen"], ["Safari", "Experimentell", "Web-Audio-Verhalten wird weiter verfeinert"]],
@@ -43,7 +43,7 @@ const copy = {
     architectureKicker: "UNDER THE HOOD", architectureTitle: "From your tab to any server.", architectureText: "Your self-hosted gateway translates WebSocket messages into the real TeamSpeak protocol and connects you to the server you choose.",
     screenKicker: "FOR EVERY SCREEN", screenTitle: ["Desktop comfort.", "Mobile freedom."], screenText: "Dark or light, large display or smartphone: WebSpeak3 adapts without hiding core functionality.",
     statusKicker: "BUILT IN THE OPEN", statusTitle: "Beta, but already quite talkative.", statusText: "WebSpeak3 is an active prototype. This overview is transparent about what works today and where refinement is still underway.", statusLabels: ["Available", "In progress", "Up next"], statusCards: [["Voice, chat & channel tree", "Real TS3/TS6 connections, Opus audio, whisper, chats and live status."], ["Browser compatibility", "Audio output and microphone behavior are being refined across more browsers and devices."], ["More polish", "More desktop-client details, resilient edge cases and community feedback."]], roadmap: "View roadmap and issues",
-    githubKicker: "LIVE FROM GITHUB", githubTitle: "Built in the open. Publicly traceable.", githubText: "Current project data directly from the public repository.", githubLabels: ["GitHub stars", "Current release", "Last updated"], githubFallback: "Beta",
+    githubKicker: "LIVE FROM GITHUB", githubTitle: "Built in the open. Publicly traceable.", githubText: "Current project data directly from the public repository.", githubLabels: ["GitHub stars", "Current release", "Last updated"], githubFallback: "Beta", releaseKicker: "WHAT'S NEW", releaseTitle: "The latest updates.", releaseText: "Releases and changes straight from GitHub — always current.", releaseAction: "All releases", releaseEmpty: "No published release notes yet. Follow the current development on GitHub.", releaseFallback: "Current development",
     tourKicker: "EXPLORE IT LIVE", tourTitle: "The client, explained in context.", tourText: "Choose an area to see exactly where WebSpeak3 keeps its most important features.", tourItems: [["tree", "Channel tree", "Channels, users and status update in real time."], ["chat", "Chat & events", "Server, channel and direct messages stay clearly separated."], ["voice", "Voice controls", "Microphone, speakers, activation and levels remain within reach."], ["whisper", "Whisper", "Talk directly to individual users or complete channels."]],
     installKicker: "READY IN MINUTES", installTitle: "Your WebSpeak3. Any server.", installText: "Self-host the browser client, then connect to any reachable TeamSpeak server.", installSteps: [["01", "Start WebSpeak3", "Choose the installation method that fits."], ["02", "Open your browser", "Visit WebSpeak3 locally or through your domain."], ["03", "Choose any server", "Enter any TS address and your nickname — done."]], installTabs: ["Docker Run", "Docker Compose", "Reverse Proxy", "Development"], installGuide: "Installation guide", copyCommand: "Copy command", copied: "Copied!",
     browserKicker: "BROWSER CHECK", browserTitle: "Ready for your browser.", browserText: "WebSpeak3 uses modern Web Audio APIs. Core features work across browsers; individual device features may vary.", browserRows: [["Edge", "Fully supported", "Recommended on Windows"], ["Chrome / Chromium", "Fully supported", "Desktop and Android"], ["Firefox", "Supported", "Audio output may vary by system"], ["Safari", "Experimental", "Web Audio behavior is still being refined"]],
@@ -74,6 +74,7 @@ const installCommands = [
 ] as const;
 
 type GitHubStats = { stars: number | null; release: string | null; updated: string | null };
+type GitHubRelease = { id: number; tag: string; title: string; body: string; date: string; url: string };
 
 function Landing() {
   const [lang, setLang] = useState<Lang>(() => {
@@ -87,7 +88,9 @@ function Landing() {
   const [phoneStyle] = useState<PhoneStyle>(detectPhoneStyle);
   const [installMethod, setInstallMethod] = useState(0);
   const [activeNav, setActiveNav] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [githubStats, setGithubStats] = useState<GitHubStats>({ stars: null, release: null, updated: null });
+  const [releases, setReleases] = useState<GitHubRelease[]>([]);
 
   const copyInstallCommand = () => {
     navigator.clipboard?.writeText(installCommands[installMethod]);
@@ -107,13 +110,30 @@ function Landing() {
     const controller = new AbortController();
     Promise.all([
       fetch("https://api.github.com/repos/Moepchi/webspeak3", { signal: controller.signal }).then(response => response.ok ? response.json() : null),
-      fetch("https://api.github.com/repos/Moepchi/webspeak3/releases/latest", { signal: controller.signal }).then(response => response.ok ? response.json() : null),
-    ]).then(([repo, release]) => setGithubStats({
-      stars: typeof repo?.stargazers_count === "number" ? repo.stargazers_count : null,
-      release: typeof release?.tag_name === "string" ? release.tag_name : null,
-      updated: typeof repo?.pushed_at === "string" ? repo.pushed_at : null,
-    })).catch(() => undefined);
+      fetch("https://api.github.com/repos/Moepchi/webspeak3/releases?per_page=3", { signal: controller.signal }).then(response => response.ok ? response.json() : []),
+    ]).then(([repo, releaseData]) => {
+      const items = Array.isArray(releaseData) ? releaseData : [];
+      setGithubStats({
+        stars: typeof repo?.stargazers_count === "number" ? repo.stargazers_count : null,
+        release: typeof items[0]?.tag_name === "string" ? items[0].tag_name : null,
+        updated: typeof repo?.pushed_at === "string" ? repo.pushed_at : null,
+      });
+      setReleases(items.map((release: any) => ({
+        id: Number(release.id),
+        tag: String(release.tag_name ?? "Beta"),
+        title: String(release.name || release.tag_name || "WebSpeak3"),
+        body: String(release.body || "").replace(/[#>*_`[\]]/g, "").replace(/\r?\n+/g, " ").trim(),
+        date: String(release.published_at || release.created_at || ""),
+        url: String(release.html_url || `${github}/releases`),
+      })));
+    }).catch(() => undefined);
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && setMobileMenuOpen(false);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
   }, []);
 
   useEffect(() => {
@@ -157,7 +177,8 @@ function Landing() {
     <header className="nav shell">
       <a className="brand" href="#top"><img src="../logo.png" alt=""/><span>WebSpeak<span>3</span></span></a>
       <nav aria-label={lang === "de" ? "Hauptnavigation" : "Main navigation"}>{["features", "status", "architecture", "tour", "install", "community"].map((id, index) => <a key={id} className={activeNav === id ? "active" : ""} href={`#${id}`} onClick={() => setActiveNav(id)}>{t.nav[index]}</a>)}</nav>
-      <div className="nav-actions"><div className="language-switch" role="group" aria-label={lang === "de" ? "Sprache wählen" : "Choose language"}><button className={lang === "de" ? "active" : ""} onClick={() => setLang("de")} aria-pressed={lang === "de"}>DE</button><button className={lang === "en" ? "active" : ""} onClick={() => setLang("en")} aria-pressed={lang === "en"}>EN</button></div><a className="nav-github" href={github} target="_blank" rel="noreferrer">GitHub <span>↗</span></a></div>
+      <div className="nav-actions"><div className="language-switch" role="group" aria-label={lang === "de" ? "Sprache wählen" : "Choose language"}><button className={lang === "de" ? "active" : ""} onClick={() => { setLang("de"); setMobileMenuOpen(false); }} aria-pressed={lang === "de"}>DE</button><button className={lang === "en" ? "active" : ""} onClick={() => { setLang("en"); setMobileMenuOpen(false); }} aria-pressed={lang === "en"}>EN</button></div><a className="nav-github" href={github} target="_blank" rel="noreferrer">GitHub <span>↗</span></a><button className={`menu-toggle ${mobileMenuOpen ? "active" : ""}`} type="button" aria-label={lang === "de" ? "Navigation öffnen" : "Open navigation"} aria-expanded={mobileMenuOpen} aria-controls="mobile-navigation" onClick={() => setMobileMenuOpen(open => !open)}><i></i><i></i><i></i></button></div>
+      <div className={`mobile-nav ${mobileMenuOpen ? "open" : ""}`} id="mobile-navigation" aria-hidden={!mobileMenuOpen}>{["features", "status", "architecture", "tour", "install", "community"].map((id, index) => <a key={id} className={activeNav === id ? "active" : ""} href={`#${id}`} onClick={() => { setActiveNav(id); setMobileMenuOpen(false); }}><span>0{index + 1}</span>{t.nav[index]}</a>)}<a className="mobile-client" href={client}>{t.client}<b>→</b></a></div>
     </header>
 
     <main id="top">
@@ -192,6 +213,8 @@ function Landing() {
       <section className="section shell status reveal" id="status"><div className="section-head"><div><span className="kicker">{t.statusKicker}</span><h2>{t.statusTitle}</h2></div><p>{t.statusText}</p></div><div className="status-grid">{t.statusCards.map(([title, description], index) => <article key={title}><span className={`status-dot status-${index}`}></span><small>{t.statusLabels[index]}</small><h3>{title}</h3><p>{description}</p></article>)}</div><a className="text-link status-link" href={`${github}/issues`} target="_blank" rel="noreferrer">{t.roadmap} <span>↗</span></a></section>
 
       <section className="github-live reveal"><div className="shell github-inner"><div className="github-copy"><span className="kicker">{t.githubKicker}</span><h2>{t.githubTitle}</h2><p>{t.githubText}</p><a className="text-link" href={github} target="_blank" rel="noreferrer">github.com/Moepchi/webspeak3 ↗</a></div><div className="github-metrics"><article><span>★</span><strong>{githubStats.stars === null ? "—" : githubStats.stars.toLocaleString(lang === "de" ? "de-DE" : "en-US")}</strong><small>{t.githubLabels[0]}</small></article><article><span>↗</span><strong>{githubStats.release ?? t.githubFallback}</strong><small>{t.githubLabels[1]}</small></article><article><span>↻</span><strong>{githubStats.updated ? new Intl.DateTimeFormat(lang === "de" ? "de-DE" : "en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(githubStats.updated)) : "—"}</strong><small>{t.githubLabels[2]}</small></article></div></div></section>
+
+      <section className="section shell releases reveal"><div className="section-head"><div><span className="kicker">{t.releaseKicker}</span><h2>{t.releaseTitle}</h2></div><p>{t.releaseText}</p></div>{releases.length > 0 ? <div className="release-list">{releases.map((release, index) => <a href={release.url} target="_blank" rel="noreferrer" key={release.id}><div className="release-meta"><span>{index === 0 ? "Latest" : `0${index + 1}`}</span><time dateTime={release.date}>{release.date ? new Intl.DateTimeFormat(lang === "de" ? "de-DE" : "en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(release.date)) : "GitHub"}</time></div><div><small>{release.tag}</small><strong>{release.title}</strong><p>{release.body || t.releaseFallback}</p></div><b>↗</b></a>)}</div> : <a className="release-empty" href={`${github}/commits/main`} target="_blank" rel="noreferrer"><span>↻</span><div><strong>{t.releaseFallback}</strong><p>{t.releaseEmpty}</p></div><b>↗</b></a>}<a className="text-link release-all" href={`${github}/releases`} target="_blank" rel="noreferrer">{t.releaseAction} <span>↗</span></a></section>
 
       <section className="section shell architecture reveal" id="architecture"><div className="section-head centered"><div><span className="kicker">{t.architectureKicker}</span><h2>{t.architectureTitle}</h2></div><p>{t.architectureText}</p></div><div className="flow">{[["Browser","React + Web Audio"],["Gateway","WebSocket · Node.js"],["Rust Connector","tsclientlib + Opus"],["TeamSpeak Server","TS3 / TS6 Protocol"]].map((x,i)=><div className="flow-wrap" style={{"--delay": `${i * 120}ms`} as React.CSSProperties} key={x[0]}><div className="flow-node"><span>0{i+1}</span><strong>{x[0]}</strong><small>{x[1]}</small></div>{i<3&&<div className="flow-arrow" aria-hidden="true"><i></i></div>}</div>)}</div></section>
 
