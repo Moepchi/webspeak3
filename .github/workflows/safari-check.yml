@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: safari-landing-${{ github.ref }}
+  group: safari-client-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
