@@ -859,10 +859,6 @@ function ConnectDialog({
                   <option>Standard</option>
                 </select>
               </label>
-              <label className="ts-dialog-checkbox">
-                <input type="checkbox" disabled title="Not supported yet" />
-                {t("connect.sendMyTeamSpeakId")}
-              </label>
               <label className="ts-dialog-field">
                 {t("connect.soundPack")}
                 <select disabled defaultValue="Standard">
@@ -1067,10 +1063,6 @@ function FavoritesDialog({
             <label className="ts-dialog-checkbox">
               <input type="checkbox" disabled title="Not supported yet" />
               {t("favorites.connectOnStartup")}
-            </label>
-            <label className="ts-dialog-checkbox">
-              <input type="checkbox" disabled title="Not supported yet" />
-              {t("favorites.enableMyTeamSpeak")}
             </label>
           </div>
         </div>
