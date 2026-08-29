@@ -64,6 +64,731 @@
   color-scheme: dark;
 }
 
+/* Nova: alternate design, independent of the light/dark toggle (always dark). */
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap");
+
+.ts-app.ts-design-nova {
+  --success: oklch(0.75 0.15 150);
+  --bg: oklch(0.17 0.014 258);
+  --bg-toolbar-1: oklch(0.205 0.015 258);
+  --bg-toolbar-2: oklch(0.245 0.016 258);
+  --border: oklch(0.32 0.015 258);
+  --border-soft: oklch(0.27 0.014 258);
+  --text: oklch(0.94 0.006 258);
+  --text-muted: oklch(0.62 0.014 258);
+  --text-faint: oklch(0.46 0.012 258);
+  --accent: #7fb0e8;
+  --input-bg: oklch(0.205 0.015 258);
+  --input-text: oklch(0.94 0.006 258);
+  --button-bg-1: oklch(0.245 0.016 258);
+  --button-bg-2: oklch(0.205 0.015 258);
+  --button-bg-hover-1: oklch(0.28 0.017 258);
+  --button-bg-hover-2: oklch(0.245 0.016 258);
+  --row-hover: oklch(0.28 0.017 258);
+  --client-text: oklch(0.94 0.006 258);
+  --self-text: #7fb0e8;
+  --log-bg: oklch(0.17 0.014 258);
+  --log-text: oklch(0.62 0.014 258);
+  --log-error: oklch(0.68 0.16 25);
+  color-scheme: dark;
+  font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.ts-app.ts-design-nova button,
+.ts-app.ts-design-nova select,
+.ts-app.ts-design-nova input[type="text"],
+.ts-app.ts-design-nova input[type="password"],
+.ts-app.ts-design-nova input[type="search"],
+.ts-app.ts-design-nova .ts-dialog {
+  border-radius: 8px;
+}
+
+/* Nova structural reskin: beyond palette/font, give panels, rows, tabs and
+   chat their own rounded "card" language instead of the Standard theme's
+   flush, hard-edged panes. Standard's layout isn't sacred here - Nova also
+   reorders the top-level app sections (all flex siblings of .ts-app) so the
+   mic/volume/output controls read as a bottom "voice control bar" like the
+   redesign, instead of a top toolbar. */
+
+.ts-app.ts-design-nova > .ts-menubar {
+  order: 0;
+  padding: 0.5rem 1.1rem;
+  gap: 1.1rem;
+  background: var(--bg-toolbar-1);
+  border-bottom: 1px solid var(--border-soft);
+  justify-content: space-between;
+}
+
+.ts-app.ts-design-nova > .ts-menubar .ts-nova-menu-dropdown {
+  order: 1;
+}
+
+/* Nova-theme-only: collapses Verbindungen/Favoriten/.../Hilfe behind a single
+   hamburger button, opening them as a dropdown panel instead of a bare row. */
+
+.ts-nova-menu-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ts-nova-menu-toggle {
+  font-size: 15px;
+  padding: 0.3rem 0.55rem;
+}
+
+.ts-menubar-items.ts-nova-menu-panel {
+  display: none;
+}
+
+.ts-menubar-items.ts-nova-menu-panel.ts-nova-menu-panel-open {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  gap: 2px;
+  padding: 6px;
+  background: var(--bg-toolbar-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 30;
+}
+
+.ts-menubar-items.ts-nova-menu-panel-open .ts-menubar-dropdown {
+  width: 100%;
+}
+
+/* The panel itself docks flush against the right viewport edge, so its nested
+   submenus must open leftward instead of the default rightward - opening right
+   here would run straight off-screen. */
+.ts-menubar-items.ts-nova-menu-panel-open .ts-menu {
+  left: auto;
+  right: 100%;
+  top: -6px;
+  margin-right: 4px;
+}
+
+.ts-menubar-items.ts-nova-menu-panel-open .ts-menubar-item,
+.ts-menubar-items.ts-nova-menu-panel-open .ts-menubar-item-active {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+}
+
+/* Nova splash: while disconnected, the connect dialog IS the app - the whole
+   chrome (menu, toolbar, tree/chat/log) stays mounted but hidden behind it,
+   and reappears the instant a connection exists (see the useEffect forcing
+   connectDialogOpen and the ts-nova-splash class in App.tsx). */
+
+.ts-app.ts-design-nova.ts-nova-splash > .ts-menubar,
+.ts-app.ts-design-nova.ts-nova-splash > .ts-toolbar,
+.ts-app.ts-design-nova.ts-nova-splash > .ts-body,
+.ts-app.ts-design-nova.ts-nova-splash > .ts-log {
+  display: none;
+}
+
+.ts-app.ts-design-nova.ts-nova-splash .ts-dialog-backdrop {
+  background: var(--bg);
+}
+
+/* Connect screen, ported from the TS6 redesign's Connect.dc.html: a centered
+   hero (logo/title/subtitle) above an elevated card, instead of a plain
+   titled dialog box floating on a dim backdrop. */
+
+.ts-connect-nova-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 22px;
+  width: min(520px, 92vw);
+}
+
+.ts-connect-nova-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.ts-connect-nova-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--bg-toolbar-1);
+  font-weight: 800;
+  font-size: 26px;
+  flex-shrink: 0;
+}
+
+.ts-connect-nova-title {
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.ts-connect-nova-subtitle {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.ts-app.ts-design-nova .ts-connect-dialog {
+  width: auto;
+  background: var(--button-bg-1);
+  border-color: var(--border-soft);
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  position: relative;
+}
+
+.ts-app.ts-design-nova .ts-connect-dialog .ts-dialog-body {
+  padding: 22px;
+  gap: 16px;
+}
+
+.ts-app.ts-design-nova .ts-connect-dialog .ts-dialog-field {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  gap: 6px;
+  /* Flex items default to min-width:auto, i.e. their content's intrinsic width -
+     for an <input> that's the browser's default control size, which is wider than
+     the space left in a two-up .ts-dialog-row once padding grows this much. Without
+     this the password/select field refuses to shrink and overflows the card. */
+  min-width: 0;
+}
+
+/* The password field doesn't grow, so once the row's available width is split
+   fairly it should still keep a usable minimum instead of shrinking to a sliver -
+   flex-shrink can still take it below this only if the row itself is too narrow. */
+.ts-app.ts-design-nova .ts-connect-dialog .ts-dialog-row > .ts-dialog-field:not(.ts-dialog-field-grow) {
+  flex: 0 0 150px;
+}
+
+.ts-app.ts-design-nova .ts-connect-dialog .ts-dialog-field input,
+.ts-app.ts-design-nova .ts-connect-dialog .ts-dialog-field select {
+  border-radius: 11px;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  border-color: var(--border-soft);
+}
+
+.ts-connect-nova-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.ts-connect-nova-chevron {
+  transition: transform 0.15s ease;
+}
+
+.ts-connect-nova-chevron-open {
+  transform: rotate(90deg);
+}
+
+.ts-app.ts-design-nova .ts-connect-dialog .ts-dialog-grid {
+  gap: 12px;
+}
+
+.ts-connect-nova-buttons {
+  display: flex;
+  gap: 10px;
+  padding: 0 22px 22px;
+}
+
+.ts-connect-nova-buttons button {
+  border-radius: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ts-connect-cancel,
+.ts-connect-nova-buttons button[disabled] {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-soft);
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ts-connect-nova-primary {
+  flex: 1;
+  background: var(--accent);
+  color: var(--bg-toolbar-1);
+  border: none;
+  padding: 12px 20px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.ts-connect-nova-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ts-connect-nova-settings {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--button-bg-1);
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.ts-connect-nova-settings:hover {
+  background: var(--row-hover);
+}
+
+/* Splash mode hides the cancel button specifically - with nothing connected
+   yet there is no "back" to cancel to. */
+.ts-app.ts-design-nova.ts-nova-splash .ts-connect-cancel {
+  display: none;
+}
+
+.ts-app.ts-design-nova > .ts-menubar .ts-menubar-item {
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+}
+
+.ts-app.ts-design-nova > .ts-menubar .ts-menubar-item-active {
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: var(--bg-toolbar-2);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.ts-app.ts-design-nova > .ts-menubar .ts-menubar-item-active:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.ts-app.ts-design-nova > .ts-body {
+  order: 1;
+}
+
+.ts-app.ts-design-nova > .ts-log {
+  order: 2;
+}
+
+.ts-app.ts-design-nova > .ts-toolbar {
+  order: 3;
+  flex-direction: row;
+  align-items: center;
+  background: var(--bg-toolbar-2);
+  border-bottom: none;
+  border-top: 1px solid var(--border-soft);
+  padding: 0.6rem 1.2rem;
+}
+
+.ts-app.ts-design-nova > .ts-toolbar .ts-toolbar-icons {
+  flex: 1;
+  justify-content: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.ts-app.ts-design-nova > .ts-toolbar .ts-icon-button {
+  width: 42px;
+  height: 42px;
+  font-size: 17px;
+}
+
+.ts-app.ts-design-nova > .ts-toolbar .ts-toolbar-sep {
+  height: 26px;
+  align-self: center;
+  margin: 0 0.3rem;
+}
+
+.ts-app.ts-design-nova > .ts-toolbar .ts-app-logo {
+  border-radius: 8px;
+}
+
+/* New Nova-only status strip: server name + connection pill, folded into the
+   menubar row (right of the menu items) as the app's visual anchor. */
+
+.ts-nova-topbar-server {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ts-nova-topbar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg-toolbar-1);
+  font-weight: 800;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.ts-nova-topbar-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ts-nova-topbar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-toolbar-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ts-nova-topbar-status-on {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: var(--success);
+}
+
+.ts-nova-topbar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* Self card in the bottom voice bar: avatar + name + status, mirroring the
+   mockup's left-hand cluster (Standard's toolbar has no equivalent). */
+
+.ts-nova-toolbar-self {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-right: 0.9rem;
+  margin-right: 0.5rem;
+  border-right: 1px solid var(--border-soft);
+}
+
+.ts-nova-toolbar-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: var(--bg-toolbar-1);
+  font-weight: 800;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ts-nova-toolbar-self-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.ts-nova-toolbar-self-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.ts-nova-toolbar-self-status {
+  font-size: 11px;
+  color: var(--success);
+  font-weight: 600;
+}
+
+.ts-app.ts-design-nova .ts-icon-button,
+.ts-app.ts-design-nova .ts-toolbar-fields button,
+.ts-app.ts-design-nova .ts-chat-input-row button {
+  border-radius: 10px;
+  background: var(--button-bg-1);
+  padding: 0.35rem 0.6rem;
+}
+
+.ts-app.ts-design-nova .ts-icon-button:hover,
+.ts-app.ts-design-nova .ts-toolbar-fields button:hover,
+.ts-app.ts-design-nova .ts-chat-input-row button:hover {
+  background: var(--button-bg-hover-1);
+}
+
+.ts-app.ts-design-nova .ts-icon-caret {
+  border-radius: 0 10px 10px 0;
+  background: var(--button-bg-1);
+}
+
+.ts-app.ts-design-nova .ts-toolbar-away .ts-icon-button {
+  border-radius: 10px 0 0 10px;
+}
+
+.ts-app.ts-design-nova .ts-upper {
+  gap: 0.6rem;
+  padding: 0.6rem 0.6rem 0;
+}
+
+.ts-app.ts-design-nova .ts-tree-panel,
+.ts-app.ts-design-nova .ts-info-panel {
+  background: var(--bg-toolbar-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.ts-app.ts-design-nova .ts-resize-handle-vertical,
+.ts-app.ts-design-nova .ts-resize-handle-horizontal {
+  background: transparent;
+}
+
+.ts-app.ts-design-nova .ts-banner-panel {
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  margin: 0 0.6rem;
+}
+
+.ts-app.ts-design-nova .ts-chat-panel {
+  background: var(--bg-toolbar-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0.6rem;
+}
+
+.ts-app.ts-design-nova .ts-row {
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.ts-app.ts-design-nova .ts-client-row {
+  padding-left: 1.1rem;
+}
+
+.ts-app.ts-design-nova .ts-row-selected {
+  border-radius: 8px;
+  outline-color: var(--accent);
+  background: var(--bg-toolbar-2);
+}
+
+.ts-app.ts-design-nova .ts-chat-tabs {
+  order: -1;
+  border-top: none;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 0.5rem 0.6rem 0;
+  gap: 0.2rem;
+}
+
+.ts-app.ts-design-nova .ts-chat-tab {
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.45rem 0.7rem;
+  font-weight: 600;
+}
+
+.ts-app.ts-design-nova .ts-chat-tab:hover:not(.ts-chat-tab-active) {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.ts-app.ts-design-nova .ts-chat-tab-active {
+  background: transparent;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 700;
+}
+
+/* Bubble-style chat messages, matching the TS6 mockup: own messages align
+   right in an accent-filled bubble, others align left in a muted-surface
+   bubble; system/log lines render as a centered pill. */
+
+.ts-app.ts-design-nova .ts-chat-messages {
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.ts-app.ts-design-nova .ts-chat-line {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 70%;
+  padding: 0;
+}
+
+.ts-app.ts-design-nova .ts-chat-line-self {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.ts-app.ts-design-nova .ts-chat-from {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.ts-app.ts-design-nova .ts-chat-line-self .ts-chat-from {
+  color: var(--accent);
+}
+
+.ts-app.ts-design-nova .ts-chat-bubble {
+  display: inline-block;
+  background: var(--bg-toolbar-2);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px 14px 14px 14px;
+  line-height: 1.45;
+}
+
+.ts-app.ts-design-nova .ts-chat-line-self .ts-chat-bubble {
+  background: var(--accent);
+  color: var(--bg-toolbar-1);
+  border-radius: 14px 4px 14px 14px;
+  font-weight: 600;
+}
+
+.ts-app.ts-design-nova .ts-chat-line-log {
+  align-self: center;
+  align-items: center;
+  max-width: none;
+  background: var(--bg-toolbar-2);
+  color: var(--text-faint);
+  font-style: italic;
+  font-size: 11.5px;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+}
+
+.ts-app.ts-design-nova .ts-chat-input-row {
+  border-top: 1px solid var(--border-soft);
+  padding: 0.6rem 0.8rem;
+  align-items: center;
+}
+
+.ts-app.ts-design-nova .ts-chat-input-row textarea {
+  border-radius: 14px;
+  border-color: var(--border-soft);
+  background: var(--bg-toolbar-2);
+  padding: 0.55rem 0.8rem;
+}
+
+/* Round, icon-only accent send button, matching the mockup's composer. */
+.ts-app.ts-design-nova .ts-chat-input-row button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent);
+  color: transparent;
+  font-size: 0;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.ts-app.ts-design-nova .ts-chat-input-row button:hover {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
+.ts-app.ts-design-nova .ts-chat-input-row button:disabled {
+  opacity: 0.4;
+}
+
+.ts-app.ts-design-nova .ts-chat-input-row button::before {
+  content: "➤";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: var(--bg-toolbar-1);
+}
+
+/* Client avatar chips: colored initial squares, Nova-only (Standard theme
+   keeps its plain icon + name row). */
+.ts-client-avatar {
+  display: none;
+}
+
+.ts-app.ts-design-nova .ts-client-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 800;
+  color: oklch(0.18 0.02 258);
+}
+
+.ts-app.ts-design-nova .ts-log {
+  border-top: 1px solid var(--border-soft);
+  margin: 0 0.6rem 0.6rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.ts-app.ts-design-nova .ts-dialog {
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.ts-app.ts-design-nova .ts-menu {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ts-app.ts-design-nova .ts-menu-item:hover:not(:disabled) {
+  border-radius: 6px;
+}
+
+.ts-app.ts-design-nova ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.ts-app.ts-design-nova ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ts-app.ts-design-nova ::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
 /* Demo mode banner */
 
 .ts-demo-banner {
@@ -101,6 +826,12 @@
 }
 
 /* Toolbar */
+
+.ts-menubar-items {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+}
 
 .ts-menubar {
   display: flex;
@@ -1629,6 +2360,63 @@
   font-size: 11px;
   color: var(--text-muted);
   margin: 0 0 0.75rem;
+}
+
+.ts-design-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.ts-design-theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.ts-design-theme-card:hover {
+  border-color: var(--accent);
+}
+
+.ts-design-theme-card-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.ts-design-theme-swatch {
+  display: block;
+  width: 100%;
+  height: 44px;
+  border-radius: 3px;
+  border: 1px solid var(--border-soft);
+}
+
+.ts-design-theme-swatch-standard {
+  background: linear-gradient(135deg, #eef1f4 0%, #d7dce2 100%);
+}
+
+.ts-design-theme-swatch-nova {
+  background: linear-gradient(135deg, oklch(0.245 0.016 258) 0%, oklch(0.17 0.014 258) 100%);
+  box-shadow: inset 0 0 0 1px #7fb0e8;
+}
+
+.ts-design-theme-card-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.ts-design-theme-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .ts-options-columns {

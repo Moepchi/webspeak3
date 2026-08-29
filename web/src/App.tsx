@@ -137,6 +137,13 @@ const PLAYBACK_VOLUME_KEY = "webspeak3:playback-volume";
 const NOISE_SUPPRESSION_KEY = "webspeak3:noise-suppression";
 const ECHO_CANCELLATION_KEY = "webspeak3:echo-cancellation";
 const VAD_HANGOVER_KEY = "webspeak3:vad-hangover";
+const DESIGN_THEME_KEY = "webspeak3:design-theme";
+
+type DesignTheme = "standard" | "nova";
+
+function loadDesignTheme(): DesignTheme {
+  return localStorage.getItem(DESIGN_THEME_KEY) === "nova" ? "nova" : "standard";
+}
 
 function loadBoolPref(key: string, fallback: boolean): boolean {
   const raw = localStorage.getItem(key);
@@ -567,6 +574,12 @@ function ChannelTree({
                     title={c.id === ownClientId ? undefined : `${t("tree.privateChatWith")} ${c.name}`}
                   >
                     <ClientIcon />
+                    <span
+                      className="ts-client-avatar"
+                      style={{ background: c.id === ownClientId ? "var(--accent)" : clientAvatarColor(c.name) }}
+                    >
+                      {c.name.trim().charAt(0).toUpperCase() || "?"}
+                    </span>
                     {countryFlag(c.country) && <span title={c.country}>{countryFlag(c.country)}</span>}
                     <span>{c.name}</span>
                     {c.away && c.awayMessage && (
@@ -758,6 +771,8 @@ function ConnectDialog({
   onToggleExpanded,
   onConnect,
   onCancel,
+  nova,
+  onOpenOptions,
 }: {
   host: string;
   nickname: string;
@@ -777,39 +792,76 @@ function ConnectDialog({
   onToggleExpanded: () => void;
   onConnect: () => void;
   onCancel: () => void;
+  /** Nova-theme-only: renders the TS6-redesign "connect hero" (logo, title,
+   *  subtitle, settings shortcut) around the same form instead of the
+   *  Standard theme's plain titled dialog box. */
+  nova: boolean;
+  onOpenOptions: () => void;
 }) {
   const t = useT();
   const backdrop = useBackdropDismiss(onCancel);
-  return (
-    <div className="ts-dialog-backdrop" {...backdrop}>
-      <div className="ts-dialog ts-connect-dialog" onClick={(e) => e.stopPropagation()}>
+
+  // Nova-theme-only: the "Erweiterte Optionen" toggle moves from the footer
+  // (Standard) to right under the nickname field, with a rotating chevron -
+  // matching the TS6 redesign's Connect screen instead of a plain button.
+  const expandToggle = nova ? (
+    <button className="ts-connect-nova-expand" onClick={onToggleExpanded}>
+      <svg
+        className={`ts-connect-nova-chevron${expanded ? " ts-connect-nova-chevron-open" : ""}`}
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M9 6l6 6-6 6" />
+      </svg>
+      {expanded ? t("connect.less") : t("connect.more")}
+    </button>
+  ) : (
+    <button onClick={onToggleExpanded}>{expanded ? t("connect.less") : t("connect.more")}</button>
+  );
+
+  const dialogBody = (
+    <div className="ts-dialog ts-connect-dialog" onClick={(e) => e.stopPropagation()}>
+      {nova ? (
+        <button className="ts-connect-nova-settings" onClick={onOpenOptions} title={t("menu.extras.options")}>
+          ⚙️
+        </button>
+      ) : (
         <div className="ts-dialog-titlebar">
           <span>{t("connect.title")}</span>
           <button onClick={onCancel} title={t("dialog.close")}>
             ✕
           </button>
         </div>
-        <div className="ts-dialog-body">
-          <div className="ts-dialog-row">
-            <label className="ts-dialog-field ts-dialog-field-grow">
-              {t("connect.serverAddress")}
-              <input autoFocus value={host} onChange={(e) => onHostChange(e.target.value)} />
-            </label>
-            <label className="ts-dialog-field">
-              {t("connect.serverPassword")}
-              <input
-                type="password"
-                value={serverPassword}
-                onChange={(e) => onServerPasswordChange(e.target.value)}
-              />
-            </label>
-          </div>
-          <label className="ts-dialog-field">
-            {t("connect.nickname")}
-            <input value={nickname} onChange={(e) => onNicknameChange(e.target.value)} />
+      )}
+      <div className="ts-dialog-body">
+        <div className="ts-dialog-row">
+          <label className="ts-dialog-field ts-dialog-field-grow">
+            {t("connect.serverAddress")}
+            <input autoFocus value={host} onChange={(e) => onHostChange(e.target.value)} />
           </label>
+          <label className="ts-dialog-field">
+            {t("connect.serverPassword")}
+            <input
+              type="password"
+              value={serverPassword}
+              onChange={(e) => onServerPasswordChange(e.target.value)}
+            />
+          </label>
+        </div>
+        <label className="ts-dialog-field">
+          {t("connect.nickname")}
+          <input value={nickname} onChange={(e) => onNicknameChange(e.target.value)} />
+        </label>
 
-          {expanded && (
+        {nova && expandToggle}
+
+        {expanded && (
             <div className="ts-dialog-grid">
               <label className="ts-dialog-field">
                 {t("connect.phoneticNickname")}
@@ -868,18 +920,56 @@ function ConnectDialog({
             </div>
           )}
         </div>
-        <div className="ts-dialog-buttons">
-          <button onClick={onToggleExpanded}>{expanded ? t("connect.less") : t("connect.more")}</button>
-          <div className="ts-dialog-buttons-right">
-            <button onClick={onConnect} disabled={connecting || !host || !nickname}>
-              {connecting ? t("connect.connecting") : t("connect.connect")}
-            </button>
+        <div className={nova ? "ts-connect-nova-buttons" : "ts-dialog-buttons"}>
+          {!nova && expandToggle}
+          <div className={nova ? undefined : "ts-dialog-buttons-right"}>
+            {nova && (
+              <button className="ts-connect-cancel" onClick={onCancel}>
+                {t("connect.cancel")}
+              </button>
+            )}
+            {!nova && (
+              <button onClick={onConnect} disabled={connecting || !host || !nickname}>
+                {connecting ? t("connect.connecting") : t("connect.connect")}
+              </button>
+            )}
             <button disabled title="Not supported in the web client">
               {t("connect.newTab")}
             </button>
-            <button onClick={onCancel}>{t("connect.cancel")}</button>
+            {nova ? (
+              <button
+                className="ts-connect-nova-primary"
+                onClick={onConnect}
+                disabled={connecting || !host || !nickname}
+              >
+                {connecting ? t("connect.connecting") : t("connect.connect")}
+              </button>
+            ) : (
+              <button onClick={onCancel}>{t("connect.cancel")}</button>
+            )}
           </div>
         </div>
+      </div>
+  );
+
+  if (!nova)
+    return (
+      <div className="ts-dialog-backdrop" {...backdrop}>
+        {dialogBody}
+      </div>
+    );
+
+  return (
+    <div className="ts-dialog-backdrop" {...backdrop}>
+      <div className="ts-connect-nova-wrap">
+        <div className="ts-connect-nova-hero">
+          <span className="ts-connect-nova-logo">W</span>
+          <div className="ts-connect-nova-heading">
+            <div className="ts-connect-nova-title">{t("connect.title")}</div>
+            <div className="ts-connect-nova-subtitle">{t("connect.novaSubtitle")}</div>
+          </div>
+        </div>
+        {dialogBody}
       </div>
     </div>
   );
@@ -1931,6 +2021,15 @@ const CUSTOM_ICON_ID_THRESHOLD = 1000;
 function groupBadgeColor(iconId: number): string {
   const hue = (iconId * 47) % 360;
   return `hsl(${hue}, 55%, 45%)`;
+}
+
+/** Nova-theme-only: a stable per-name color for the client avatar chips,
+ *  hashed from the name so the same person always gets the same color. */
+function clientAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  const hue = hash % 360;
+  return `oklch(0.6 0.13 ${hue})`;
 }
 
 /** The icon repository lives under TS3's special "channel 0" - not a real,
@@ -3472,6 +3571,39 @@ function AnwendungPanel() {
   );
 }
 
+function DesignPanel({
+  designTheme,
+  onDesignThemeChange,
+}: {
+  designTheme: DesignTheme;
+  onDesignThemeChange: (next: DesignTheme) => void;
+}) {
+  const t = useT();
+  const themes: { id: DesignTheme; name: string; desc: string }[] = [
+    { id: "standard", name: t("design.theme.standard"), desc: t("design.theme.standard.desc") },
+    { id: "nova", name: t("design.theme.nova"), desc: t("design.theme.nova.desc") },
+  ];
+  return (
+    <>
+      <h3>{t("options.section.design")}</h3>
+      <p className="ts-options-subtitle">{t("design.subtitle")}</p>
+      <div className="ts-design-theme-grid">
+        {themes.map((th) => (
+          <button
+            key={th.id}
+            className={`ts-design-theme-card${th.id === designTheme ? " ts-design-theme-card-active" : ""}`}
+            onClick={() => onDesignThemeChange(th.id)}
+          >
+            <span className={`ts-design-theme-swatch ts-design-theme-swatch-${th.id}`} />
+            <span className="ts-design-theme-card-name">{th.name}</span>
+            <span className="ts-design-theme-card-desc">{th.desc}</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function SoundsPanel() {
   const t = useT();
   const [enabled, setEnabled] = useState(() => loadSoundsEnabled());
@@ -3739,11 +3871,15 @@ function OptionsDialog({
   onSectionChange,
   onClose,
   audio,
+  designTheme,
+  onDesignThemeChange,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
   onClose: () => void;
   audio: AudioSettings;
+  designTheme: DesignTheme;
+  onDesignThemeChange: (next: DesignTheme) => void;
 }) {
   const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
@@ -3779,6 +3915,8 @@ function OptionsDialog({
               <AufnahmePanel audio={audio} />
             ) : active.id === "sounds" ? (
               <SoundsPanel />
+            ) : active.id === "design" ? (
+              <DesignPanel designTheme={designTheme} onDesignThemeChange={onDesignThemeChange} />
             ) : active.id === "nachrichten" ? (
               <NachrichtenPanel />
             ) : (
@@ -4037,7 +4175,11 @@ function ServerEditDialog({
 }
 
 function AppInner() {
-  const [host, setHost] = useState(() => localStorage.getItem(LAST_HOST_KEY) ?? (DEMO_MODE ? DEMO_HOST : "localhost"));
+  const [host, setHost] = useState(
+    () =>
+      localStorage.getItem(LAST_HOST_KEY) ??
+      (DEMO_MODE ? DEMO_HOST : loadDesignTheme() === "nova" ? "" : "localhost")
+  );
   const [nickname, setNickname] = useState(
     () => localStorage.getItem(LAST_NICKNAME_KEY) ?? (DEMO_MODE ? "Guest" : "")
   );
@@ -4142,6 +4284,11 @@ function AppInner() {
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
   );
+  const [designTheme, setDesignTheme] = useState<DesignTheme>(() => loadDesignTheme());
+  const handleDesignThemeChange = (next: DesignTheme) => {
+    setDesignTheme(next);
+    localStorage.setItem(DESIGN_THEME_KEY, next);
+  };
   const [micOn, setMicOn] = useState(false);
   const [talkers, setTalkers] = useState<Set<number>>(new Set());
   const [selfActive, setSelfActive] = useState(false);
@@ -4160,6 +4307,9 @@ function AppInner() {
   );
   const [micTestOn, setMicTestOn] = useState(false);
   const [connectionsMenuOpen, setConnectionsMenuOpen] = useState(false);
+  // Nova-theme-only: collapses the classic menu items behind a hamburger button.
+  const [novaMenuOpen, setNovaMenuOpen] = useState(false);
+  const novaMenuRef = useRef<HTMLDivElement | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>(() => loadFavorites());
   const [favoritesMenuOpen, setFavoritesMenuOpen] = useState(false);
   const [favoritesDialogMode, setFavoritesDialogMode] = useState<
@@ -4837,6 +4987,22 @@ function AppInner() {
   };
 
   useEffect(() => {
+    if (!novaMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!novaMenuRef.current?.contains(e.target as Node)) setNovaMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNovaMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [novaMenuOpen]);
+
+  useEffect(() => {
     if (!connectionsMenuOpen) return;
     const onPointerDown = (e: MouseEvent) => {
       if (!connectionsMenuRef.current?.contains(e.target as Node)) setConnectionsMenuOpen(false);
@@ -5096,6 +5262,13 @@ function AppInner() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [connected, connecting, host, nickname, serverPassword, defaultChannel, channelPassword]);
+
+  // Nova-theme-only: the connect dialog IS the app until a connection exists -
+  // it's forced open on load and after every disconnect, and closes itself the
+  // moment a connection succeeds.
+  useEffect(() => {
+    if (designTheme === "nova" && !connected) setConnectDialogOpen(true);
+  }, [designTheme, connected]);
 
   // Overrides let a device/DSP-setting change take effect immediately, without
   // waiting for the next render's (possibly still-stale) state closure.
@@ -5918,9 +6091,14 @@ function AppInner() {
       ? new Set(talkers).add(ownClient.id)
       : talkers;
   const t = useT();
+  const novaSplash = designTheme === "nova" && !connected;
 
   return (
-    <div className={`ts-app ts-theme-${theme}${demoForceMobile ? " ts-force-mobile" : ""}`}>
+    <div
+      className={`ts-app ts-theme-${theme}${designTheme === "nova" ? " ts-design-nova" : ""}${
+        demoForceMobile ? " ts-force-mobile" : ""
+      }${novaSplash ? " ts-nova-splash" : ""}`}
+    >
       {DEMO_MODE && (
         <div className="ts-demo-banner">
           Demo mode — simulated data only, no real TeamSpeak server involved.{" "}
@@ -5933,6 +6111,21 @@ function AppInner() {
         </div>
       )}
       <div className="ts-menubar">
+        <div className={designTheme === "nova" ? "ts-nova-menu-dropdown" : undefined} ref={novaMenuRef}>
+        {designTheme === "nova" && (
+          <button
+            className="ts-icon-button ts-nova-menu-toggle"
+            onClick={() => setNovaMenuOpen((v) => !v)}
+            aria-label={t("menu.connections")}
+          >
+            ☰
+          </button>
+        )}
+        <div
+          className={`ts-menubar-items${designTheme === "nova" ? " ts-nova-menu-panel" : ""}${
+            novaMenuOpen ? " ts-nova-menu-panel-open" : ""
+          }`}
+        >
         <div className="ts-menubar-dropdown" ref={connectionsMenuRef}>
           <span
             className="ts-menubar-item ts-menubar-item-active"
@@ -6376,9 +6569,34 @@ function AppInner() {
           )}
         </div>
         <span className="ts-menubar-item">{t("menu.help")}</span>
+        </div>
+        </div>
+        {designTheme === "nova" && (
+          <div className="ts-nova-topbar-server">
+            <span className="ts-nova-topbar-logo">W</span>
+            <span className="ts-nova-topbar-name">{connected ? serverName || host : "WebSpeak3"}</span>
+            <span className={`ts-nova-topbar-status${connected ? " ts-nova-topbar-status-on" : ""}`}>
+              <span className="ts-nova-topbar-dot" />
+              {connected ? t("design.status.connected") : t("tree.notConnected")}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="ts-toolbar">
+        {designTheme === "nova" && connected && ownClient && (
+          <div className="ts-nova-toolbar-self">
+            <span className="ts-nova-toolbar-avatar">
+              {ownClient.name.trim().charAt(0).toUpperCase() || "?"}
+            </span>
+            <span className="ts-nova-toolbar-self-info">
+              <span className="ts-nova-toolbar-self-name">{ownClient.name}</span>
+              <span className="ts-nova-toolbar-self-status">
+                {isAway ? t("tree.away") : t("design.status.connected")}
+              </span>
+            </span>
+          </div>
+        )}
         <div className="ts-toolbar-icons">
           <div className="ts-toolbar-away" ref={awayMenuRef}>
             <button
@@ -6580,7 +6798,9 @@ function AppInner() {
           onActiveIdentityChange={handleActiveIdentityChange}
           onToggleExpanded={() => setConnectDialogExpanded((v) => !v)}
           onConnect={handleConnect}
-          onCancel={() => setConnectDialogOpen(false)}
+          onCancel={novaSplash ? () => {} : () => setConnectDialogOpen(false)}
+          nova={designTheme === "nova"}
+          onOpenOptions={() => setOptionsDialogOpen(true)}
         />
       )}
 
@@ -6809,6 +7029,8 @@ function AppInner() {
           section={optionsSection}
           onSectionChange={setOptionsSection}
           onClose={() => setOptionsDialogOpen(false)}
+          designTheme={designTheme}
+          onDesignThemeChange={handleDesignThemeChange}
           audio={{
             outputDevices,
             outputDeviceId,
@@ -7320,8 +7542,12 @@ function AppInner() {
           <div className="ts-chat-messages">
             {activeTab === "channel"
               ? chat.map((entry, i) => (
-                  <div key={i} className="ts-chat-line">
-                    <span className="ts-chat-from">{entry.from}:</span> <span>{entry.message}</span>
+                  <div
+                    key={i}
+                    className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
+                  >
+                    <span className="ts-chat-from">{entry.from}:</span>{" "}
+                    <span className="ts-chat-bubble">{entry.message}</span>
                   </div>
                 ))
               : activeTab === "server"
@@ -7331,17 +7557,21 @@ function AppInner() {
                         <span>{entry.message}</span>
                       </div>
                     ) : (
-                      <div key={i} className="ts-chat-line">
-                        <span className="ts-chat-from">{entry.from}:</span> <span>{entry.message}</span>
+                      <div
+                        key={i}
+                        className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
+                      >
+                        <span className="ts-chat-from">{entry.from}:</span>{" "}
+                        <span className="ts-chat-bubble">{entry.message}</span>
                       </div>
                     )
                   )
                 : pmThreads[activeTab]?.messages.map((entry, i) => (
-                    <div key={i} className="ts-chat-line">
+                    <div key={i} className={`ts-chat-line${entry.fromSelf ? " ts-chat-line-self" : ""}`}>
                       <span className="ts-chat-from">
                         {entry.fromSelf ? t("chat.you") : pmThreads[activeTab].partnerName}:
                       </span>{" "}
-                      <span>{entry.message}</span>
+                      <span className="ts-chat-bubble">{entry.message}</span>
                     </div>
                   ))}
             <div ref={chatEndRef} />
