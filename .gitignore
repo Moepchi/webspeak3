@@ -9,3 +9,4 @@ dist-ssr/
 docker-compose.override.yml
 .claude/
 CLAUDE.md
+.serena/
