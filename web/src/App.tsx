@@ -136,6 +136,7 @@ const INPUT_DEVICE_KEY = "webspeak3:input-device";
 const PLAYBACK_VOLUME_KEY = "webspeak3:playback-volume";
 const NOISE_SUPPRESSION_KEY = "webspeak3:noise-suppression";
 const ECHO_CANCELLATION_KEY = "webspeak3:echo-cancellation";
+const AUTO_GAIN_CONTROL_KEY = "webspeak3:auto-gain-control";
 const VAD_HANGOVER_KEY = "webspeak3:vad-hangover";
 const DESIGN_THEME_KEY = "webspeak3:design-theme";
 // The user's actual pick - "standard" | "nova" | "custom:<id>". DESIGN_THEME_KEY above
@@ -3397,6 +3398,8 @@ interface AudioSettings {
   onToggleNoiseSuppression: () => void;
   echoCancellationEnabled: boolean;
   onToggleEchoCancellation: () => void;
+  autoGainControlEnabled: boolean;
+  onToggleAutoGainControl: () => void;
 }
 
 function MicLevelBar({ levelRef, active }: { levelRef: React.MutableRefObject<number>; active: boolean }) {
@@ -3586,6 +3589,14 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
                   onChange={audio.onToggleNoiseSuppression}
                 />
                 {t("recording.noiseSuppression")}
+              </label>
+              <label className="ts-options-checkbox">
+                <input
+                  type="checkbox"
+                  checked={audio.autoGainControlEnabled}
+                  onChange={audio.onToggleAutoGainControl}
+                />
+                {t("recording.autoGainControl")}
               </label>
             </div>
           </fieldset>
@@ -4555,6 +4566,9 @@ function AppInner() {
   const [echoCancellationEnabled, setEchoCancellationEnabled] = useState(() =>
     loadBoolPref(ECHO_CANCELLATION_KEY, true)
   );
+  const [autoGainControlEnabled, setAutoGainControlEnabled] = useState(() =>
+    loadBoolPref(AUTO_GAIN_CONTROL_KEY, true)
+  );
   const [micTestOn, setMicTestOn] = useState(false);
   const [connectionsMenuOpen, setConnectionsMenuOpen] = useState(false);
   // Nova-theme-only: collapses the classic menu items behind a hamburger button.
@@ -4713,6 +4727,10 @@ function AppInner() {
   useEffect(() => {
     localStorage.setItem(ECHO_CANCELLATION_KEY, echoCancellationEnabled ? "1" : "0");
   }, [echoCancellationEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(AUTO_GAIN_CONTROL_KEY, autoGainControlEnabled ? "1" : "0");
+  }, [autoGainControlEnabled]);
 
   useEffect(() => {
     if (inputDeviceId) localStorage.setItem(INPUT_DEVICE_KEY, inputDeviceId);
@@ -5526,6 +5544,7 @@ function AppInner() {
     deviceId?: string;
     echoCancellation?: boolean;
     noiseSuppression?: boolean;
+    autoGainControl?: boolean;
   }) => {
     const audioContext = ensureAudioContext();
     try {
@@ -5542,6 +5561,7 @@ function AppInner() {
         deviceId: overrides?.deviceId ?? (inputDeviceId || undefined),
         echoCancellation: overrides?.echoCancellation ?? echoCancellationEnabled,
         noiseSuppression: overrides?.noiseSuppression ?? noiseSuppressionEnabled,
+        autoGainControl: overrides?.autoGainControl ?? autoGainControlEnabled,
       });
       await mic.start();
       micCaptureRef.current = mic;
@@ -5558,6 +5578,7 @@ function AppInner() {
     deviceId?: string;
     echoCancellation?: boolean;
     noiseSuppression?: boolean;
+    autoGainControl?: boolean;
   }) => {
     micCaptureRef.current?.stop();
     micCaptureRef.current = null;
@@ -5597,6 +5618,12 @@ function AppInner() {
     const next = !echoCancellationEnabled;
     setEchoCancellationEnabled(next);
     if (micCaptureRef.current) void restartMic({ echoCancellation: next });
+  };
+
+  const handleToggleAutoGainControl = () => {
+    const next = !autoGainControlEnabled;
+    setAutoGainControlEnabled(next);
+    if (micCaptureRef.current) void restartMic({ autoGainControl: next });
   };
 
   const handleToggleMicTest = () => {
@@ -7309,6 +7336,8 @@ function AppInner() {
             onToggleNoiseSuppression: handleToggleNoiseSuppression,
             echoCancellationEnabled,
             onToggleEchoCancellation: handleToggleEchoCancellation,
+            autoGainControlEnabled,
+            onToggleAutoGainControl: handleToggleAutoGainControl,
           }}
         />
       )}

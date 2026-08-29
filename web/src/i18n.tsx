@@ -291,6 +291,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "recording.typingAttenuation": "Typing attenuation",
     "recording.echoCancellation": "Echo Dämpfung",
     "recording.noiseSuppression": "Hintergrundgeräusche entfernen",
+    "recording.autoGainControl": "Automatische Verstärkung",
 
     "info.address": "Adresse:",
     "info.version": "Version:",
@@ -813,6 +814,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "recording.typingAttenuation": "Typing attenuation",
     "recording.echoCancellation": "Echo cancellation",
     "recording.noiseSuppression": "Remove background noise",
+    "recording.autoGainControl": "Automatic gain control",
 
     "info.address": "Address:",
     "info.version": "Version:",

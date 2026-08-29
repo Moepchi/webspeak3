@@ -36,6 +36,11 @@ export interface MicCaptureOptions {
   deviceId?: string;
   echoCancellation?: boolean;
   noiseSuppression?: boolean;
+  /** Automatic gain control. Exposed as its own toggle (rather than folded into
+   *  echoCancellation) because AGC re-amplifying the mic signal after the
+   *  browser's own AEC runs can bring back audible echo residue in speaker+mic
+   *  (no headset) setups - some users get a cleaner result with it off. */
+  autoGainControl?: boolean;
 }
 
 /**
@@ -61,6 +66,7 @@ export class MicCapture {
   private deviceId?: string;
   private echoCancellation: boolean;
   private noiseSuppression: boolean;
+  private autoGainControl: boolean;
   private context: AudioContext;
   threshold: number;
   hangoverSeconds: number;
@@ -75,6 +81,7 @@ export class MicCapture {
     this.deviceId = options.deviceId;
     this.echoCancellation = options.echoCancellation ?? true;
     this.noiseSuppression = options.noiseSuppression ?? true;
+    this.autoGainControl = options.autoGainControl ?? true;
   }
 
   async start(): Promise<void> {
@@ -84,8 +91,15 @@ export class MicCapture {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
+        // Requesting the pipeline's own rate (rather than leaving it to the
+        // device/OS default) avoids an extra internal resampling step ahead
+        // of the browser's own echo canceller - standard constraint, honored
+        // by both Chromium and Firefox, "ideal" so it's not fatal if a device
+        // genuinely can't provide it.
+        sampleRate: { ideal: SAMPLE_RATE },
         echoCancellation: this.echoCancellation,
         noiseSuppression: this.noiseSuppression,
+        autoGainControl: this.autoGainControl,
         ...(this.deviceId ? { deviceId: { exact: this.deviceId } } : {}),
       },
     });
