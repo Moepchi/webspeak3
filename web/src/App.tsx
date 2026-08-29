@@ -138,11 +138,54 @@ const NOISE_SUPPRESSION_KEY = "webspeak3:noise-suppression";
 const ECHO_CANCELLATION_KEY = "webspeak3:echo-cancellation";
 const VAD_HANGOVER_KEY = "webspeak3:vad-hangover";
 const DESIGN_THEME_KEY = "webspeak3:design-theme";
+// The user's actual pick - "standard" | "nova" | "custom:<id>". DESIGN_THEME_KEY above
+// keeps tracking just the resolved structural base, since a couple of early call sites
+// (e.g. the host-field default below) need that cheaply, before customThemes is loaded.
+const DESIGN_SELECTION_KEY = "webspeak3:design-selection";
+const CUSTOM_THEMES_KEY = "webspeak3:custom-themes";
 
 type DesignTheme = "standard" | "nova";
 
+/** A user-authored theme package: a name, which built-in layout it behaves like
+ *  (Standard's plain chrome vs Nova's collapsed menu/splash behavior), and raw CSS
+ *  that gets injected while it's active - free-form, so it can restyle or even
+ *  reflow the existing markup (e.g. via flex `order`, `display:none`, overlays). */
+type CustomTheme = {
+  id: string;
+  name: string;
+  baseTheme: DesignTheme;
+  css: string;
+};
+
 function loadDesignTheme(): DesignTheme {
   return localStorage.getItem(DESIGN_THEME_KEY) === "nova" ? "nova" : "standard";
+}
+
+function loadCustomThemes(): CustomTheme[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_THEMES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (v): v is CustomTheme =>
+        v &&
+        typeof v.id === "string" &&
+        typeof v.name === "string" &&
+        (v.baseTheme === "standard" || v.baseTheme === "nova") &&
+        typeof v.css === "string"
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomThemes(list: CustomTheme[]) {
+  localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(list));
+}
+
+function loadDesignSelection(): string {
+  return localStorage.getItem(DESIGN_SELECTION_KEY) ?? loadDesignTheme();
 }
 
 function loadBoolPref(key: string, fallback: boolean): boolean {
@@ -3571,34 +3614,185 @@ function AnwendungPanel() {
   );
 }
 
+type CustomThemeDraft = { id: string | null; name: string; baseTheme: DesignTheme; css: string };
+
 function DesignPanel({
-  designTheme,
-  onDesignThemeChange,
+  designSelection,
+  onSelectionChange,
+  customThemes,
+  onSaveCustomTheme,
+  onDeleteCustomTheme,
 }: {
-  designTheme: DesignTheme;
-  onDesignThemeChange: (next: DesignTheme) => void;
+  designSelection: string;
+  onSelectionChange: (next: string) => void;
+  customThemes: CustomTheme[];
+  onSaveCustomTheme: (theme: CustomTheme) => void;
+  onDeleteCustomTheme: (id: string) => void;
 }) {
   const t = useT();
-  const themes: { id: DesignTheme; name: string; desc: string }[] = [
+  const [editing, setEditing] = useState<CustomThemeDraft | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  const builtins: { id: DesignTheme; name: string; desc: string }[] = [
     { id: "standard", name: t("design.theme.standard"), desc: t("design.theme.standard.desc") },
     { id: "nova", name: t("design.theme.nova"), desc: t("design.theme.nova.desc") },
   ];
+
+  const handleSaveEditing = () => {
+    if (!editing || !editing.name.trim()) return;
+    const id = editing.id ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    onSaveCustomTheme({ id, name: editing.name.trim(), baseTheme: editing.baseTheme, css: editing.css });
+    onSelectionChange(`custom:${id}`);
+    setEditing(null);
+  };
+
+  const handleExport = (theme: CustomTheme) => {
+    const blob = new Blob(
+      [JSON.stringify({ name: theme.name, baseTheme: theme.baseTheme, css: theme.css }, null, 2)],
+      { type: "application/json" }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${theme.name.replace(/[^a-z0-9-_]+/gi, "_") || "theme"}.webspeak3theme.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (
+        !parsed ||
+        typeof parsed.name !== "string" ||
+        (parsed.baseTheme !== "standard" && parsed.baseTheme !== "nova") ||
+        typeof parsed.css !== "string"
+      ) {
+        window.alert(t("design.custom.importError"));
+        return;
+      }
+      const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      onSaveCustomTheme({ id, name: parsed.name, baseTheme: parsed.baseTheme, css: parsed.css });
+      onSelectionChange(`custom:${id}`);
+    } catch {
+      window.alert(t("design.custom.importError"));
+    }
+  };
+
+  if (editing) {
+    return (
+      <>
+        <h3>{editing.id ? t("design.custom.editTitle") : t("design.custom.newTitle")}</h3>
+        <label className="ts-options-field">
+          {t("design.custom.name")}
+          <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} autoFocus />
+        </label>
+        <label className="ts-options-field">
+          {t("design.custom.base")}
+          <select
+            value={editing.baseTheme}
+            onChange={(e) => setEditing({ ...editing, baseTheme: e.target.value as DesignTheme })}
+          >
+            <option value="standard">{t("design.theme.standard")}</option>
+            <option value="nova">{t("design.theme.nova")}</option>
+          </select>
+        </label>
+        <label className="ts-options-field">
+          {t("design.custom.css")}
+          <textarea
+            className="ts-custom-theme-css"
+            spellCheck={false}
+            value={editing.css}
+            onChange={(e) => setEditing({ ...editing, css: e.target.value })}
+            placeholder={".ts-app {\n  --accent: #ff6b6b;\n}"}
+          />
+        </label>
+        <p className="ts-options-subtitle">{t("design.custom.hint")}</p>
+        <div className="ts-dialog-buttons-right">
+          <button onClick={() => setEditing(null)}>{t("connect.cancel")}</button>
+          <button onClick={handleSaveEditing} disabled={!editing.name.trim()}>
+            {t("design.custom.save")}
+          </button>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <h3>{t("options.section.design")}</h3>
       <p className="ts-options-subtitle">{t("design.subtitle")}</p>
       <div className="ts-design-theme-grid">
-        {themes.map((th) => (
+        {builtins.map((th) => (
           <button
             key={th.id}
-            className={`ts-design-theme-card${th.id === designTheme ? " ts-design-theme-card-active" : ""}`}
-            onClick={() => onDesignThemeChange(th.id)}
+            className={`ts-design-theme-card${th.id === designSelection ? " ts-design-theme-card-active" : ""}`}
+            onClick={() => onSelectionChange(th.id)}
           >
             <span className={`ts-design-theme-swatch ts-design-theme-swatch-${th.id}`} />
             <span className="ts-design-theme-card-name">{th.name}</span>
             <span className="ts-design-theme-card-desc">{th.desc}</span>
           </button>
         ))}
+        {customThemes.map((theme) => (
+          <div
+            key={theme.id}
+            className={`ts-design-theme-card ts-design-theme-card-custom${
+              designSelection === `custom:${theme.id}` ? " ts-design-theme-card-active" : ""
+            }`}
+          >
+            <button className="ts-design-theme-card-select" onClick={() => onSelectionChange(`custom:${theme.id}`)}>
+              <span className="ts-design-theme-swatch ts-design-theme-swatch-custom" />
+              <span className="ts-design-theme-card-name">{theme.name}</span>
+              <span className="ts-design-theme-card-desc">
+                {theme.baseTheme === "nova" ? t("design.theme.nova") : t("design.theme.standard")}
+              </span>
+            </button>
+            <div className="ts-design-theme-card-actions">
+              <button
+                onClick={() => setEditing({ id: theme.id, name: theme.name, baseTheme: theme.baseTheme, css: theme.css })}
+                title={t("design.custom.edit")}
+              >
+                ✎
+              </button>
+              <button
+                onClick={() =>
+                  setEditing({ id: null, name: t("design.custom.copyOf", { name: theme.name }), baseTheme: theme.baseTheme, css: theme.css })
+                }
+                title={t("design.custom.duplicate")}
+              >
+                ⧉
+              </button>
+              <button onClick={() => handleExport(theme)} title={t("design.custom.export")}>
+                ⭳
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm(t("design.custom.deleteConfirm"))) onDeleteCustomTheme(theme.id);
+                }}
+                title={t("design.custom.delete")}
+              >
+                🗑
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="ts-design-custom-actions">
+        <button onClick={() => setEditing({ id: null, name: "", baseTheme: "standard", css: "" })}>
+          {t("design.custom.new")}
+        </button>
+        <button onClick={() => importInputRef.current?.click()}>{t("design.custom.import")}</button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: "none" }}
+          onChange={handleImportSelected}
+        />
       </div>
     </>
   );
@@ -3871,15 +4065,21 @@ function OptionsDialog({
   onSectionChange,
   onClose,
   audio,
-  designTheme,
-  onDesignThemeChange,
+  designSelection,
+  onDesignSelectionChange,
+  customThemes,
+  onSaveCustomTheme,
+  onDeleteCustomTheme,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
   onClose: () => void;
   audio: AudioSettings;
-  designTheme: DesignTheme;
-  onDesignThemeChange: (next: DesignTheme) => void;
+  designSelection: string;
+  onDesignSelectionChange: (next: string) => void;
+  customThemes: CustomTheme[];
+  onSaveCustomTheme: (theme: CustomTheme) => void;
+  onDeleteCustomTheme: (id: string) => void;
 }) {
   const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
@@ -3916,7 +4116,13 @@ function OptionsDialog({
             ) : active.id === "sounds" ? (
               <SoundsPanel />
             ) : active.id === "design" ? (
-              <DesignPanel designTheme={designTheme} onDesignThemeChange={onDesignThemeChange} />
+              <DesignPanel
+                designSelection={designSelection}
+                onSelectionChange={onDesignSelectionChange}
+                customThemes={customThemes}
+                onSaveCustomTheme={onSaveCustomTheme}
+                onDeleteCustomTheme={onDeleteCustomTheme}
+              />
             ) : active.id === "nachrichten" ? (
               <NachrichtenPanel />
             ) : (
@@ -4284,11 +4490,55 @@ function AppInner() {
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
   );
-  const [designTheme, setDesignTheme] = useState<DesignTheme>(() => loadDesignTheme());
-  const handleDesignThemeChange = (next: DesignTheme) => {
-    setDesignTheme(next);
-    localStorage.setItem(DESIGN_THEME_KEY, next);
+  const [customThemes, setCustomThemes] = useState<CustomTheme[]>(() => loadCustomThemes());
+  const [designSelection, setDesignSelection] = useState<string>(() => loadDesignSelection());
+  const activeCustomTheme = designSelection.startsWith("custom:")
+    ? customThemes.find((th) => `custom:${th.id}` === designSelection) ?? null
+    : null;
+  // Structural base - everywhere else in the app that branches on "nova" behavior
+  // (splash, hamburger menu, ...) keeps working unchanged, whether that behavior
+  // came from picking Nova directly or from a custom theme built on top of it.
+  const designTheme: DesignTheme = activeCustomTheme ? activeCustomTheme.baseTheme : designSelection === "nova" ? "nova" : "standard";
+  const handleDesignSelectionChange = (next: string) => {
+    setDesignSelection(next);
+    localStorage.setItem(DESIGN_SELECTION_KEY, next);
+    const base = next.startsWith("custom:")
+      ? customThemes.find((th) => `custom:${th.id}` === next)?.baseTheme ?? "standard"
+      : next === "nova"
+        ? "nova"
+        : "standard";
+    localStorage.setItem(DESIGN_THEME_KEY, base);
   };
+  const handleSaveCustomTheme = (nextTheme: CustomTheme) => {
+    setCustomThemes((prev) => {
+      const idx = prev.findIndex((th) => th.id === nextTheme.id);
+      const next = idx === -1 ? [...prev, nextTheme] : prev.map((th, i) => (i === idx ? nextTheme : th));
+      saveCustomThemes(next);
+      return next;
+    });
+  };
+  const handleDeleteCustomTheme = (id: string) => {
+    setCustomThemes((prev) => {
+      const next = prev.filter((th) => th.id !== id);
+      saveCustomThemes(next);
+      return next;
+    });
+    if (designSelection === `custom:${id}`) handleDesignSelectionChange("standard");
+  };
+  // Custom themes ship as free-form CSS - inject/replace it in a dedicated <style>
+  // tag while active, and drop it the moment no custom theme is selected.
+  useEffect(() => {
+    const css = activeCustomTheme?.css ?? "";
+    const existing = document.getElementById("ts-custom-theme-style") as HTMLStyleElement | null;
+    if (!css) {
+      existing?.remove();
+      return;
+    }
+    const el = existing ?? document.createElement("style");
+    el.id = "ts-custom-theme-style";
+    el.textContent = css;
+    if (!existing) document.head.appendChild(el);
+  }, [activeCustomTheme?.id, activeCustomTheme?.css]);
   const [micOn, setMicOn] = useState(false);
   const [talkers, setTalkers] = useState<Set<number>>(new Set());
   const [selfActive, setSelfActive] = useState(false);
@@ -6096,8 +6346,9 @@ function AppInner() {
   return (
     <div
       className={`ts-app ts-theme-${theme}${designTheme === "nova" ? " ts-design-nova" : ""}${
-        demoForceMobile ? " ts-force-mobile" : ""
-      }${novaSplash ? " ts-nova-splash" : ""}`}
+        activeCustomTheme ? " ts-design-custom" : ""
+      }${demoForceMobile ? " ts-force-mobile" : ""}${novaSplash ? " ts-nova-splash" : ""}`}
+      data-custom-theme={activeCustomTheme?.id}
     >
       {DEMO_MODE && (
         <div className="ts-demo-banner">
@@ -7029,8 +7280,11 @@ function AppInner() {
           section={optionsSection}
           onSectionChange={setOptionsSection}
           onClose={() => setOptionsDialogOpen(false)}
-          designTheme={designTheme}
-          onDesignThemeChange={handleDesignThemeChange}
+          designSelection={designSelection}
+          onDesignSelectionChange={handleDesignSelectionChange}
+          customThemes={customThemes}
+          onSaveCustomTheme={handleSaveCustomTheme}
+          onDeleteCustomTheme={handleDeleteCustomTheme}
           audio={{
             outputDevices,
             outputDeviceId,

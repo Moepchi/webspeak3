@@ -1,4 +1,11 @@
-.ts-app {
+/* Wrapped in :where() so these three variable-defining rules carry ZERO
+   specificity. That's deliberate: a user-authored custom theme (injected
+   later as a plain `.ts-app { --accent: ... }` rule) has real specificity
+   and must always win here, regardless of which of these three blocks would
+   otherwise apply. Every other selector in this file is untouched, so the
+   normal cascade elsewhere (including .ts-app.ts-design-nova's non-variable
+   rules further down) still works exactly as before. */
+:where(.ts-app) {
   --bg: #ffffff;
   --bg-toolbar-1: #f5f6f8;
   --bg-toolbar-2: #dfe2e6;
@@ -40,7 +47,7 @@
     0 0 40px rgba(0, 0, 0, 0.5);
 }
 
-.ts-app.ts-theme-dark {
+:where(.ts-app.ts-theme-dark) {
   --bg: #1e1f22;
   --bg-toolbar-1: #2b2d31;
   --bg-toolbar-2: #232428;
@@ -67,7 +74,7 @@
 /* Nova: alternate design, independent of the light/dark toggle (always dark). */
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap");
 
-.ts-app.ts-design-nova {
+:where(.ts-app.ts-design-nova) {
   --success: oklch(0.75 0.15 150);
   --bg: oklch(0.17 0.014 258);
   --bg-toolbar-1: oklch(0.205 0.015 258);
@@ -2417,6 +2424,74 @@
 .ts-design-theme-card-desc {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* Custom-theme cards are a <div> (built-ins are a plain <button>) so the select
+   area and the edit/duplicate/export/delete row can sit side by side without
+   nesting a button inside a button. */
+.ts-design-theme-card-custom {
+  position: relative;
+}
+
+.ts-design-theme-card-select {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.ts-design-theme-swatch-custom {
+  background: conic-gradient(from 180deg, #7fb0e8, #ff8fab, #ffd166, #7fb0e8);
+}
+
+.ts-design-theme-card-actions {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.ts-design-theme-card-actions button {
+  flex: 1;
+  padding: 0.25rem 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  background: var(--input-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ts-design-theme-card-actions button:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.ts-design-custom-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.ts-custom-theme-css {
+  width: 100%;
+  min-height: 220px;
+  font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  resize: vertical;
+  box-sizing: border-box;
 }
 
 .ts-options-columns {
