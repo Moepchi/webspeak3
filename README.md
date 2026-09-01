@@ -76,7 +76,7 @@ installed on the same machine, modified, or operated by you.
 | 👉 **Poke & away status** | Poke clients with an optional message; set yourself away with presets or a custom status |
 | ⭐ **Favorites & reconnect** | Remembers your last server/nickname; switch servers without leaving your tab |
 | 📱 **Mobile-friendly layout** | Responsive single-column layout for narrow screens, not just a shrunk desktop UI |
-| 🌍 **Localized UI** | Interface available in German and English, detected automatically or switchable in Options |
+| 🌍 **Localized UI** | Interface available in German, English, and Simplified Chinese, detected automatically or switchable in Options |
 | 🌗 **Dark / light theme** | Clean, modern UI that adapts to your preference |
 | 🔁 **Seamless reconnect** | Switch connections mid-session — old state tears down cleanly, no leaks or duplicates |
 

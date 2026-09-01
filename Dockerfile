@@ -41,7 +41,15 @@ LABEL org.opencontainers.image.title="WebSpeak3"
 LABEL org.opencontainers.image.description="Self-hosted web client for TeamSpeak 3 servers"
 WORKDIR /app
 COPY gateway/package*.json ./
-RUN npm ci --omit=dev
+# npm/npx are only needed to install the gateway's runtime deps; the
+# container never runs either afterwards, so strip them (plus npm's own
+# cache/package tree) to shrink the image and drop npm's own CVEs from the
+# final attack surface. This does mean `docker exec ... npm ...` won't work
+# for ad-hoc debugging in a running container anymore.
+RUN npm ci --omit=dev \
+    && npm cache clean --force \
+    && rm -rf /root/.npm /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=gateway-builder /src/gateway/dist ./dist
 COPY --from=connector-builder /src/connector/target/release/ts-connector /app/connector-bin/ts-connector
 COPY --from=web-builder /src/web/dist /app/web/dist
@@ -50,5 +58,8 @@ ENV PORT=8080
 ENV WEB_DIST=/app/web/dist
 ENV CONNECTOR_BIN=/app/connector-bin/ts-connector
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:8080/').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
 
 CMD ["node", "dist/index.js"]
