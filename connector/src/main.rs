@@ -7,6 +7,7 @@ use audiopus::coder::Encoder as OpusEncoder;
 use base64::Engine;
 use clap::Parser;
 use futures::prelude::*;
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
@@ -23,9 +24,10 @@ use tsclientlib::messages::c2s::{
 };
 use tsclientlib::prelude::*;
 use tsclientlib::{
-	data, ChannelGroupId, ChannelId, ClientDbId, ClientId, CodecEncryptionMode, Connection,
-	DisconnectOptions, HostBannerMode, HostMessageMode, Identity, InMessage, MaxClients,
-	MessageHandle, MessageTarget, Permission, Reason, ServerGroupId, StreamItem, TextMessageTargetMode,
+	data, ChannelGroupId, ChannelId, ClientDbId, ClientId, ClientType, CodecEncryptionMode,
+	Connection, DisconnectOptions, HostBannerMode, HostMessageMode, Identity, InMessage,
+	LicenseType, MaxClients, MessageHandle, MessageTarget, Permission, Reason, ServerGroupId,
+	ServerType, StreamItem, TextMessageTargetMode,
 };
 use tsproto_packets::packets::{AudioData, CodecType, Direction, Flags, OutAudio, OutCommand, PacketType};
 
@@ -58,6 +60,13 @@ struct Args {
 	/// reported back the same way - when omitted or unparseable.
 	#[arg(long)]
 	identity: Option<String>,
+	/// Server flavour: `teamspeak` (skip TeaSpeak handshake), `teaspeak`
+	/// (always handshake), or `auto` (handshake when server sends `teaspeak=1`).
+	#[arg(long, default_value = "auto", value_parser = ["auto", "teamspeak", "teaspeak"])]
+	server_type: String,
+	/// Privilege key / token (`client_default_token` in clientinit).
+	#[arg(long, alias = "token")]
+	privilege_key: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -184,13 +193,26 @@ enum Event {
 		server_max_clients: u16,
 		server_version: String,
 		server_license: String,
+		/// Raw id for UI coloring (GTS: 0=none, 1=Private, 2=Premium, 3=Authorized).
+		server_license_id: u8,
 		server_banner_url: String,
 		/// Opaque JSON blob the frontend can store and pass back as `--identity`
 		/// on a future connection to keep the same client UID.
 		identity: String,
 	},
 	#[serde(rename = "channels")]
-	Channels { channels: Vec<ChannelInfo>, clients: Vec<ClientInfo> },
+	Channels {
+		channels: Vec<ChannelInfo>,
+		clients: Vec<ClientInfo>,
+		/// Our own client id — frontend must not guess this via nickname match.
+		own_client_id: u16,
+		/// From `virtualserver_maxclients` (updated via `notifyserverupdated`).
+		server_max_clients: u16,
+		/// From `virtualserver_clientsonline` when known, else visible client count.
+		server_clients_online: u16,
+		/// From `virtualserver_channelsonline` when known, else visible channel count.
+		server_channels_online: u64,
+	},
 	#[serde(rename = "chatMessage")]
 	ChatMessage { from: String, message: String },
 	#[serde(rename = "serverMessage")]
@@ -241,6 +263,7 @@ enum Event {
 	#[serde(rename = "serverConnectionInfo")]
 	ServerConnectionInfo {
 		ping_ms: f64,
+		/// Server-side connection/uptime seconds (shown as Uptime, not session time).
 		connected_secs: i64,
 		packet_loss_percent: f32,
 		packets_sent_total: u64,
@@ -249,6 +272,12 @@ enum Event {
 		bytes_received_total: u64,
 		bandwidth_sent_last_second: u64,
 		bandwidth_received_last_second: u64,
+		bandwidth_sent_last_minute: u64,
+		bandwidth_received_last_minute: u64,
+		filetransfer_bandwidth_sent: u64,
+		filetransfer_bandwidth_received: u64,
+		filetransfer_bytes_sent: u64,
+		filetransfer_bytes_received: u64,
 	},
 	/// Reply to a "serverlog" request - raw lines from the virtual server's
 	/// protocol log (distinct from `ServerLog` above, which is the synthesized
@@ -538,10 +567,15 @@ fn snapshot(con: &data::Connection) -> Event {
 			},
 			has_password: ch.has_password.unwrap_or(false),
 		})
-		.collect();
+		.collect::<Vec<_>>();
+	// Bookkeeping includes ServerQuery clients (`ClientType::Query`); hide them
+	// from the channel tree / client lists. Online counters still use the
+	// server-reported total (often includes Query) via `client_count` below.
+	let all_clients_count = con.clients.len() as u16;
 	let clients = con
 		.clients
 		.values()
+		.filter(|c| !matches!(c.client_type, ClientType::Query { .. }))
 		.map(|c| {
 			// A channel with no talk power requirement at all (the common
 			// case) is never moderated, so everyone can talk regardless of
@@ -569,8 +603,38 @@ fn snapshot(con: &data::Connection) -> Event {
 				has_talk_power,
 			}
 		})
-		.collect();
-	Event::Channels { channels, clients }
+		.collect::<Vec<_>>();
+
+	// Prefer server-reported counters (GTS/TS `virtualserver_*` via notifyserverupdated)
+	// but never under-report vs. the full bookkeeping client set including Query
+	// (stale optional_data after joins would otherwise freeze the InfoPanel left number).
+	let opt = con.server.optional_data.as_ref();
+	let visible_channels = channels.len() as u64;
+	let server_clients_online =
+		opt.map(|d| d.client_count.max(all_clients_count)).unwrap_or(all_clients_count);
+	let server_channels_online =
+		opt.map(|d| d.channel_count.max(visible_channels)).unwrap_or(visible_channels);
+
+	Event::Channels {
+		channels,
+		clients,
+		own_client_id: con.own_client.0,
+		server_max_clients: con.server.max_clients,
+		server_clients_online,
+		server_channels_online,
+	}
+}
+
+fn send_server_get_variables(con: &mut tsclientlib::Connection) {
+	let packet = OutCommand::new(
+		Direction::C2S,
+		Flags::empty(),
+		PacketType::Command,
+		"servergetvariables",
+	);
+	if let Err(e) = packet.send(con) {
+		emit(&Event::Error { message: format!("servergetvariables failed: {e}") });
+	}
 }
 
 #[tokio::main]
@@ -581,11 +645,74 @@ async fn main() {
 	}
 }
 
+/// GreenTeaSpeak servers report versions like `2.5.1 [Build: …]`.
+/// Classic TeaSpeak reports `TeaSpeak 1.4.21-beta [Build: …]` — not a GTS host.
+/// Classic TeamSpeak 3 reports `3.13.8 [Build: …]` — must not use GTS labels.
+fn is_greenteaspeak_server_version(version: &str) -> bool {
+	let v = version.trim();
+	if v.is_empty() {
+		return false;
+	}
+	let lower = v.to_ascii_lowercase();
+	if lower.starts_with("teaspeak") || lower.starts_with("3.") {
+		return false;
+	}
+	let mut parts = v.split('.');
+	matches!(
+		(parts.next(), parts.next(), parts.next()),
+		(Some(a), Some(b), Some(c))
+			if !a.is_empty()
+				&& a.chars().all(|ch| ch.is_ascii_digit())
+				&& !b.is_empty()
+				&& b.chars().all(|ch| ch.is_ascii_digit())
+				&& c.chars().next().is_some_and(|ch| ch.is_ascii_digit())
+	)
+}
+
+/// Labels match the GreenTeaSpeak desktop client (`formatLicenseLabel`).
+fn format_server_license(license: LicenseType, version: &str) -> String {
+	if is_greenteaspeak_server_version(version) {
+		return match license {
+			LicenseType::Offline => "Private".into(),
+			LicenseType::Sdk => "Premium".into(),
+			LicenseType::SdkOffline => "Authorized GreenTeaSpeak Host Provider".into(),
+			_ => "Keine Lizenz".into(),
+		};
+	}
+	if version.trim().to_ascii_lowercase().starts_with("teaspeak") {
+		return "Kein GreenTeaSpeak-Server".into();
+	}
+	match license {
+		LicenseType::NoLicense => "No License".into(),
+		LicenseType::Offline => "Offline / LAN".into(),
+		LicenseType::Sdk => "SDK".into(),
+		LicenseType::SdkOffline => "SDK Offline".into(),
+		LicenseType::Npl => "NPL".into(),
+		LicenseType::Athp => "ATHP".into(),
+		LicenseType::Aal => "AAL".into(),
+		LicenseType::Default => "Default".into(),
+		LicenseType::Gamer => "Gamer".into(),
+		LicenseType::Sponsorship => "Sponsorship".into(),
+		LicenseType::Commercial => "Commercial".into(),
+	}
+}
+
 /// tsclientlib's error `Display` impls mostly fall back to `{:?}` for nested
 /// errors (e.g. `Failed to connect to server at "x": [Connect(TsProto(Timeout(..)))]`),
 /// which is accurate but not something an end user can act on. Map the cases
 /// that come up in practice to plain-language messages instead.
 fn friendly_connect_error(address: &str, e: tsclientlib::Error) -> anyhow::Error {
+	let raw = e.to_string();
+	if raw.contains("client\\stype\\sis\\snot\\sallowed")
+		|| raw.contains("client type is not allowed")
+		|| raw.contains("id=533")
+	{
+		return anyhow::anyhow!(
+			"Could not connect to \"{address}\": this server rejects this client type (error 533). \
+GreenTeaSpeak public servers often only allow the official GreenTeaSpeak desktop client. \
+Try a self-hosted TeaSpeak with TeamSpeak-compat enabled, or use GreenTeaSpeak 2 for ts.greenteaspeak.de."
+		);
+	}
 	match &e {
 		tsclientlib::Error::ConnectTs(inner) => {
 			anyhow::anyhow!("The server rejected the connection: {inner}")
@@ -593,7 +720,7 @@ fn friendly_connect_error(address: &str, e: tsclientlib::Error) -> anyhow::Error
 		tsclientlib::Error::InitserverTimeout => anyhow::anyhow!(
 			"The server did not finish logging us in within the timeout - please try again"
 		),
-		_ if e.to_string().contains("Timeout") => anyhow::anyhow!(
+		_ if raw.contains("Timeout") => anyhow::anyhow!(
 			"Could not reach \"{address}\": connection timed out. Check the address/port and that the server is reachable."
 		),
 		_ => anyhow::anyhow!("Could not connect to \"{address}\": {e}"),
@@ -617,6 +744,15 @@ async fn run(args: Args) -> Result<()> {
 		.unwrap_or_else(Identity::create);
 	let identity_str = serde_json::to_string(&identity).unwrap();
 	let mut con_config = Connection::build(args.address).name(args.nickname).identity(identity);
+	let server_type = match args.server_type.as_str() {
+		"teaspeak" => ServerType::Teaspeak,
+		"teamspeak" => ServerType::Teamspeak,
+		_ => ServerType::Auto,
+	};
+	con_config = con_config.server_type(server_type);
+	if let Some(token) = args.privilege_key {
+		con_config = con_config.default_token(token);
+	}
 	if let Some(pwd) = args.server_password {
 		con_config = con_config.password(pwd);
 	}
@@ -655,7 +791,8 @@ async fn run(args: Args) -> Result<()> {
 	let server_name = server_state.server.name.clone();
 	let server_max_clients = server_state.server.max_clients;
 	let server_version = server_state.server.version.clone();
-	let server_license = format!("{:?}", server_state.server.license);
+	let server_license = format_server_license(server_state.server.license, &server_version);
+	let server_license_id = server_state.server.license.to_u8().unwrap_or(0);
 	let server_banner_url = server_state.server.hostbanner_gfx_url.clone();
 	emit(&Event::Connected {
 		welcome_message,
@@ -663,12 +800,17 @@ async fn run(args: Args) -> Result<()> {
 		server_max_clients,
 		server_version,
 		server_license,
+		server_license_id,
 		server_banner_url,
 		identity: identity_str,
 	});
 
 	// Subscribe to all channels so we actually receive the full channel/client list.
 	con.get_state()?.server.set_subscribed(true).send(&mut con)?;
+
+	// Ask for virtualserver_* counters (maxclients / clientsonline / …) like GTS.
+	// Reply arrives as notifyserverupdated and updates bookkeeping + snapshots.
+	send_server_get_variables(&mut con);
 
 	// Give the server a moment to send the channel/client list, then emit a
 	// snapshot. Further snapshots are emitted below whenever book state changes.
@@ -758,12 +900,23 @@ async fn run(args: Args) -> Result<()> {
 	// eventual emit can be routed back to it.
 	let mut pending_perm_list: Option<(String, u64, Option<u64>)> = None;
 	let mut pending_perm_list_raw: Option<Vec<(u32, i32, bool, bool)>> = None;
+	// TeaSpeak may reveal hidden channels after a group/permission change. Debounce
+	// a channelsubscribeall so we pick up any channels the server only exposes then.
+	let mut resubscribe_at: Option<tokio::time::Instant> = None;
 
 	enum LoopOutcome {
 		StdinLine(std::io::Result<Option<String>>),
 		ConEvent(Option<Result<StreamItem, tsclientlib::Error>>),
 		AudioTick,
+		Resubscribe,
+		ServerVarsRefresh,
 	}
+
+	// Keep virtualserver_maxclients / clientsonline in sync (GTS-style).
+	let mut server_vars_ticker = tokio::time::interval(tokio::time::Duration::from_secs(20));
+	server_vars_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+	// First tick fires immediately; we already requested once after connect.
+	server_vars_ticker.tick().await;
 
 	loop {
 		let mut events = con.events();
@@ -771,6 +924,13 @@ async fn run(args: Args) -> Result<()> {
 			line = stdin_lines.next_line() => LoopOutcome::StdinLine(line),
 			ev = events.next() => LoopOutcome::ConEvent(ev),
 			_ = audio_ticker.tick() => LoopOutcome::AudioTick,
+			_ = server_vars_ticker.tick() => LoopOutcome::ServerVarsRefresh,
+			_ = async {
+				match resubscribe_at {
+					Some(at) => tokio::time::sleep_until(at).await,
+					None => std::future::pending::<()>().await,
+				}
+			} => LoopOutcome::Resubscribe,
 		};
 		drop(events);
 
@@ -792,16 +952,39 @@ async fn run(args: Args) -> Result<()> {
 					} else if let Some(rest) = l.strip_prefix("switch ") {
 						match rest.trim().parse::<u64>() {
 							Ok(id) => {
-								let part = {
-									let state = con.get_state()?;
-									let own = &state.clients[&state.own_client];
-									own.client_move(ChannelId(id))
-								};
-								match part.send_with_result(&mut con) {
-									Ok(handle) => {
-										pending_messages.insert(handle, "Channel switch".into());
+								// Build clientmove defensively: missing own client must not panic
+								// the whole connector (that looked like a dead Join from the UI).
+								let part = match con.get_state() {
+									Ok(state) => match state.clients.get(&state.own_client) {
+										Some(own) => {
+											// Always include cpw= (empty) like the GTS desktop client —
+											// some TeaSpeak builds are picky about an omitted key.
+											let mut part = own.client_move(ChannelId(id));
+											part.channel_password = Some(std::borrow::Cow::Borrowed(""));
+											Some(part)
+										}
+										None => {
+											emit(&Event::Error {
+												message: "Channel switch failed: own client not in book state"
+													.into(),
+											});
+											None
+										}
+									},
+									Err(e) => {
+										emit(&Event::Error {
+											message: format!("Channel switch failed: {e}"),
+										});
+										None
 									}
-									Err(e) => emit(&Event::Error { message: e.to_string() }),
+								};
+								if let Some(part) = part {
+									match part.send_with_result(&mut con) {
+										Ok(handle) => {
+											pending_messages.insert(handle, "Channel switch".into());
+										}
+										Err(e) => emit(&Event::Error { message: e.to_string() }),
+									}
 								}
 							}
 							Err(_) => emit(&Event::Error { message: format!("Invalid channel id: {rest}") }),
@@ -1075,6 +1258,9 @@ async fn run(args: Args) -> Result<()> {
 								match part.send_with_result(&mut con) {
 									Ok(handle) => {
 										pending_messages.insert(handle, "Server edit".into());
+										// Refresh counters/maxclients after edit (notifyserveredited
+										// may be partial on TeaSpeak; servergetvariables fills gaps).
+										send_server_get_variables(&mut con);
 									}
 									Err(e) => emit(&Event::Error { message: e.to_string() }),
 								}
@@ -1841,6 +2027,7 @@ async fn run(args: Args) -> Result<()> {
 			},
 			LoopOutcome::ConEvent(ev) => match ev {
 				Some(Ok(StreamItem::BookEvents(events))) => {
+					let own_id = con.get_state()?.own_client;
 					for event in &events {
 						if let BookEvent::Message { target, invoker, message } = event {
 							match target {
@@ -1857,7 +2044,6 @@ async fn run(args: Args) -> Result<()> {
 									});
 								}
 								MessageTarget::Client(other_id) => {
-									let own_id = con.get_state()?.own_client;
 									if invoker.id == own_id {
 										let partner_name = con
 											.get_state()?
@@ -1885,6 +2071,22 @@ async fn run(args: Args) -> Result<()> {
 								}
 							}
 						} else {
+							// Group add/remove emit PropertyAdded/Removed (not Changed).
+							if matches!(
+								event,
+								BookEvent::PropertyAdded {
+									id: PropertyId::ClientServerGroup(id, _),
+									..
+								} | BookEvent::PropertyRemoved {
+									id: PropertyId::ClientServerGroup(id, _),
+									..
+								} if *id == own_id
+							) {
+								resubscribe_at = Some(
+									tokio::time::Instant::now()
+										+ tokio::time::Duration::from_millis(250),
+								);
+							}
 							log_book_event(con.get_state()?, event);
 						}
 					}
@@ -1919,16 +2121,25 @@ async fn run(args: Args) -> Result<()> {
 					}
 					if pending_server_conninfo {
 						if let Some(data) = &con.get_state()?.server.connection_data {
+							// TeaSpeak/TS may report packet loss as a fraction (0–1) or percent.
+							let loss = data.packetloss_total;
+							let packet_loss_percent = if loss <= 1.0 { loss * 100.0 } else { loss };
 							emit(&Event::ServerConnectionInfo {
 								ping_ms: data.ping.as_seconds_f64() * 1000.0,
 								connected_secs: data.connected_time_total.whole_seconds(),
-								packet_loss_percent: data.packetloss_total,
+								packet_loss_percent,
 								packets_sent_total: data.packets_sent_total,
 								bytes_sent_total: data.bytes_sent_total,
 								packets_received_total: data.packets_received_total,
 								bytes_received_total: data.bytes_received_total,
 								bandwidth_sent_last_second: data.bandwidth_sent_last_second_total,
 								bandwidth_received_last_second: data.bandwidth_received_last_second_total,
+								bandwidth_sent_last_minute: data.bandwidth_sent_last_minute_total,
+								bandwidth_received_last_minute: data.bandwidth_received_last_minute_total,
+								filetransfer_bandwidth_sent: data.filetransfer_bandwidth_sent,
+								filetransfer_bandwidth_received: data.filetransfer_bandwidth_received,
+								filetransfer_bytes_sent: data.filetransfer_bytes_sent_total,
+								filetransfer_bytes_received: data.filetransfer_bytes_received_total,
 							});
 							pending_server_conninfo = false;
 						}
@@ -2323,6 +2534,19 @@ async fn run(args: Args) -> Result<()> {
 					break;
 				}
 			},
+			LoopOutcome::Resubscribe => {
+				resubscribe_at = None;
+				// Re-send channelsubscribeall so TeaSpeak pushes newly visible channels
+				// (and clients in them) after our own server-group change.
+				if let Err(e) = con.get_state()?.server.set_subscribed(true).send(&mut con) {
+					emit(&Event::Error {
+						message: format!("channelsubscribeall after perm change failed: {e}"),
+					});
+				}
+			}
+			LoopOutcome::ServerVarsRefresh => {
+				send_server_get_variables(&mut con);
+			}
 			LoopOutcome::AudioTick => {
 				if !audio_handler.get_queues().is_empty() {
 					let mut buf = vec![0.0f32; FRAME_SAMPLES * OUT_CHANNELS];

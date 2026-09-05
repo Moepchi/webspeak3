@@ -228,6 +228,7 @@ export class DemoSocket {
             serverMaxClients: 32,
             serverVersion: "3.13.7 [Build: demo]",
             serverLicense: "Demo License",
+            serverLicenseId: 2,
             serverBannerUrl: null,
             welcomeMessage: "This is a simulated demo - no real TeamSpeak server is involved. Connect with any name/address you like.",
           });
@@ -620,6 +621,14 @@ export class DemoSocket {
       serverGroups: [...this.selfServerGroups],
       hasTalkPower: true,
     };
-    this.emit({ type: "channels", channels: DEMO_CHANNELS, clients: [self, ...DEMO_NPCS] });
+    this.emit({
+      type: "channels",
+      channels: DEMO_CHANNELS,
+      clients: [self, ...DEMO_NPCS],
+      ownClientId: SELF_ID,
+      serverMaxClients: 32,
+      serverClientsOnline: 1 + DEMO_NPCS.length,
+      serverChannelsOnline: DEMO_CHANNELS.length,
+    });
   }
 }

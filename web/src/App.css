@@ -1178,6 +1178,23 @@
   color: var(--text-muted);
 }
 
+/* GreenTeaSpeak / TeaSpeak license badge colors (ids 0–3) */
+.ts-license-label.ts-license-0 {
+  color: #9a9aa3;
+}
+
+.ts-license-label.ts-license-1 {
+  color: #8fbf7a;
+}
+
+.ts-license-label.ts-license-2 {
+  color: #d4b45a;
+}
+
+.ts-license-label.ts-license-3 {
+  color: #6eb0e0;
+}
+
 .ts-info-connection-link {
   margin-top: 0.5rem;
   background: none;
@@ -1197,6 +1214,10 @@
   width: 380px;
 }
 
+.ts-connection-info-dialog.ts-server-conn-info {
+  width: min(520px, 94vw);
+}
+
 .ts-connection-info-loading {
   padding: 1rem;
   text-align: center;
@@ -1211,6 +1232,32 @@
 }
 
 .ts-connection-info-grid span:nth-child(odd) {
+  color: var(--text-muted);
+}
+
+.ts-server-conn-table {
+  width: 100%;
+  margin-top: 0.85rem;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ts-server-conn-table th,
+.ts-server-conn-table td {
+  padding: 0.3rem 0.4rem;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+
+.ts-server-conn-table th:first-child,
+.ts-server-conn-table td:first-child {
+  text-align: left;
+  color: var(--text-muted);
+}
+
+.ts-server-conn-table th {
+  font-style: italic;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
@@ -1259,9 +1306,118 @@
   background: var(--row-hover);
 }
 
+/* Channel spacers ([cspacer], [*spacer01], …) — GreenTeaSpeak / TS parity */
+.ts-channel-row.ts-spacer {
+  position: relative;
+  justify-content: center;
+  min-height: 19px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ts-channel-row.ts-spacer:hover {
+  background: var(--row-hover);
+}
+
+.ts-channel-row.ts-spacer .ts-spacer-label {
+  position: absolute;
+  left: 0.35rem;
+  right: 0.35rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: center;
+  pointer-events: none;
+}
+
+.ts-channel-row.ts-spacer-align-left .ts-spacer-label {
+  text-align: left;
+}
+
+.ts-channel-row.ts-spacer-align-right .ts-spacer-label {
+  text-align: right;
+}
+
+.ts-channel-row.ts-spacer-align-center .ts-spacer-label,
+.ts-channel-row.ts-spacer-align-repetitive .ts-spacer-label {
+  text-align: center;
+}
+
+.ts-channel-row.ts-spacer-align-repetitive .ts-spacer-label {
+  text-overflow: clip;
+}
+
+.ts-channel-row.ts-spacer-line .ts-spacer-line-rule {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  top: 50%;
+  height: 0;
+  border-top: 1px solid currentColor;
+  opacity: 0.7;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ts-channel-row.ts-spacer-boxart .ts-spacer-label {
+  font-family: Consolas, "Courier New", monospace;
+  letter-spacing: 0.02em;
+}
+
+.ts-tree-expander {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 16px;
+  flex: 0 0 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ts-tree-expander span {
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 5px solid #c8c8c8;
+}
+
+.ts-tree-expander-collapsed span {
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-left: 5px solid #c8c8c8;
+  border-right: 0;
+}
+
+.ts-tree-expander-empty {
+  visibility: hidden;
+  cursor: default;
+}
+
+.ts-client-status-leading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  flex-shrink: 0;
+}
+
+.ts-client-status-leading:empty {
+  display: none;
+}
+
+.ts-tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ts-tree-list-root {
+  padding-left: 0.15rem;
+}
+
 .ts-client-row {
   color: var(--client-text);
-  padding-left: 0.65rem;
+  padding-left: 0;
 }
 
 .ts-client-row.ts-self {
@@ -1278,9 +1434,50 @@
 }
 
 .ts-client-row.ts-talking {
-  outline: 1px solid #4caf50;
+  outline: 1px solid color-mix(in srgb, #4caf50 55%, transparent);
   border-radius: 2px;
-  background: color-mix(in srgb, #4caf50 15%, transparent);
+  background: color-mix(in srgb, #4caf50 10%, transparent);
+}
+
+/* Talk lamps (GTS2-style status orbs left of the nickname) */
+.ts-talk-lamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.ts-talk-lamp-idle {
+  background:
+    radial-gradient(circle at 32% 28%, #9fd0ff 0%, #3a7ec4 45%, #1a4a7a 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.ts-talk-lamp-talking {
+  background:
+    radial-gradient(circle at 32% 28%, #c8f59a 0%, #4caf50 42%, #1e7a28 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.6),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3),
+    0 0 4px rgba(76, 175, 80, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.ts-talk-lamp-muted {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ts-talk-lamp-muted svg {
+  display: block;
 }
 
 .ts-client-icons {
@@ -2414,6 +2611,10 @@
 .ts-design-theme-swatch-nova {
   background: linear-gradient(135deg, oklch(0.245 0.016 258) 0%, oklch(0.17 0.014 258) 100%);
   box-shadow: inset 0 0 0 1px #7fb0e8;
+}
+
+.ts-design-theme-swatch-greenteaspeak {
+  background: linear-gradient(135deg, #1f2329 40%, #6fbf5c 40%, #386896 70%, #c8b882 70%);
 }
 
 .ts-design-theme-card-name {

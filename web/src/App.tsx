@@ -42,6 +42,20 @@ import {
   type SoundEventId,
 } from "./sounds";
 import { parseSoundpack } from "./soundpack";
+import {
+  GREENTEASPEAK_THEME_ID,
+  GreenteaSpeakChrome,
+  isGreenteaSpeakTheme,
+} from "./themes/greenteaspeak";
+import { parseChannelName, spacerDisplayName } from "./lib/spacer";
+import {
+  applyParkedGatewayEvent,
+  emptyParkedState,
+  sessionLabel,
+  type ParkedSessionState,
+  type SessionRecord,
+  type SessionTabInfo,
+} from "./connectionSessions";
 
 // In dev, the gateway runs standalone on its own port. In production it's
 // normally served from the same origin/port as the web app (single
@@ -56,7 +70,7 @@ import { parseSoundpack } from "./soundpack";
 // gateway/src/index.ts), so that path always gets appended here - a
 // VITE_GATEWAY_URL override only needs to name the host, not the path.
 const GATEWAY_URL = import.meta.env.DEV
-  ? "ws://localhost:8080"
+  ? "ws://localhost:8080/ws"
   : import.meta.env.VITE_GATEWAY_URL
     ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "")}/ws`
     : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
@@ -77,6 +91,15 @@ const GATEWAY_URL = import.meta.env.DEV
 
 const LAST_HOST_KEY = "webspeak3:last-host";
 const LAST_NICKNAME_KEY = "webspeak3:last-nickname";
+const LAST_PRIVILEGE_KEY = "webspeak3:last-privilege-key";
+const LAST_SERVER_TYPE_KEY = "webspeak3:last-server-type";
+
+type ServerType = "teamspeak" | "teaspeak" | "auto";
+
+function loadServerType(): ServerType {
+  const raw = localStorage.getItem(LAST_SERVER_TYPE_KEY);
+  return raw === "teamspeak" || raw === "teaspeak" || raw === "auto" ? raw : "auto";
+}
 /** Identity persisted across sessions so the server sees the same client UID
  *  each time, instead of a fresh one being generated per connection. */
 const IDENTITY_KEY = "webspeak3:identity";
@@ -139,18 +162,19 @@ const ECHO_CANCELLATION_KEY = "webspeak3:echo-cancellation";
 const AUTO_GAIN_CONTROL_KEY = "webspeak3:auto-gain-control";
 const VAD_HANGOVER_KEY = "webspeak3:vad-hangover";
 const DESIGN_THEME_KEY = "webspeak3:design-theme";
-// The user's actual pick - "standard" | "nova" | "custom:<id>". DESIGN_THEME_KEY above
-// keeps tracking just the resolved structural base, since a couple of early call sites
-// (e.g. the host-field default below) need that cheaply, before customThemes is loaded.
+// The user's actual pick - "standard" | "nova" | "greenteaspeak" | "custom:<id>".
+// DESIGN_THEME_KEY above keeps tracking just the resolved structural base, since a
+// couple of early call sites (e.g. the host-field default below) need that cheaply,
+// before customThemes is loaded.
 const DESIGN_SELECTION_KEY = "webspeak3:design-selection";
 const CUSTOM_THEMES_KEY = "webspeak3:custom-themes";
 
-type DesignTheme = "standard" | "nova";
+type DesignTheme = "standard" | "nova" | "greenteaspeak";
 
 /** A user-authored theme package: a name, which built-in layout it behaves like
- *  (Standard's plain chrome vs Nova's collapsed menu/splash behavior), and raw CSS
- *  that gets injected while it's active - free-form, so it can restyle or even
- *  reflow the existing markup (e.g. via flex `order`, `display:none`, overlays). */
+ *  (Standard's plain chrome vs Nova's collapsed menu/splash vs GreenTeaSpeak shell),
+ *  and raw CSS that gets injected while it's active - free-form, so it can restyle
+ *  or even reflow the existing markup. */
 type CustomTheme = {
   id: string;
   name: string;
@@ -158,8 +182,33 @@ type CustomTheme = {
   css: string;
 };
 
+function isDesignTheme(value: string): value is DesignTheme {
+  return value === "standard" || value === "nova" || value === "greenteaspeak";
+}
+
 function loadDesignTheme(): DesignTheme {
-  return localStorage.getItem(DESIGN_THEME_KEY) === "nova" ? "nova" : "standard";
+  const raw = localStorage.getItem(DESIGN_THEME_KEY);
+  if (raw && isDesignTheme(raw)) return raw;
+  return "standard";
+}
+
+function resolveDesignThemeBase(selection: string, customThemes: CustomTheme[]): DesignTheme {
+  if (selection.startsWith("custom:")) {
+    return customThemes.find((th) => `custom:${th.id}` === selection)?.baseTheme ?? "standard";
+  }
+  return isDesignTheme(selection) ? selection : "standard";
+}
+
+function designThemeClassName(theme: DesignTheme): string {
+  if (theme === "nova") return " ts-design-nova";
+  if (isGreenteaSpeakTheme(theme)) return " ts-design-greenteaspeak";
+  return "";
+}
+
+function designThemeLabel(theme: DesignTheme, t: (key: string) => string): string {
+  if (theme === "nova") return t("design.theme.nova");
+  if (theme === "greenteaspeak") return t("design.theme.greenteaspeak");
+  return t("design.theme.standard");
 }
 
 function loadCustomThemes(): CustomTheme[] {
@@ -173,7 +222,7 @@ function loadCustomThemes(): CustomTheme[] {
         v &&
         typeof v.id === "string" &&
         typeof v.name === "string" &&
-        (v.baseTheme === "standard" || v.baseTheme === "nova") &&
+        isDesignTheme(v.baseTheme) &&
         typeof v.css === "string"
     );
   } catch {
@@ -375,7 +424,10 @@ interface ChannelInfo {
   hasPassword: boolean;
 }
 
-type SelectedItem = { type: "server" } | { type: "channel"; id: number };
+type SelectedItem =
+  | { type: "server" }
+  | { type: "channel"; id: number }
+  | { type: "client"; id: number };
 
 interface ClientInfo {
   id: number;
@@ -447,10 +499,17 @@ interface ServerConnectionInfoData {
   bytesReceivedTotal: number;
   bandwidthSentLastSecond: number;
   bandwidthReceivedLastSecond: number;
+  bandwidthSentLastMinute: number;
+  bandwidthReceivedLastMinute: number;
+  filetransferBandwidthSent: number;
+  filetransferBandwidthReceived: number;
+  filetransferBytesSent: number;
+  filetransferBytesReceived: number;
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
   const units = ["KB", "MB", "GB", "TB"];
   let value = bytes / 1024;
   let unitIndex = 0;
@@ -459,6 +518,18 @@ function formatBytes(bytes: number): string {
     unitIndex++;
   }
   return `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+/** Compact counts like GreenTeaSpeak (`772.92 k`) — avoids DE locale `772.920`. */
+function formatCount(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return "0";
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)} k`;
+  return value.toFixed(value % 1 === 0 ? 0 : 2);
+}
+
+function formatRate(bytesPerSec: number): string {
+  return `${formatBytes(bytesPerSec)}/s`;
 }
 
 /** Turns a base64-encoded file (as delivered by the "fileDownloadData" event)
@@ -509,23 +580,64 @@ function ChannelIcon() {
   );
 }
 
-function ClientIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="5.2" r="3" fill="#6d8fb0" />
-      <path d="M2 14c0-3.3 2.7-5.2 6-5.2s6 1.9 6 5.2v.3H2V14Z" fill="#6d8fb0" />
-      <circle cx="12.3" cy="12.3" r="2.6" fill="#4caf50" stroke="#fff" strokeWidth="0.8" />
-    </svg>
-  );
+/** GTS2-style talk lamp: blue idle / green talking / muted mic. */
+function TalkLamp({
+  talking,
+  inputMuted,
+  inputHardwareEnabled,
+}: {
+  talking: boolean;
+  inputMuted: boolean;
+  inputHardwareEnabled: boolean;
+}) {
+  const t = useT();
+  const muted = inputMuted || !inputHardwareEnabled;
+
+  if (muted) {
+    return (
+      <span className="ts-talk-lamp ts-talk-lamp-muted" title={t("tree.micMuted")} aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" focusable="false">
+          <path
+            d="M7 1.4c-1.15 0-2.05.9-2.05 2.05v3.1c0 1.15.9 2.05 2.05 2.05s2.05-.9 2.05-2.05v-3.1C9.05 2.3 8.15 1.4 7 1.4Z"
+            fill="#9aa3ad"
+          />
+          <path
+            d="M3.2 6.4v.4c0 2 1.7 3.55 3.8 3.55s3.8-1.55 3.8-3.55v-.4"
+            fill="none"
+            stroke="#8a939c"
+            strokeWidth="1.15"
+            strokeLinecap="round"
+          />
+          <path d="M7 10.35v2" stroke="#8a939c" strokeWidth="1.15" strokeLinecap="round" />
+          <path d="M5.2 12.35h3.6" stroke="#8a939c" strokeWidth="1.15" strokeLinecap="round" />
+          <circle cx="10.35" cy="10.35" r="2.55" fill="#e53935" stroke="#1a1a1a" strokeWidth="0.55" />
+          <path
+            d="M9.35 9.35l2 2M11.35 9.35l-2 2"
+            stroke="#fff"
+            strokeWidth="1.1"
+            strokeLinecap="round"
+          />
+        </svg>
+      </span>
+    );
+  }
+
+  if (talking) {
+    return (
+      <span className="ts-talk-lamp ts-talk-lamp-talking" title={t("tree.talking")} aria-hidden="true" />
+    );
+  }
+
+  return <span className="ts-talk-lamp ts-talk-lamp-idle" aria-hidden="true" />;
 }
 
 function ClientStatusIcons({ client }: { client: ClientInfo }) {
   const t = useT();
+  // Mute is shown on the TalkLamp; keep secondary flags here.
   return (
     <span className="ts-status-icons">
       {client.isChannelCommander && <span title={t("tree.channelCommander")}>⭐</span>}
       {client.away && <span title={t("tree.away")}>💤</span>}
-      {(client.inputMuted || !client.inputHardwareEnabled) && <span title={t("tree.micMuted")}>🔇</span>}
       {!client.inputMuted && client.inputHardwareEnabled && !client.hasTalkPower && (
         <span title={t("tree.noTalkPower")}>🔒</span>
       )}
@@ -544,6 +656,10 @@ function ServerIcon() {
     </svg>
   );
 }
+
+/** Survives ChannelTree remounts when Select's setState rebuilds the tree. */
+let lastChannelClick: { id: number; at: number } | null = null;
+let switchArmedUntil = 0;
 
 function ChannelTree({
   channels,
@@ -577,6 +693,9 @@ function ChannelTree({
   onChannelContextMenu: (e: React.MouseEvent, channelId: number, channelName: string) => void;
 }) {
   const t = useT();
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
+  // Module-level click tracking (see lastChannelClick) — refs alone are not
+  // enough when Select re-renders remount nested ChannelTree instances.
   const children = channels.filter((c) => c.parent === parent).sort((a, b) => a.order - b.order);
   if (children.length === 0) return null;
 
@@ -587,56 +706,160 @@ function ChannelTree({
           .filter((g): g is GroupEntry => !!g && g.iconId !== 0)
       : [];
 
+  const toggleCollapsed = (channelId: number, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(channelId)) next.delete(channelId);
+      else next.add(channelId);
+      return next;
+    });
+  };
+
   return (
-    <ul className="ts-tree-list">
-      {children.map((channel) => (
+    <ul className={`ts-tree-list${parent === 0 ? " ts-tree-list-root" : ""}`}>
+      {children.map((channel) => {
+        const isRoot = parent === 0;
+        const spacer = spacerDisplayName(channel.name, isRoot);
+        const channelClients = clients.filter((c) => c.channel === channel.id);
+        const hasSubChannels = channels.some((c) => c.parent === channel.id);
+        const hasChildren = channelClients.length > 0 || hasSubChannels;
+        const isCollapsed = collapsed.has(channel.id);
+        const spacerClass = spacer.isSpacer
+          ? ` ts-spacer ts-spacer-align-${spacer.alignment}${spacer.isLine ? " ts-spacer-line" : ""}${
+              spacer.isBoxArt ? " ts-spacer-boxart" : ""
+            }`
+          : "";
+        return (
         <li key={channel.id}>
           <div
-            className={`ts-row ts-channel-row${
+            className={`ts-row ts-channel-row${spacerClass}${
               selected?.type === "channel" && selected.id === channel.id ? " ts-row-selected" : ""
             }`}
-            onClick={() => onSelectItem({ type: "channel", id: channel.id })}
-            onDoubleClick={() => onSwitchChannel(channel.id)}
+            onClick={() => {
+              onSelectItem({ type: "channel", id: channel.id });
+              // Manual double-click: native dblclick is often lost when the first
+              // click's Select setState remounts this row before the second click.
+              // Spacers are joinable (TS/GTS): visual-only difference.
+              const now = performance.now();
+              const prev = lastChannelClick;
+              if (prev && prev.id === channel.id && now - prev.at < 450) {
+                lastChannelClick = null;
+                switchArmedUntil = now + 50;
+                onSwitchChannel(channel.id);
+              } else {
+                lastChannelClick = { id: channel.id, at: now };
+              }
+            }}
+            onDoubleClick={() => {
+              if (performance.now() < switchArmedUntil) return;
+              onSwitchChannel(channel.id);
+            }}
             onContextMenu={(e) => onChannelContextMenu(e, channel.id, channel.name)}
-            title={t("tree.clickToSelect")}
+            title={t("tree.clickToJoin")}
           >
-            <ChannelIcon />
-            <span>{channel.name}</span>
-            {channel.hasPassword && <span title={t("tree.passwordProtected")}>🔒</span>}
+            {!spacer.isSpacer && (
+              <button
+                type="button"
+                className={`ts-tree-expander${hasChildren ? "" : " ts-tree-expander-empty"}${
+                  isCollapsed ? " ts-tree-expander-collapsed" : ""
+                }`}
+                aria-label={isCollapsed ? "aufklappen" : "zuklappen"}
+                tabIndex={-1}
+                onMouseDown={(e) => {
+                  // Keep focus on the row so a nearby double-click still joins.
+                  e.preventDefault();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!hasChildren) return;
+                  toggleCollapsed(channel.id, e);
+                }}
+                onDoubleClick={(e) => e.stopPropagation()}
+              >
+                <span />
+              </button>
+            )}
+            {!spacer.isSpacer && <ChannelIcon />}
+            {spacer.isSpacer ? (
+              spacer.isLine ? (
+                <span className="ts-spacer-label ts-spacer-line-rule" aria-hidden="true" />
+              ) : (
+                <span className="ts-spacer-label">{spacer.label}</span>
+              )
+            ) : (
+              <span className="ts-tree-label">{channel.name}</span>
+            )}
+            {!spacer.isSpacer && channel.hasPassword && (
+              <span title={t("tree.passwordProtected")}>🔒</span>
+            )}
           </div>
-          <ul className="ts-tree-list">
-            {clients
-              .filter((c) => c.channel === channel.id)
-              .map((c) => (
+          {!isCollapsed && (
+            <ul className="ts-tree-list">
+              {channelClients.map((c) => (
                 <li key={c.id}>
                   <div
                     className={`ts-row ts-client-row${c.id === ownClientId ? " ts-self" : ""}${
-                      talkers.has(c.id) && c.hasTalkPower ? " ts-talking" : ""
-                    }`}
-                    onClick={c.id === ownClientId ? undefined : () => onOpenPrivateChat(c.id, c.name)}
+                      talkers.has(c.id) &&
+                      c.hasTalkPower &&
+                      !c.inputMuted &&
+                      c.inputHardwareEnabled
+                        ? " ts-talking"
+                        : ""
+                    }${selected?.type === "client" && selected.id === c.id ? " ts-row-selected" : ""}`}
+                    onClick={() => onSelectItem({ type: "client", id: c.id })}
+                    onDoubleClick={
+                      c.id === ownClientId ? undefined : () => onOpenPrivateChat(c.id, c.name)
+                    }
                     onContextMenu={(e) => onClientContextMenu(e, c.id, c.name, c.id === ownClientId)}
-                    title={c.id === ownClientId ? undefined : `${t("tree.privateChatWith")} ${c.name}`}
+                    title={
+                      c.id === ownClientId
+                        ? undefined
+                        : `${t("tree.privateChatWith")} ${c.name}`
+                    }
                   >
-                    <ClientIcon />
+                    <span className="ts-tree-expander ts-tree-expander-empty" aria-hidden="true">
+                      <span />
+                    </span>
+                    <TalkLamp
+                      talking={
+                        talkers.has(c.id) &&
+                        c.hasTalkPower &&
+                        !c.inputMuted &&
+                        c.inputHardwareEnabled
+                      }
+                      inputMuted={c.inputMuted}
+                      inputHardwareEnabled={c.inputHardwareEnabled}
+                    />
+                    <span className="ts-client-status-leading">
+                      <ClientStatusIcons client={c} />
+                    </span>
                     <span
                       className="ts-client-avatar"
-                      style={{ background: c.id === ownClientId ? "var(--accent)" : clientAvatarColor(c.name) }}
+                      style={{
+                        background: c.id === ownClientId ? "var(--accent)" : clientAvatarColor(c.name),
+                      }}
                     >
                       {c.name.trim().charAt(0).toUpperCase() || "?"}
                     </span>
                     {countryFlag(c.country) && <span title={c.country}>{countryFlag(c.country)}</span>}
-                    <span>{c.name}</span>
+                    <span className="ts-tree-label">{c.name}</span>
                     {c.away && c.awayMessage && (
                       <span className="ts-client-away-message">({c.awayMessage})</span>
                     )}
                     <span className="ts-client-icons">
-                      <ClientStatusIcons client={c} />
                       {clientGroupBadges(c).map((g) => {
                         if (g.iconId >= CUSTOM_ICON_ID_THRESHOLD) {
                           const base64 = groupIconImages[`/icon_${g.iconId}`];
                           if (base64) {
                             return (
-                              <img key={g.id} className="ts-group-icon" src={iconDataUrl(base64)} alt="" title={g.name} />
+                              <img
+                                key={g.id}
+                                className="ts-group-icon"
+                                src={iconDataUrl(base64)}
+                                alt=""
+                                title={g.name}
+                              />
                             );
                           }
                         }
@@ -655,25 +878,29 @@ function ChannelTree({
                   </div>
                 </li>
               ))}
-          </ul>
-          <ChannelTree
-            channels={channels}
-            clients={clients}
-            parent={channel.id}
-            ownClientId={ownClientId}
-            talkers={talkers}
-            serverGroups={serverGroups}
-            groupIconImages={groupIconImages}
-            selected={selected}
-            onSelectItem={onSelectItem}
-            onSwitchChannel={onSwitchChannel}
-            onOpenPrivateChat={onOpenPrivateChat}
-            onPokeClient={onPokeClient}
-            onClientContextMenu={onClientContextMenu}
-            onChannelContextMenu={onChannelContextMenu}
-          />
+            </ul>
+          )}
+          {!isCollapsed && (
+            <ChannelTree
+              channels={channels}
+              clients={clients}
+              parent={channel.id}
+              ownClientId={ownClientId}
+              talkers={talkers}
+              serverGroups={serverGroups}
+              groupIconImages={groupIconImages}
+              selected={selected}
+              onSelectItem={onSelectItem}
+              onSwitchChannel={onSwitchChannel}
+              onOpenPrivateChat={onOpenPrivateChat}
+              onPokeClient={onPokeClient}
+              onClientContextMenu={onClientContextMenu}
+              onChannelContextMenu={onChannelContextMenu}
+            />
+          )}
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
@@ -685,9 +912,12 @@ function InfoPanel({
   serverMaxClients,
   serverVersion,
   serverLicense,
+  serverLicenseId,
   totalClientCount,
+  totalChannelCount,
   channels,
   clients,
+  serverGroups,
   onShowServerConnectionInfo,
   onEditServer,
 }: {
@@ -697,9 +927,12 @@ function InfoPanel({
   serverMaxClients: number;
   serverVersion: string;
   serverLicense: string;
+  serverLicenseId: number;
   totalClientCount: number;
+  totalChannelCount: number;
   channels: ChannelInfo[];
   clients: ClientInfo[];
+  serverGroups: GroupEntry[] | null;
   onShowServerConnectionInfo: () => void;
   onEditServer: () => void;
 }) {
@@ -721,14 +954,18 @@ function InfoPanel({
         )}
         {serverLicense && (
           <div className="ts-info-row">
-            <span>{t("info.license")}</span> <span>{serverLicense}</span>
+            <span>{t("info.license")}</span>{" "}
+            <span className={`ts-license-label ts-license-${serverLicenseId}`}>{serverLicense}</span>
           </div>
         )}
         <div className="ts-info-row">
-          <span>{t("info.currentClients")}</span> <span>{totalClientCount} / {serverMaxClients || "∞"}</span>
+          <span>{t("info.currentClients")}</span>{" "}
+          <span>
+            {totalClientCount} / {serverMaxClients > 0 ? serverMaxClients : "∞"}
+          </span>
         </div>
         <div className="ts-info-row">
-          <span>{t("info.currentChannels")}</span> <span>{channels.length}</span>
+          <span>{t("info.currentChannels")}</span> <span>{totalChannelCount}</span>
         </div>
         <button className="ts-info-connection-link" onClick={onShowServerConnectionInfo}>
           🔌 {t("connectionInfo.serverTitle")}
@@ -740,16 +977,76 @@ function InfoPanel({
     );
   }
 
+  if (selected.type === "client") {
+    const client = clients.find((c) => c.id === selected.id);
+    if (!client) return <div className="ts-info-panel" />;
+    const groups = serverGroups
+      ? client.serverGroups
+          .map((gid) => serverGroups.find((g) => g.id === gid)?.name)
+          .filter((n): n is string => !!n)
+      : [];
+    return (
+      <div className="ts-info-panel">
+        <div className="ts-info-title">
+          <TalkLamp
+            talking={false}
+            inputMuted={client.inputMuted}
+            inputHardwareEnabled={client.inputHardwareEnabled}
+          />
+          <span>{client.name}</span>
+        </div>
+        {client.country && (
+          <div className="ts-info-row">
+            <span>{t("info.country")}</span>{" "}
+            <span>
+              {countryFlag(client.country) ? `${countryFlag(client.country)} ` : ""}
+              {client.country}
+            </span>
+          </div>
+        )}
+        <div className="ts-info-row">
+          <span>{t("info.muted")}</span>{" "}
+          <span>
+            {client.inputMuted || !client.inputHardwareEnabled
+              ? t("info.yes")
+              : t("info.no")}
+          </span>
+        </div>
+        <div className="ts-info-row">
+          <span>{t("info.outputMuted")}</span>{" "}
+          <span>{client.outputMuted ? t("info.yes") : t("info.no")}</span>
+        </div>
+        {groups.length > 0 && (
+          <div className="ts-info-row">
+            <span>{t("info.serverGroups")}</span> <span>{groups.join(", ")}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const channel = channels.find((c) => c.id === selected.id);
   if (!channel) return <div className="ts-info-panel" />;
   const clientCount = clients.filter((c) => c.channel === channel.id).length;
+  const parsed = parseChannelName(channel.name, channel.parent === 0);
+  const isSpacer = parsed.alignment !== null;
 
   return (
     <div className="ts-info-panel">
       <div className="ts-info-title">
-        <ChannelIcon />
-        <span>{channel.name}</span>
+        {!isSpacer && <ChannelIcon />}
+        <span>{isSpacer ? parsed.name || channel.name : channel.name}</span>
       </div>
+      {isSpacer && (
+        <div className="ts-info-row">
+          <span>{t("info.spacer")}</span> <span>{parsed.alignment}</span>
+        </div>
+      )}
+      {isSpacer && (
+        <div className="ts-info-row">
+          <span>{t("info.rawName")}</span> <span>{channel.name}</span>
+        </div>
+      )}
       {channel.topic && (
         <div className="ts-info-row">
           <span>{t("info.topic")}</span> <span>{channel.topic}</span>
@@ -802,6 +1099,8 @@ function ConnectDialog({
   serverPassword,
   channelPassword,
   defaultChannel,
+  privilegeKey,
+  serverType,
   expanded,
   connecting,
   identities,
@@ -811,18 +1110,24 @@ function ConnectDialog({
   onServerPasswordChange,
   onChannelPasswordChange,
   onDefaultChannelChange,
+  onPrivilegeKeyChange,
+  onServerTypeChange,
   onActiveIdentityChange,
   onToggleExpanded,
   onConnect,
+  onConnectNewTab,
   onCancel,
   nova,
   onOpenOptions,
+  canOpenNewTab,
 }: {
   host: string;
   nickname: string;
   serverPassword: string;
   channelPassword: string;
   defaultChannel: string;
+  privilegeKey: string;
+  serverType: ServerType;
   expanded: boolean;
   connecting: boolean;
   identities: Identity[];
@@ -832,15 +1137,20 @@ function ConnectDialog({
   onServerPasswordChange: (v: string) => void;
   onChannelPasswordChange: (v: string) => void;
   onDefaultChannelChange: (v: string) => void;
+  onPrivilegeKeyChange: (v: string) => void;
+  onServerTypeChange: (v: ServerType) => void;
   onActiveIdentityChange: (id: string) => void;
   onToggleExpanded: () => void;
+  /** Connect always opens a new session tab (GTS multi-join). */
   onConnect: () => void;
+  onConnectNewTab: () => void;
   onCancel: () => void;
   /** Nova-theme-only: renders the TS6-redesign "connect hero" (logo, title,
    *  subtitle, settings shortcut) around the same form instead of the
    *  Standard theme's plain titled dialog box. */
   nova: boolean;
   onOpenOptions: () => void;
+  canOpenNewTab: boolean;
 }) {
   const t = useT();
   const backdrop = useBackdropDismiss(onCancel);
@@ -947,7 +1257,23 @@ function ConnectDialog({
               </label>
               <label className="ts-dialog-field">
                 {t("connect.onetimeGrant")}
-                <input disabled title="Not supported yet" />
+                <input
+                  type="password"
+                  value={privilegeKey}
+                  onChange={(e) => onPrivilegeKeyChange(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="ts-dialog-field">
+                {t("connect.serverType")}
+                <select
+                  value={serverType}
+                  onChange={(e) => onServerTypeChange(e.target.value as ServerType)}
+                >
+                  <option value="auto">{t("connect.serverType.auto")}</option>
+                  <option value="teamspeak">{t("connect.serverType.teamspeak")}</option>
+                  <option value="teaspeak">{t("connect.serverType.teaspeak")}</option>
+                </select>
               </label>
               <label className="ts-dialog-field">
                 {t("connect.hotkeyProfile")}
@@ -977,7 +1303,11 @@ function ConnectDialog({
                 {connecting ? t("connect.connecting") : t("connect.connect")}
               </button>
             )}
-            <button disabled title="Not supported in the web client">
+            <button
+              onClick={onConnectNewTab}
+              disabled={connecting || !host || !nickname || !canOpenNewTab}
+              title={canOpenNewTab ? undefined : t("connect.newTab")}
+            >
               {t("connect.newTab")}
             </button>
             {nova ? (
@@ -2892,9 +3222,17 @@ function ClientConnectionInfoDialog({
 
 function ServerConnectionInfoDialog({
   info,
+  serverName,
+  host,
+  serverVersion,
+  serverLicense,
   onClose,
 }: {
   info: ServerConnectionInfoData | null;
+  serverName: string;
+  host: string;
+  serverVersion: string;
+  serverLicense: string;
   onClose: () => void;
 }) {
   const t = useT();
@@ -2911,7 +3249,7 @@ function ServerConnectionInfoDialog({
 
   return (
     <div className="ts-dialog-backdrop" {...backdrop}>
-      <div className="ts-dialog ts-connection-info-dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="ts-dialog ts-connection-info-dialog ts-server-conn-info" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("connectionInfo.serverTitle")}</span>
           <button onClick={onClose} title={t("dialog.close")}>
@@ -2924,26 +3262,73 @@ function ServerConnectionInfoDialog({
               {timedOut ? t("connectionInfo.unavailable") : t("connectionInfo.loading")}
             </div>
           ) : (
-            <div className="ts-connection-info-grid">
-              <span>{t("connectionInfo.ping")}</span>
-              <span>{info.pingMs.toFixed(1)} ms</span>
-              <span>{t("connectionInfo.connectedSince")}</span>
-              <span>{formatDurationSecs(info.connectedSecs)}</span>
-              <span>{t("connectionInfo.packetLoss")}</span>
-              <span>{info.packetLossPercent.toFixed(2)}%</span>
-              <span>{t("connectionInfo.packetsSent")}</span>
-              <span>{info.packetsSentTotal.toLocaleString()}</span>
-              <span>{t("connectionInfo.packetsReceived")}</span>
-              <span>{info.packetsReceivedTotal.toLocaleString()}</span>
-              <span>{t("connectionInfo.bytesSent")}</span>
-              <span>{formatBytes(info.bytesSentTotal)}</span>
-              <span>{t("connectionInfo.bytesReceived")}</span>
-              <span>{formatBytes(info.bytesReceivedTotal)}</span>
-              <span>{t("connectionInfo.bandwidthSent")}</span>
-              <span>{formatBytes(info.bandwidthSentLastSecond)}/s</span>
-              <span>{t("connectionInfo.bandwidthReceived")}</span>
-              <span>{formatBytes(info.bandwidthReceivedLastSecond)}/s</span>
-            </div>
+            <>
+              <div className="ts-connection-info-grid">
+                <span>{t("connectionInfo.name")}</span>
+                <span>{serverName || host}</span>
+                <span>{t("info.address")}</span>
+                <span>{host}</span>
+                {serverVersion ? (
+                  <>
+                    <span>{t("info.version")}</span>
+                    <span>{serverVersion}</span>
+                  </>
+                ) : null}
+                {serverLicense ? (
+                  <>
+                    <span>{t("info.license")}</span>
+                    <span>{serverLicense}</span>
+                  </>
+                ) : null}
+                <span>{t("connectionInfo.uptime")}</span>
+                <span>{formatDurationSecs(info.connectedSecs)}</span>
+                <span>{t("connectionInfo.avgPing")}</span>
+                <span>{Math.round(info.pingMs)} ms</span>
+                <span>{t("connectionInfo.avgPacketLoss")}</span>
+                <span>{info.packetLossPercent.toFixed(2)} %</span>
+              </div>
+              <table className="ts-server-conn-table">
+                <thead>
+                  <tr>
+                    <th />
+                    <th>{t("connectionInfo.incoming")}</th>
+                    <th>{t("connectionInfo.outgoing")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{t("connectionInfo.packetsTransferred")}</td>
+                    <td>{formatCount(info.packetsReceivedTotal)}</td>
+                    <td>{formatCount(info.packetsSentTotal)}</td>
+                  </tr>
+                  <tr>
+                    <td>{t("connectionInfo.bytesTransferred")}</td>
+                    <td>{formatBytes(info.bytesReceivedTotal)}</td>
+                    <td>{formatBytes(info.bytesSentTotal)}</td>
+                  </tr>
+                  <tr>
+                    <td>{t("connectionInfo.bandwidthLastSecond")}</td>
+                    <td>{formatRate(info.bandwidthReceivedLastSecond)}</td>
+                    <td>{formatRate(info.bandwidthSentLastSecond)}</td>
+                  </tr>
+                  <tr>
+                    <td>{t("connectionInfo.bandwidthLastMinute")}</td>
+                    <td>{formatRate(info.bandwidthReceivedLastMinute)}</td>
+                    <td>{formatRate(info.bandwidthSentLastMinute)}</td>
+                  </tr>
+                  <tr>
+                    <td>{t("connectionInfo.ftBandwidth")}</td>
+                    <td>{formatRate(info.filetransferBandwidthReceived)}</td>
+                    <td>{formatRate(info.filetransferBandwidthSent)}</td>
+                  </tr>
+                  <tr>
+                    <td>{t("connectionInfo.ftBytes")}</td>
+                    <td>{formatBytes(info.filetransferBytesReceived)}</td>
+                    <td>{formatBytes(info.filetransferBytesSent)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </>
           )}
         </div>
         <div className="ts-dialog-buttons">
@@ -3648,6 +4033,11 @@ function DesignPanel({
   const builtins: { id: DesignTheme; name: string; desc: string }[] = [
     { id: "standard", name: t("design.theme.standard"), desc: t("design.theme.standard.desc") },
     { id: "nova", name: t("design.theme.nova"), desc: t("design.theme.nova.desc") },
+    {
+      id: GREENTEASPEAK_THEME_ID,
+      name: t("design.theme.greenteaspeak"),
+      desc: t("design.theme.greenteaspeak.desc"),
+    },
   ];
 
   const handleSaveEditing = () => {
@@ -3680,7 +4070,7 @@ function DesignPanel({
       if (
         !parsed ||
         typeof parsed.name !== "string" ||
-        (parsed.baseTheme !== "standard" && parsed.baseTheme !== "nova") ||
+        !isDesignTheme(parsed.baseTheme) ||
         typeof parsed.css !== "string"
       ) {
         window.alert(t("design.custom.importError"));
@@ -3710,6 +4100,7 @@ function DesignPanel({
           >
             <option value="standard">{t("design.theme.standard")}</option>
             <option value="nova">{t("design.theme.nova")}</option>
+            <option value="greenteaspeak">{t("design.theme.greenteaspeak")}</option>
           </select>
         </label>
         <label className="ts-options-field">
@@ -3760,7 +4151,7 @@ function DesignPanel({
               <span className="ts-design-theme-swatch ts-design-theme-swatch-custom" />
               <span className="ts-design-theme-card-name">{theme.name}</span>
               <span className="ts-design-theme-card-desc">
-                {theme.baseTheme === "nova" ? t("design.theme.nova") : t("design.theme.standard")}
+                {designThemeLabel(theme.baseTheme, t)}
               </span>
             </button>
             <div className="ts-design-theme-card-actions">
@@ -4393,6 +4784,7 @@ function ServerEditDialog({
 }
 
 function AppInner() {
+  const t = useT();
   const [host, setHost] = useState(
     () =>
       localStorage.getItem(LAST_HOST_KEY) ??
@@ -4404,6 +4796,10 @@ function AppInner() {
   const [serverPassword, setServerPassword] = useState("");
   const [channelPassword, setChannelPassword] = useState("");
   const [defaultChannel, setDefaultChannel] = useState("");
+  const [privilegeKey, setPrivilegeKey] = useState(
+    () => localStorage.getItem(LAST_PRIVILEGE_KEY) ?? ""
+  );
+  const [serverType, setServerType] = useState<ServerType>(loadServerType);
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [connectDialogExpanded, setConnectDialogExpanded] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
@@ -4412,10 +4808,15 @@ function AppInner() {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [clients, setClients] = useState<ClientInfo[]>([]);
+  /** Stable self id from the connector (`own_client_id`); nickname match is fallback only. */
+  const [ownClientId, setOwnClientId] = useState<number | null>(null);
   const [serverName, setServerName] = useState("");
   const [serverMaxClients, setServerMaxClients] = useState(0);
+  const [serverClientsOnline, setServerClientsOnline] = useState(0);
+  const [serverChannelsOnline, setServerChannelsOnline] = useState(0);
   const [serverVersion, setServerVersion] = useState("");
   const [serverLicense, setServerLicense] = useState("");
+  const [serverLicenseId, setServerLicenseId] = useState(0);
   const [serverBannerUrl, setServerBannerUrl] = useState("");
   const [serverWelcomeMessage, setServerWelcomeMessage] = useState("");
   const [serverEditOpen, setServerEditOpen] = useState(false);
@@ -4507,19 +4908,14 @@ function AppInner() {
   const activeCustomTheme = designSelection.startsWith("custom:")
     ? customThemes.find((th) => `custom:${th.id}` === designSelection) ?? null
     : null;
-  // Structural base - everywhere else in the app that branches on "nova" behavior
-  // (splash, hamburger menu, ...) keeps working unchanged, whether that behavior
-  // came from picking Nova directly or from a custom theme built on top of it.
-  const designTheme: DesignTheme = activeCustomTheme ? activeCustomTheme.baseTheme : designSelection === "nova" ? "nova" : "standard";
+  // Structural base - everywhere else in the app that branches on "nova" /
+  // "greenteaspeak" behavior keeps working unchanged, whether that behavior
+  // came from picking the builtin directly or from a custom theme on top of it.
+  const designTheme: DesignTheme = resolveDesignThemeBase(designSelection, customThemes);
   const handleDesignSelectionChange = (next: string) => {
     setDesignSelection(next);
     localStorage.setItem(DESIGN_SELECTION_KEY, next);
-    const base = next.startsWith("custom:")
-      ? customThemes.find((th) => `custom:${th.id}` === next)?.baseTheme ?? "standard"
-      : next === "nova"
-        ? "nova"
-        : "standard";
-    localStorage.setItem(DESIGN_THEME_KEY, base);
+    localStorage.setItem(DESIGN_THEME_KEY, resolveDesignThemeBase(next, customThemes));
   };
   const handleSaveCustomTheme = (nextTheme: CustomTheme) => {
     setCustomThemes((prev) => {
@@ -4630,6 +5026,11 @@ function AppInner() {
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
   const [optionsSection, setOptionsSection] = useState<string>(OPTIONS_SECTIONS[0].id);
   const socketRef = useRef<WebSocket | DemoSocket | null>(null);
+  /** Multi-join: one gateway WebSocket (+ connector) per session tab. */
+  const [sessionTabs, setSessionTabs] = useState<SessionTabInfo[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const sessionsRef = useRef<Map<string, SessionRecord>>(new Map());
+  const activeSessionIdRef = useRef<string | null>(null);
   const connectionsMenuRef = useRef<HTMLDivElement | null>(null);
   const favoritesMenuRef = useRef<HTMLDivElement | null>(null);
   const awayMenuRef = useRef<HTMLDivElement | null>(null);
@@ -4776,7 +5177,20 @@ function AppInner() {
   }, []);
 
   useEffect(() => {
-    return () => socketRef.current?.close();
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    return () => {
+      for (const rec of sessionsRef.current.values()) {
+        try {
+          rec.socket?.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      sessionsRef.current.clear();
+    };
   }, []);
 
   const appendLog = (entry: LogEntry) => setLog((prev) => [...prev, entry]);
@@ -4830,61 +5244,246 @@ function AppInner() {
     return audioContextRef.current;
   };
 
+  const snapshotActiveToParked = (): ParkedSessionState =>
+    emptyParkedState({
+      host,
+      nickname,
+      connected,
+      connecting,
+      connectError,
+      channels,
+      clients,
+      ownClientId,
+      serverName,
+      serverMaxClients,
+      serverClientsOnline,
+      serverChannelsOnline,
+      serverVersion,
+      serverLicense,
+      serverLicenseId,
+      serverBannerUrl,
+      serverWelcomeMessage,
+      selected,
+      chat,
+      serverChat,
+      pmThreads,
+      pokes,
+      chatTab: activeTab,
+      talkers: [...talkers],
+      whisperChannelIds: [...whisperChannelIds],
+      whisperClientIds: [...whisperClientIds],
+      whisperLog,
+      log,
+      hasConnected: hasConnectedRef.current,
+      previousClients: previousClientsRef.current,
+    });
+
+  const applyParkedToUi = (parked: ParkedSessionState) => {
+    setHost(parked.host);
+    setNickname(parked.nickname);
+    setConnected(parked.connected);
+    setConnecting(parked.connecting);
+    setConnectError(parked.connectError);
+    setChannels(parked.channels);
+    setClients(parked.clients);
+    setOwnClientId(parked.ownClientId);
+    setServerName(parked.serverName);
+    setServerMaxClients(parked.serverMaxClients);
+    setServerClientsOnline(parked.serverClientsOnline);
+    setServerChannelsOnline(parked.serverChannelsOnline);
+    setServerVersion(parked.serverVersion);
+    setServerLicense(parked.serverLicense);
+    setServerLicenseId(parked.serverLicenseId);
+    setServerBannerUrl(parked.serverBannerUrl);
+    setServerWelcomeMessage(parked.serverWelcomeMessage);
+    setSelected(parked.selected);
+    setChat(parked.chat);
+    setServerChat(parked.serverChat);
+    setPmThreads(parked.pmThreads);
+    setPokes(parked.pokes);
+    setActiveTab(parked.chatTab);
+    setTalkers(new Set(parked.talkers));
+    setWhisperChannelIds(new Set(parked.whisperChannelIds));
+    setWhisperClientIds(new Set(parked.whisperClientIds));
+    setWhisperLog(parked.whisperLog);
+    setLog(parked.log);
+    hasConnectedRef.current = parked.hasConnected;
+    previousClientsRef.current = parked.previousClients;
+    cleanDisconnectRef.current = false;
+  };
+
+  const clearActiveUi = () => {
+    setConnected(false);
+    setConnecting(false);
+    setConnectError(null);
+    setChannels([]);
+    setClients([]);
+    setOwnClientId(null);
+    setServerName("");
+    setServerMaxClients(0);
+    setServerClientsOnline(0);
+    setServerChannelsOnline(0);
+    setServerVersion("");
+    setServerLicense("");
+    setServerLicenseId(0);
+    setServerBannerUrl("");
+    setServerWelcomeMessage("");
+    setSelected(null);
+    setChat([]);
+    setServerChat([]);
+    setPmThreads({});
+    setPokes([]);
+    setActiveTab("channel");
+    setTalkers(new Set());
+    setWhisperChannelIds(new Set());
+    setWhisperClientIds(new Set());
+    setWhisperLog([]);
+    prevWhisperTargetsRef.current = null;
+    hasConnectedRef.current = false;
+    previousClientsRef.current = null;
+    cleanDisconnectRef.current = false;
+  };
+
+  const updateTabMeta = (id: string, patch: Partial<SessionTabInfo>) => {
+    setSessionTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  };
+
+  const disposeAudioIfIdle = () => {
+    if (sessionsRef.current.size > 0) return;
+    stopMic();
+    stopRecording();
+    audioPlayerRef.current?.dispose();
+    audioPlayerRef.current = null;
+    void audioContextRef.current?.close();
+    audioContextRef.current = null;
+  };
+
+  const parkActiveSession = () => {
+    const id = activeSessionIdRef.current;
+    if (!id) return;
+    const rec = sessionsRef.current.get(id);
+    if (!rec) return;
+    rec.parked = snapshotActiveToParked();
+    updateTabMeta(id, {
+      label: sessionLabel(rec.parked),
+      connected: rec.parked.connected,
+      connecting: rec.parked.connecting,
+    });
+    stopMic();
+    stopRecording();
+  };
+
+  const switchToSession = (id: string) => {
+    if (id === activeSessionIdRef.current) return;
+    const target = sessionsRef.current.get(id);
+    if (!target) return;
+    parkActiveSession();
+    const parked = target.parked ?? emptyParkedState({ host: target.id });
+    target.parked = null;
+    applyParkedToUi(parked);
+    socketRef.current = target.socket as WebSocket | DemoSocket | null;
+    activeSessionIdRef.current = id;
+    setActiveSessionId(id);
+    updateTabMeta(id, {
+      label: sessionLabel(parked),
+      connected: parked.connected,
+      connecting: parked.connecting,
+    });
+  };
+
+  const removeSession = (id: string, opts?: { skipSocketClose?: boolean }) => {
+    const rec = sessionsRef.current.get(id);
+    if (rec && !opts?.skipSocketClose) {
+      try {
+        const sock = rec.socket;
+        if (sock && sock.readyState === WebSocket.OPEN) {
+          const message = loadDisconnectMessage();
+          if (message) sock.send(JSON.stringify({ type: "disconnect", message }));
+        }
+        sock?.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (rec) {
+      try {
+        rec.socket && ((rec.socket as WebSocket).onmessage = null);
+      } catch {
+        /* ignore */
+      }
+    }
+    sessionsRef.current.delete(id);
+    setSessionTabs((prev) => prev.filter((t) => t.id !== id));
+
+    if (activeSessionIdRef.current !== id) {
+      disposeAudioIfIdle();
+      return;
+    }
+
+    const remaining = [...sessionsRef.current.keys()];
+    if (remaining.length > 0) {
+      const nextId = remaining[remaining.length - 1];
+      const nextRec = sessionsRef.current.get(nextId)!;
+      const parked = nextRec.parked ?? emptyParkedState();
+      nextRec.parked = null;
+      applyParkedToUi(parked);
+      socketRef.current = nextRec.socket as WebSocket | DemoSocket | null;
+      activeSessionIdRef.current = nextId;
+      setActiveSessionId(nextId);
+    } else {
+      clearActiveUi();
+      socketRef.current = null;
+      activeSessionIdRef.current = null;
+      setActiveSessionId(null);
+      disposeAudioIfIdle();
+    }
+  };
+
   const handleConnect = (overrides?: {
     host?: string;
     nickname?: string;
     serverPassword?: string;
     channelPassword?: string;
     defaultChannel?: string;
+    privilegeKey?: string;
+    serverType?: ServerType;
   }) => {
     const connectHost = overrides?.host ?? host;
     const connectNickname = overrides?.nickname ?? nickname;
     const connectServerPassword = overrides?.serverPassword ?? serverPassword;
     const connectChannelPassword = overrides?.channelPassword ?? channelPassword;
     const connectDefaultChannel = overrides?.defaultChannel ?? defaultChannel;
+    const connectPrivilegeKey = overrides?.privilegeKey ?? privilegeKey;
+    const connectServerType = overrides?.serverType ?? serverType;
 
-    // Switching servers while already connected (or mid-connect): tear down the
-    // old socket first and detach its handlers so its async close doesn't later
-    // clobber state that belongs to the new connection.
-    const previousSocket = socketRef.current;
-    if (previousSocket) {
-      previousSocket.onopen = null;
-      previousSocket.onmessage = null;
-      previousSocket.onerror = null;
-      previousSocket.onclose = null;
-      if (previousSocket.readyState === WebSocket.OPEN || previousSocket.readyState === WebSocket.CONNECTING) {
-        previousSocket.close();
-      }
-      stopMic();
-      stopRecording();
-      audioPlayerRef.current?.dispose();
-      audioPlayerRef.current = null;
-      audioContextRef.current?.close();
-      audioContextRef.current = null;
-      setConnected(false);
-      setChannels([]);
-      setClients([]);
-      setSelected(null);
-      setChat([]);
-      setServerChat([]);
-      setPmThreads({});
-      setPokes([]);
-      setActiveTab("channel");
-      setTalkers(new Set());
+    // Multi-join: keep existing sessions; park the active tab and open a new one.
+    if (activeSessionIdRef.current && sessionsRef.current.has(activeSessionIdRef.current)) {
+      parkActiveSession();
     }
 
+    clearActiveUi();
     hasConnectedRef.current = false;
     setConnecting(true);
     setConnectError(null);
     setConnectDialogOpen(false);
+    setHost(connectHost);
+    setNickname(connectNickname);
 
     ensureAudioContext();
 
+    const sessionId = crypto.randomUUID();
     const connectIdentityId = activeIdentityId;
     const connectIdentityBlob = identities.find((i) => i.id === connectIdentityId)?.blob ?? undefined;
 
     const socket = DEMO_MODE ? new DemoSocket() : new WebSocket(GATEWAY_URL);
+    sessionsRef.current.set(sessionId, { id: sessionId, socket, parked: null });
     socketRef.current = socket;
+    activeSessionIdRef.current = sessionId;
+    setActiveSessionId(sessionId);
+    setSessionTabs((prev) => [
+      ...prev,
+      { id: sessionId, label: connectHost || "…", connected: false, connecting: true },
+    ]);
 
     socket.onopen = () => {
       logClient("info", "Connection", `Connecting to ${connectHost}…`);
@@ -4897,12 +5496,46 @@ function AppInner() {
           channelPassword: connectChannelPassword || undefined,
           defaultChannel: connectDefaultChannel || undefined,
           identity: connectIdentityBlob || undefined,
+          privilegeKey: connectPrivilegeKey.trim() || undefined,
+          serverType: connectServerType || "auto",
         })
       );
     };
 
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
+
+      // Inactive tab: update parked snapshot only (no audio playback).
+      if (sessionId !== activeSessionIdRef.current) {
+        const rec = sessionsRef.current.get(sessionId);
+        if (!rec) return;
+        if (!rec.parked) {
+          rec.parked = emptyParkedState({ host: connectHost, nickname: connectNickname });
+        }
+        if (data.type === "disconnected") {
+          sessionsRef.current.delete(sessionId);
+          setSessionTabs((prev) => prev.filter((t) => t.id !== sessionId));
+          if (hasConnectedRef.current === false) {
+            /* noop — background */
+          }
+          void playSound("disconnect");
+          return;
+        }
+        const result = applyParkedGatewayEvent(rec.parked, data, {
+          connectNickname,
+          chatTab: rec.parked.chatTab,
+        });
+        rec.parked = result.state;
+        updateTabMeta(sessionId, {
+          label: sessionLabel(rec.parked),
+          connected: rec.parked.connected,
+          connecting: rec.parked.connecting,
+        });
+        if (data.type === "connected") void playSound("connect");
+        else if (data.type === "poke") void playSound("poke");
+        return;
+      }
+
       switch (data.type) {
         case "connected":
           logClient("info", "Connection", `Connected to ${data.serverName}`);
@@ -4910,8 +5543,15 @@ function AppInner() {
           setConnecting(false);
           setConnectError(null);
           setConnected(true);
+          updateTabMeta(sessionId, {
+            label: String(data.serverName || connectHost),
+            connected: true,
+            connecting: false,
+          });
           localStorage.setItem(LAST_HOST_KEY, connectHost);
           localStorage.setItem(LAST_NICKNAME_KEY, connectNickname);
+          localStorage.setItem(LAST_PRIVILEGE_KEY, connectPrivilegeKey);
+          localStorage.setItem(LAST_SERVER_TYPE_KEY, connectServerType);
           if (connectIdentityId) {
             setIdentities((prev) =>
               prev.map((i) =>
@@ -4923,8 +5563,11 @@ function AppInner() {
           }
           setServerName(data.serverName);
           setServerMaxClients(data.serverMaxClients);
+          setServerClientsOnline(0);
+          setServerChannelsOnline(0);
           setServerVersion(data.serverVersion);
           setServerLicense(data.serverLicense);
+          setServerLicenseId(typeof data.serverLicenseId === "number" ? data.serverLicenseId : 0);
           setServerBannerUrl(data.serverBannerUrl);
           setServerWelcomeMessage(data.welcomeMessage);
           setSelected({ type: "server" });
@@ -4946,6 +5589,19 @@ function AppInner() {
           previousClientsRef.current = newClients;
           setChannels(data.channels);
           setClients(newClients);
+          if (typeof data.ownClientId === "number" && data.ownClientId > 0) {
+            setOwnClientId(data.ownClientId);
+          }
+          // Only apply positive max — gateway maps missing connector fields to 0.
+          if (typeof data.serverMaxClients === "number" && data.serverMaxClients > 0) {
+            setServerMaxClients(data.serverMaxClients);
+          }
+          if (typeof data.serverClientsOnline === "number" && data.serverClientsOnline >= 0) {
+            setServerClientsOnline(data.serverClientsOnline);
+          }
+          if (typeof data.serverChannelsOnline === "number" && data.serverChannelsOnline >= 0) {
+            setServerChannelsOnline(data.serverChannelsOnline);
+          }
           break;
         }
         case "chatMessage":
@@ -4984,6 +5640,7 @@ function AppInner() {
           if (!data.fromSelf) void playSound("message");
           break;
         case "audioOut":
+          // Audio only for the active session tab.
           if (!outputMutedRef.current) audioPlayerRef.current?.playFrame(data.pcm);
           break;
         case "talkers":
@@ -5036,27 +5693,11 @@ function AppInner() {
         }
         case "disconnected": {
           const wasConnected = hasConnectedRef.current;
-          hasConnectedRef.current = false;
           cleanDisconnectRef.current = true;
-          previousClientsRef.current = null;
-          setConnecting(false);
-          setConnected(false);
-          setChannels([]);
-          setClients([]);
-          setSelected(null);
-          setChat([]);
-          setServerChat([]);
-          setPmThreads({});
-          setPokes([]);
-          setActiveTab("channel");
-          setTalkers(new Set());
-          setWhisperLog([]);
-          prevWhisperTargetsRef.current = null;
-          stopMic();
-          stopRecording();
           appendLog({ text: `Disconnected: ${data.reason}`, kind: "info" });
           logClient("info", "Connection", `Disconnected: ${data.reason}`);
           if (wasConnected) void playSound("disconnect");
+          removeSession(sessionId, { skipSocketClose: true });
           break;
         }
         case "error":
@@ -5066,6 +5707,7 @@ function AppInner() {
           } else {
             setConnecting(false);
             setConnectError(data.message);
+            updateTabMeta(sessionId, { connecting: false, connected: false });
           }
           break;
         case "clientConnectionInfo":
@@ -5092,6 +5734,12 @@ function AppInner() {
             bytesReceivedTotal: data.bytesReceivedTotal,
             bandwidthSentLastSecond: data.bandwidthSentLastSecond,
             bandwidthReceivedLastSecond: data.bandwidthReceivedLastSecond,
+            bandwidthSentLastMinute: data.bandwidthSentLastMinute ?? 0,
+            bandwidthReceivedLastMinute: data.bandwidthReceivedLastMinute ?? 0,
+            filetransferBandwidthSent: data.filetransferBandwidthSent ?? 0,
+            filetransferBandwidthReceived: data.filetransferBandwidthReceived ?? 0,
+            filetransferBytesSent: data.filetransferBytesSent ?? 0,
+            filetransferBytesReceived: data.filetransferBytesReceived ?? 0,
           });
           break;
         case "serverProtocolLog":
@@ -5162,30 +5810,51 @@ function AppInner() {
 
     socket.onerror = () => {
       logClient("error", "WebSocket", "WebSocket error (is the gateway running?)");
+      if (sessionId !== activeSessionIdRef.current) {
+        const rec = sessionsRef.current.get(sessionId);
+        if (rec?.parked && !rec.parked.hasConnected) {
+          rec.parked = {
+            ...rec.parked,
+            connecting: false,
+            connectError: "Could not reach the gateway - is it running?",
+          };
+          updateTabMeta(sessionId, { connecting: false, connected: false });
+        }
+        return;
+      }
       if (!hasConnectedRef.current) {
         setConnecting(false);
         setConnectError("Could not reach the gateway - is it running?");
+        updateTabMeta(sessionId, { connecting: false, connected: false });
       } else {
         appendLog({ text: "WebSocket error (is the gateway running?)", kind: "error" });
       }
     };
     socket.onclose = () => {
+      if (sessionId !== activeSessionIdRef.current) {
+        if (sessionsRef.current.has(sessionId)) {
+          sessionsRef.current.delete(sessionId);
+          setSessionTabs((prev) => prev.filter((t) => t.id !== sessionId));
+        }
+        return;
+      }
       if (!hasConnectedRef.current && !cleanDisconnectRef.current) {
         setConnecting(false);
         setConnectError((prev) => prev ?? "Connection closed before the server responded");
       }
       cleanDisconnectRef.current = false;
-      setConnected(false);
-      stopMic();
-      stopRecording();
-      audioPlayerRef.current?.dispose();
-      audioPlayerRef.current = null;
-      audioContextRef.current?.close();
-      audioContextRef.current = null;
+      if (sessionsRef.current.has(sessionId)) {
+        removeSession(sessionId, { skipSocketClose: true });
+      }
     };
   };
 
   const handleDisconnect = () => {
+    const id = activeSessionIdRef.current;
+    if (id) {
+      removeSession(id);
+      return;
+    }
     const socket = socketRef.current;
     if (!socket) return;
     const message = loadDisconnectMessage();
@@ -5194,6 +5863,36 @@ function AppInner() {
     }
     socket.close();
   };
+
+  const handleDisconnectAll = () => {
+    const ids = [...sessionsRef.current.keys()];
+    for (const id of ids) {
+      const rec = sessionsRef.current.get(id);
+      if (!rec) continue;
+      try {
+        const sock = rec.socket;
+        if (sock && sock.readyState === WebSocket.OPEN) {
+          const message = loadDisconnectMessage();
+          if (message) sock.send(JSON.stringify({ type: "disconnect", message }));
+        }
+        sock?.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    sessionsRef.current.clear();
+    setSessionTabs([]);
+    clearActiveUi();
+    socketRef.current = null;
+    activeSessionIdRef.current = null;
+    setActiveSessionId(null);
+    disposeAudioIfIdle();
+  };
+
+  const closeSessionTab = (id: string) => {
+    removeSession(id);
+  };
+
 
   const connectToFavorite = (f: Favorite) => {
     setHost(f.host);
@@ -5517,10 +6216,10 @@ function AppInner() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!e.ctrlKey) return;
-      if (e.key.toLowerCase() === "s" && !connected && !connecting) {
+      if (e.key.toLowerCase() === "s" && !connecting) {
         e.preventDefault();
         setConnectDialogOpen(true);
-      } else if (e.key.toLowerCase() === "d" && connected) {
+      } else if (e.key.toLowerCase() === "d" && (connected || sessionTabs.length > 0)) {
         e.preventDefault();
         handleDisconnect();
       } else if (e.key.toLowerCase() === "b") {
@@ -5530,7 +6229,7 @@ function AppInner() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [connected, connecting, host, nickname, serverPassword, defaultChannel, channelPassword]);
+  }, [connected, connecting, sessionTabs.length, host, nickname, serverPassword, defaultChannel, channelPassword]);
 
   // Nova-theme-only: the connect dialog IS the app until a connection exists -
   // it's forced open on load and after every disconnect, and closes itself the
@@ -5749,7 +6448,21 @@ function AppInner() {
   };
 
   const handleSwitchChannel = (channelId: number) => {
-    socketRef.current?.send(JSON.stringify({ type: "switchChannel", channelId }));
+    const id = Number(channelId);
+    if (!Number.isFinite(id)) return;
+    // Prefer server-reported own client id — nickname match breaks when the
+    // server renames us (Guest → Guest1) or another client shares our nick.
+    const me =
+      ownClientId != null
+        ? clients.find((c) => c.id === ownClientId)
+        : clients.find((c) => c.name === nickname);
+    if (me?.channel === id) return;
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      appendLog({ text: t("tree.joinNotConnected"), kind: "error" });
+      return;
+    }
+    socket.send(JSON.stringify({ type: "switchChannel", channelId: id }));
   };
 
   const handleSelectItem = (item: SelectedItem) => setSelected(item);
@@ -6360,7 +7073,10 @@ function AppInner() {
     setActiveTab((current) => (current === clientId ? "channel" : current));
   };
 
-  const ownClient = clients.find((c) => c.name === nickname) ?? null;
+  const ownClient =
+    (ownClientId != null ? clients.find((c) => c.id === ownClientId) : null) ??
+    clients.find((c) => c.name === nickname) ??
+    null;
   const isAway = ownClient?.away ?? false;
   const inputMuted = ownClient?.inputMuted ?? false;
   const outputMuted = ownClient?.outputMuted ?? false;
@@ -6368,15 +7084,15 @@ function AppInner() {
     selfActive && !inputMuted && ownClient?.hasTalkPower
       ? new Set(talkers).add(ownClient.id)
       : talkers;
-  const t = useT();
   const novaSplash = designTheme === "nova" && !connected;
 
   return (
     <div
-      className={`ts-app ts-theme-${theme}${designTheme === "nova" ? " ts-design-nova" : ""}${
+      className={`ts-app ts-theme-${theme}${designThemeClassName(designTheme)}${
         activeCustomTheme ? " ts-design-custom" : ""
       }${demoForceMobile ? " ts-force-mobile" : ""}${novaSplash ? " ts-nova-splash" : ""}`}
       data-custom-theme={activeCustomTheme?.id}
+      data-design-theme={designTheme}
     >
       {DEMO_MODE && (
         <div className="ts-demo-banner">
@@ -6416,7 +7132,7 @@ function AppInner() {
             <div className="ts-menu">
               <button
                 className="ts-menu-item"
-                disabled={connected || connecting}
+                disabled={connecting}
                 onClick={() => {
                   setConnectDialogOpen(true);
                   setConnectionsMenuOpen(false);
@@ -6428,7 +7144,7 @@ function AppInner() {
               </button>
               <button
                 className="ts-menu-item"
-                disabled={!connected}
+                disabled={!connected && sessionTabs.length === 0}
                 onClick={() => {
                   handleDisconnect();
                   setConnectionsMenuOpen(false);
@@ -6440,9 +7156,9 @@ function AppInner() {
               </button>
               <button
                 className="ts-menu-item"
-                disabled={!connected}
+                disabled={sessionTabs.length === 0}
                 onClick={() => {
-                  handleDisconnect();
+                  handleDisconnectAll();
                   setConnectionsMenuOpen(false);
                 }}
               >
@@ -6876,6 +7592,14 @@ function AppInner() {
             </span>
           </div>
         )}
+        {isGreenteaSpeakTheme(designTheme) && (
+          <div className="gts-toolbar-brand" title="GreenTeaSpeak">
+            <span className="gts-toolbar-brand-mark">GTS</span>
+            <span className="gts-toolbar-brand-name">
+              {connected ? serverName || host || "GreenTeaSpeak" : "GreenTeaSpeak"}
+            </span>
+          </div>
+        )}
         <div className="ts-toolbar-icons">
           <div className="ts-toolbar-away" ref={awayMenuRef}>
             <button
@@ -7058,6 +7782,15 @@ function AppInner() {
 
       </div>
 
+      {sessionTabs.length > 0 || isGreenteaSpeakTheme(designTheme) ? (
+        <GreenteaSpeakChrome
+          tabs={sessionTabs}
+          activeTabId={activeSessionId}
+          onSelectTab={switchToSession}
+          onCloseTab={closeSessionTab}
+        />
+      ) : null}
+
       {connectDialogOpen && (
         <ConnectDialog
           host={host}
@@ -7065,6 +7798,8 @@ function AppInner() {
           serverPassword={serverPassword}
           channelPassword={channelPassword}
           defaultChannel={defaultChannel}
+          privilegeKey={privilegeKey}
+          serverType={serverType}
           expanded={connectDialogExpanded}
           connecting={connecting}
           identities={identities}
@@ -7074,9 +7809,13 @@ function AppInner() {
           onServerPasswordChange={setServerPassword}
           onChannelPasswordChange={setChannelPassword}
           onDefaultChannelChange={setDefaultChannel}
+          onPrivilegeKeyChange={setPrivilegeKey}
+          onServerTypeChange={setServerType}
           onActiveIdentityChange={handleActiveIdentityChange}
           onToggleExpanded={() => setConnectDialogExpanded((v) => !v)}
           onConnect={handleConnect}
+          onConnectNewTab={handleConnect}
+          canOpenNewTab={sessionTabs.length > 0 || connected}
           onCancel={novaSplash ? () => {} : () => setConnectDialogOpen(false)}
           nova={designTheme === "nova"}
           onOpenOptions={() => setOptionsDialogOpen(true)}
@@ -7160,6 +7899,10 @@ function AppInner() {
       {serverConnectionInfoOpen && (
         <ServerConnectionInfoDialog
           info={serverConnectionInfo}
+          serverName={serverName}
+          host={host}
+          serverVersion={serverVersion}
+          serverLicense={serverLicense}
           onClose={() => setServerConnectionInfoOpen(false)}
         />
       )}
@@ -7746,6 +8489,23 @@ function AppInner() {
           style={{ top: channelContextMenu.y, left: channelContextMenu.x }}
         >
           <div className="ts-context-menu-title">{channelContextMenu.channelName}</div>
+          {ownClient?.channel !== channelContextMenu.channelId && (
+            <button
+              className="ts-menu-item"
+              onMouseDown={(e) => {
+                // mousedown + stopPropagation beats the document dismiss listener
+                // (which also listens on mousedown) so Join actually fires.
+                e.preventDefault();
+                e.stopPropagation();
+                handleSwitchChannel(channelContextMenu.channelId);
+                handleSelectItem({ type: "channel", id: channelContextMenu.channelId });
+                setChannelContextMenu(null);
+              }}
+            >
+              <span className="ts-menu-item-icon">➡️</span>
+              <span className="ts-menu-item-label">{t("channelContext.join")}</span>
+            </button>
+          )}
           <button
             className="ts-menu-item"
             onClick={() => {
@@ -7776,7 +8536,7 @@ function AppInner() {
                   channels={channels}
                   clients={clients}
                   parent={0}
-                  ownClientId={ownClient?.id ?? null}
+                  ownClientId={ownClientId ?? ownClient?.id ?? null}
                   talkers={displayTalkers}
                   serverGroups={serverGroups}
                   groupIconImages={serverIconImages}
@@ -7810,9 +8570,16 @@ function AppInner() {
                 serverMaxClients={serverMaxClients}
                 serverVersion={serverVersion}
                 serverLicense={serverLicense}
-                totalClientCount={clients.length}
+                serverLicenseId={serverLicenseId}
+                totalClientCount={
+                  serverClientsOnline > 0 ? serverClientsOnline : clients.length
+                }
+                totalChannelCount={
+                  serverChannelsOnline > 0 ? serverChannelsOnline : channels.length
+                }
                 channels={channels}
                 clients={clients}
+                serverGroups={serverGroups}
                 onShowServerConnectionInfo={handleShowServerConnectionInfo}
                 onEditServer={() => setServerEditOpen(true)}
               />
@@ -7925,11 +8692,19 @@ function AppInner() {
       </div>
 
       <div className="ts-log">
-        {log.map((entry, i) => (
-          <div key={i} className={entry.kind === "error" ? "ts-log-error" : "ts-log-info"}>
-            {entry.text}
-          </div>
-        ))}
+        {log.slice(-1).map((entry, i) => {
+          let text = entry.text;
+          if (/os[- ]?error\s*10049/i.test(text) || /angeforderte Adresse ist in diesem Kontext ungültig/i.test(text)) {
+            text = "File-Transfer fehlgeschlagen (ungültige Adresse)";
+          } else {
+            text = text.replace(/^(file transfer failed:\s*)+/i, "File-Transfer fehlgeschlagen: ");
+          }
+          return (
+            <div key={i} className={entry.kind === "error" ? "ts-log-error" : "ts-log-info"}>
+              {text}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

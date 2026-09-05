@@ -2639,6 +2639,7 @@ dependencies = [
  "base64",
  "clap",
  "futures",
+ "num-traits",
  "serde",
  "serde_json",
  "time",
