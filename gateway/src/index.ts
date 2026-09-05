@@ -3,15 +3,34 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
-import { Ts3Connection, type Ts3ConnectOptions } from "./ts3/connection.js";
+import { Ts3Connection, type ServerType, type Ts3ConnectOptions } from "./ts3/connection.js";
+
+const SERVER_TYPES = new Set<ServerType>(["teamspeak", "teaspeak", "auto"]);
+
+function parseServerType(value: unknown): ServerType | undefined {
+  return typeof value === "string" && SERVER_TYPES.has(value as ServerType)
+    ? (value as ServerType)
+    : undefined;
+}
+
+function parsePrivilegeKey(msg: { privilegeKey?: unknown; token?: unknown }): string | undefined {
+  const raw = msg.privilegeKey ?? msg.token;
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  return trimmed || undefined;
+}
 
 const PORT = Number(process.env.PORT ?? 8080);
 
 // In production (Docker), the built web app lives alongside the gateway and
 // is served from the same port as the WebSocket endpoint, so a single
 // reverse-proxied origin (e.g. a Zoraxy subdomain) is enough for everything.
+// Local Vite dev (`npm run dev` in web/) is a separate UI on :5173 that talks
+// to this gateway only via WebSocket — do not use :8080's HTML for UI work
+// unless you rebuilt web/dist. Set WEB_STATIC=0 to serve API/WS only.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = process.env.WEB_DIST ?? path.resolve(__dirname, "../../web/dist");
+const SERVE_STATIC = process.env.WEB_STATIC !== "0";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -24,9 +43,23 @@ const MIME_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
+const DEV_HINT = `<!doctype html><html><body style="font:14px system-ui;padding:2rem;max-width:40rem">
+<h1>WebSpeak3 gateway</h1>
+<p>WebSocket: <code>/ws</code></p>
+<p>Static UI is disabled (<code>WEB_STATIC=0</code>) or <code>web/dist</code> is missing.</p>
+<p>For local development open the Vite app at <a href="http://localhost:5173/">http://localhost:5173/</a>
+(run <code>npm run dev</code> in <code>web/</code>). Rebuild with <code>npm run build</code> in <code>web/</code>
+to serve the UI from this port again.</p>
+</body></html>`;
+
 const server = createServer((req, res) => {
   void (async () => {
     try {
+      if (!SERVE_STATIC) {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(DEV_HINT);
+        return;
+      }
       const url = new URL(req.url ?? "/", "http://localhost");
       let filePath = path.join(WEB_DIST, decodeURIComponent(url.pathname));
       if (!filePath.startsWith(WEB_DIST)) {
@@ -45,8 +78,8 @@ const server = createServer((req, res) => {
       res.writeHead(200, { "Content-Type": MIME_TYPES[path.extname(filePath)] ?? "application/octet-stream" });
       res.end(body);
     } catch {
-      res.writeHead(404);
-      res.end("Not found");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(DEV_HINT);
     }
   })();
 });
@@ -55,9 +88,17 @@ const wss = new WebSocketServer({ server, path: "/ws" });
 
 server.listen(PORT, () => {
   console.log(`WebSpeak3 gateway listening on http://localhost:${PORT} (WebSocket at /ws)`);
+  if (SERVE_STATIC) {
+    console.log(`Serving static UI from ${WEB_DIST}`);
+    console.log(`Dev tip: use http://localhost:5173/ for live UI; rebuild web/dist after UI changes if you open :${PORT}`);
+  } else {
+    console.log(`Static UI disabled (WEB_STATIC=0) — open http://localhost:5173/ for the Vite dev UI`);
+  }
 });
 
 wss.on("connection", (socket: WebSocket) => {
+  // One browser WebSocket ↔ one Rust connector. Multi-join in the UI opens
+  // multiple /ws connections in parallel (one per server tab).
   let connection: Ts3Connection | undefined;
 
   socket.on("message", async (raw) => {
@@ -65,6 +106,16 @@ wss.on("connection", (socket: WebSocket) => {
 
     switch (msg.type) {
       case "connect": {
+        // Replacing a connection on the same socket: tear down the previous
+        // connector so we don't leak processes.
+        if (connection) {
+          try {
+            await connection.disconnect();
+          } catch {
+            /* ignore */
+          }
+          connection = undefined;
+        }
         const options: Ts3ConnectOptions = {
           host: msg.host,
           nickname: msg.nickname,
@@ -72,6 +123,8 @@ wss.on("connection", (socket: WebSocket) => {
           channelPassword: msg.channelPassword,
           defaultChannel: msg.defaultChannel,
           identity: msg.identity,
+          serverType: parseServerType(msg.serverType),
+          privilegeKey: parsePrivilegeKey(msg),
         };
         connection = new Ts3Connection(options);
         connection.onEvent((event) => socket.send(JSON.stringify(event)));
@@ -79,7 +132,10 @@ wss.on("connection", (socket: WebSocket) => {
         break;
       }
       case "switchChannel": {
-        await connection?.switchChannel(msg.channelId);
+        const channelId = Number(msg.channelId);
+        if (Number.isFinite(channelId)) {
+          await connection?.switchChannel(channelId);
+        }
         break;
       }
       case "sendChatMessage": {

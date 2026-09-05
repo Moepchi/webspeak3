@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src="web/public/logo.png" width="140" alt="WebSpeak3 logo">
 </p>
 
@@ -78,7 +78,8 @@ installed on the same machine, modified, or operated by you.
 | 📱 **Mobile-friendly layout** | Responsive single-column layout for narrow screens, not just a shrunk desktop UI |
 | 🌍 **Localized UI** | Interface available in German, English, and Simplified Chinese, detected automatically or switchable in Options |
 | 🌗 **Dark / light theme** | Clean, modern UI that adapts to your preference |
-| 🔁 **Seamless reconnect** | Switch connections mid-session — old state tears down cleanly, no leaks or duplicates |
+| 🔁 **Multi-join (server tabs)** | Several TeamSpeak connections in parallel — one tab per server, like GreenTeaSpeak 2. Audio stays on the active tab |
+| 🔁 **Seamless reconnect** | Switch or add connections mid-session without tearing down unrelated tabs |
 
 ## 🧱 Tech Stack
 
@@ -108,8 +109,9 @@ Browser (web/)  <--WebSocket-->  Gateway (gateway/)  <--stdin/stdout JSON-->  Ru
 - **`web/`** — Vite + React frontend. TS3-lookalike UI: channel tree, chat
   tabs, voice controls.
 - **`gateway/`** — Node.js/TypeScript WebSocket server. Spawns the Rust
-  connector per browser connection and relays newline-delimited JSON events
-  between it and the browser.
+  connector **per browser WebSocket** and relays newline-delimited JSON events
+  between it and the browser. Multi-join opens one `/ws` connection per server
+  tab (parallel connectors).
 - **`connector/`** — Rust binary wrapping [`tsclientlib`](https://github.com/ReSpeak/tsclientlib)
   (vendored as a git submodule in `tsclientlib/`), the actual TS3/TS6
   protocol implementation. Handles connecting, channel/client state, chat,
@@ -222,7 +224,7 @@ npm install
 npm run dev
 ```
 
-This starts the WebSocket gateway on `ws://localhost:8080`.
+This starts the WebSocket gateway on `ws://localhost:8080`. Open **http://localhost:8080** for the UI (serves `web/dist`). After UI changes run `cd web && npm run build`, then reload. Optional Vite (`npm run dev` in `web/`, typically `:5173`) is only for HMR. `WEB_STATIC=0 npm run dev` serves API/WebSocket only.
 
 **4. Install and start the web frontend**
 
@@ -235,6 +237,9 @@ npm run dev
 ```
 
 Vite will print a local dev URL (typically `http://localhost:5173`) — open it in a browser.
+The Vite app connects to the gateway at `ws://localhost:8080/ws`.
+
+> **Preferred UI:** **http://localhost:8080** (static `web/dist` — refresh after `cd web && npm run build`). Vite `:5173` is optional HMR only.
 
 **5. Connect**
 
