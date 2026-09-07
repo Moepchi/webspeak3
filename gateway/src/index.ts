@@ -41,6 +41,7 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
   ".json": "application/json",
   ".woff2": "font/woff2",
+  ".webmanifest": "application/manifest+json",
 };
 
 const DEV_HINT = `<!doctype html><html><body style="font:14px system-ui;padding:2rem;max-width:40rem">
