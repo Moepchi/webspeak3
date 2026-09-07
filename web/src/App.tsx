@@ -100,6 +100,21 @@ function loadServerType(): ServerType {
   const raw = localStorage.getItem(LAST_SERVER_TYPE_KEY);
   return raw === "teamspeak" || raw === "teaspeak" || raw === "auto" ? raw : "auto";
 }
+
+/** Everything needed to (re)open a gateway connection for one session, kept
+ *  around per session id so a dropped socket — active tab or a parked
+ *  background one — can be silently reconnected. */
+type ConnectParams = {
+  host: string;
+  nickname: string;
+  serverPassword: string;
+  channelPassword: string;
+  defaultChannel: string;
+  privilegeKey: string;
+  serverType: ServerType;
+  identityId: string | null;
+  favoriteId: string | null;
+};
 /** Identity persisted across sessions so the server sees the same client UID
  *  each time, instead of a fresh one being generated per connection. */
 const IDENTITY_KEY = "webspeak3:identity";
@@ -5312,6 +5327,10 @@ function AppInner() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const sessionsRef = useRef<Map<string, SessionRecord>>(new Map());
   const activeSessionIdRef = useRef<string | null>(null);
+  /** Last-used connect params per session, kept around so a dropped session
+   *  (active OR parked/background) can reconnect itself without the user
+   *  re-entering host/password — see reconnectSession(). */
+  const sessionParamsRef = useRef<Map<string, ConnectParams>>(new Map());
   const connectionsMenuRef = useRef<HTMLDivElement | null>(null);
   const favoritesMenuRef = useRef<HTMLDivElement | null>(null);
   const awayMenuRef = useRef<HTMLDivElement | null>(null);
@@ -5729,6 +5748,7 @@ function AppInner() {
       }
     }
     sessionsRef.current.delete(id);
+    sessionParamsRef.current.delete(id);
     lastChannelClickBySession.delete(id);
     setSessionTabs((prev) => prev.filter((t) => t.id !== id));
 
@@ -5758,54 +5778,22 @@ function AppInner() {
     }
   };
 
-  const handleConnect = (overrides?: {
-    host?: string;
-    nickname?: string;
-    serverPassword?: string;
-    channelPassword?: string;
-    defaultChannel?: string;
-    privilegeKey?: string;
-    serverType?: ServerType;
-    favoriteId?: string | null;
-  }) => {
-    const connectHost = overrides?.host ?? host;
-    const connectNickname = overrides?.nickname ?? nickname;
-    const connectServerPassword = overrides?.serverPassword ?? serverPassword;
-    const connectChannelPassword = overrides?.channelPassword ?? channelPassword;
-    const connectDefaultChannel = overrides?.defaultChannel ?? defaultChannel;
-    const connectPrivilegeKey = overrides?.privilegeKey ?? privilegeKey;
-    const connectServerType = overrides?.serverType ?? serverType;
-    const connectFavoriteId = overrides?.favoriteId !== undefined ? overrides.favoriteId : null;
-
-    // Multi-join: keep existing sessions; park the active tab and open a new one.
-    if (activeSessionIdRef.current && sessionsRef.current.has(activeSessionIdRef.current)) {
-      parkActiveSession();
-    }
-
-    clearActiveUi();
-    setActiveFavoriteId(connectFavoriteId);
-    hasConnectedRef.current = false;
-    setConnecting(true);
-    setConnectError(null);
-    setConnectDialogOpen(false);
-    setHost(connectHost);
-    setNickname(connectNickname);
-
-    ensureAudioContext();
-
-    const sessionId = crypto.randomUUID();
-    const connectIdentityId = activeIdentityId;
+  // Wires onopen/onmessage/onerror/onclose for one session's socket. Shared
+  // by handleConnect (brand-new session) and reconnectSession (an existing
+  // session — active or parked in the background — getting a fresh socket
+  // after an unexpected drop), so a reconnect behaves identically to the
+  // original connect from the gateway/UI's point of view.
+  const wireSocket = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams) => {
+    const connectHost = params.host;
+    const connectNickname = params.nickname;
+    const connectServerPassword = params.serverPassword;
+    const connectChannelPassword = params.channelPassword;
+    const connectDefaultChannel = params.defaultChannel;
+    const connectPrivilegeKey = params.privilegeKey;
+    const connectServerType = params.serverType;
+    const connectIdentityId = params.identityId;
+    const connectFavoriteId = params.favoriteId;
     const connectIdentityBlob = identities.find((i) => i.id === connectIdentityId)?.blob ?? undefined;
-
-    const socket = DEMO_MODE ? new DemoSocket() : new WebSocket(GATEWAY_URL);
-    sessionsRef.current.set(sessionId, { id: sessionId, socket, parked: null });
-    socketRef.current = socket;
-    activeSessionIdRef.current = sessionId;
-    setActiveSessionId(sessionId);
-    setSessionTabs((prev) => [
-      ...prev,
-      { id: sessionId, label: connectHost || "…", connected: false, connecting: true },
-    ]);
 
     socket.onopen = () => {
       logClient("info", "Connection", `Connecting to ${connectHost}…`);
@@ -5840,10 +5828,8 @@ function AppInner() {
         }
         if (data.type === "disconnected") {
           sessionsRef.current.delete(sessionId);
+          sessionParamsRef.current.delete(sessionId);
           setSessionTabs((prev) => prev.filter((t) => t.id !== sessionId));
-          if (hasConnectedRef.current === false) {
-            /* noop — background */
-          }
           void playSound("disconnect");
           return;
         }
@@ -5857,7 +5843,10 @@ function AppInner() {
           connected: rec.parked.connected,
           connecting: rec.parked.connecting,
         });
-        if (data.type === "connected") void playSound("connect");
+        if (data.type === "connected") {
+          reconnectAttemptsRef.current.delete(sessionId);
+          void playSound("connect");
+        }
         else if (data.type === "poke") void playSound("poke");
         return;
       }
@@ -5865,6 +5854,7 @@ function AppInner() {
       switch (data.type) {
         case "connected":
           logClient("info", "Connection", `Connected to ${data.serverName}`);
+          reconnectAttemptsRef.current.delete(sessionId);
           hasConnectedRef.current = true;
           setConnecting(false);
           setConnectError(null);
@@ -6178,22 +6168,216 @@ function AppInner() {
     };
     socket.onclose = () => {
       if (sessionId !== activeSessionIdRef.current) {
-        if (sessionsRef.current.has(sessionId)) {
-          sessionsRef.current.delete(sessionId);
-          setSessionTabs((prev) => prev.filter((t) => t.id !== sessionId));
+        const rec = sessionsRef.current.get(sessionId);
+        // Missing already means a deliberate disconnect (the "disconnected"
+        // message handler above already removed it) — nothing to do.
+        if (!rec) return;
+        if (rec.parked?.hasConnected) {
+          // Unexpected drop of a background tab (network blip, or the OS
+          // suspended the backgrounded/screen-off page) — keep the tab
+          // instead of dropping it, same as a real TS3 client keeps other
+          // server connections open while you're looking at a different
+          // one. It comes back on its own (immediately if we're still in
+          // the foreground, otherwise the visibilitychange handler retries
+          // it once the page is visible again), mic still off throughout.
+          rec.parked = { ...rec.parked, connecting: false, connected: false };
+          updateTabMeta(sessionId, { connecting: false, connected: false });
+          if (document.visibilityState === "visible") scheduleReconnectRef.current(sessionId);
+          return;
         }
+        sessionsRef.current.delete(sessionId);
+        sessionParamsRef.current.delete(sessionId);
+        setSessionTabs((prev) => prev.filter((t) => t.id !== sessionId));
         return;
       }
       if (!hasConnectedRef.current && !cleanDisconnectRef.current) {
         setConnecting(false);
         setConnectError((prev) => prev ?? "Connection closed before the server responded");
+        cleanDisconnectRef.current = false;
+        if (sessionsRef.current.has(sessionId)) {
+          removeSession(sessionId, { skipSocketClose: true });
+        }
+        return;
       }
+      const wasConnected = hasConnectedRef.current;
       cleanDisconnectRef.current = false;
+      if (wasConnected && sessionsRef.current.has(sessionId)) {
+        // Same as above, for the active tab: an unexpected drop after a
+        // successful connect tries to come back rather than closing the tab.
+        // A deliberate disconnect goes through the "disconnected" message
+        // handler (or handleDisconnect()), both of which remove the session
+        // before this fires, so we only land here for a real hiccup.
+        setConnected(false);
+        updateTabMeta(sessionId, { connecting: false, connected: false });
+        if (document.visibilityState === "visible") scheduleReconnectRef.current(sessionId);
+        return;
+      }
       if (sessionsRef.current.has(sessionId)) {
         removeSession(sessionId, { skipSocketClose: true });
       }
     };
   };
+
+  const handleConnect = (overrides?: {
+    host?: string;
+    nickname?: string;
+    serverPassword?: string;
+    channelPassword?: string;
+    defaultChannel?: string;
+    privilegeKey?: string;
+    serverType?: ServerType;
+    favoriteId?: string | null;
+  }) => {
+    const params: ConnectParams = {
+      host: overrides?.host ?? host,
+      nickname: overrides?.nickname ?? nickname,
+      serverPassword: overrides?.serverPassword ?? serverPassword,
+      channelPassword: overrides?.channelPassword ?? channelPassword,
+      defaultChannel: overrides?.defaultChannel ?? defaultChannel,
+      privilegeKey: overrides?.privilegeKey ?? privilegeKey,
+      serverType: overrides?.serverType ?? serverType,
+      identityId: activeIdentityId,
+      favoriteId: overrides?.favoriteId !== undefined ? overrides.favoriteId : null,
+    };
+
+    // Multi-join: keep existing sessions; park the active tab and open a new one.
+    if (activeSessionIdRef.current && sessionsRef.current.has(activeSessionIdRef.current)) {
+      parkActiveSession();
+    }
+
+    clearActiveUi();
+    setActiveFavoriteId(params.favoriteId);
+    hasConnectedRef.current = false;
+    setConnecting(true);
+    setConnectError(null);
+    setConnectDialogOpen(false);
+    setHost(params.host);
+    setNickname(params.nickname);
+
+    ensureAudioContext();
+
+    const sessionId = crypto.randomUUID();
+    sessionParamsRef.current.set(sessionId, params);
+
+    const socket = DEMO_MODE ? new DemoSocket() : new WebSocket(GATEWAY_URL);
+    sessionsRef.current.set(sessionId, { id: sessionId, socket, parked: null });
+    socketRef.current = socket;
+    activeSessionIdRef.current = sessionId;
+    setActiveSessionId(sessionId);
+    setSessionTabs((prev) => [
+      ...prev,
+      { id: sessionId, label: params.host || "…", connected: false, connecting: true },
+    ]);
+
+    wireSocket(sessionId, socket, params);
+  };
+
+  // Opens a fresh socket for a session that already exists (active or
+  // parked) and re-runs the same connect handshake, reusing the params
+  // stored at connect time. Used to recover from an unexpected drop —
+  // network blip, or the page coming back from being backgrounded/suspended
+  // — without disturbing which tab is active or losing chat/scroll history.
+  const reconnectSession = (sessionId: string) => {
+    const params = sessionParamsRef.current.get(sessionId);
+    const rec = sessionsRef.current.get(sessionId);
+    if (!params || !rec) return;
+    // Already open or mid-(re)connect — nothing to do.
+    if (rec.socket && rec.socket.readyState !== WebSocket.CLOSED && rec.socket.readyState !== WebSocket.CLOSING) {
+      return;
+    }
+
+    logClient("info", "Connection", `Reconnecting to ${params.host}…`);
+    const socket = DEMO_MODE ? new DemoSocket() : new WebSocket(GATEWAY_URL);
+    rec.socket = socket;
+    if (sessionId === activeSessionIdRef.current) {
+      socketRef.current = socket;
+      hasConnectedRef.current = false;
+      setConnecting(true);
+      setConnectError(null);
+    } else if (rec.parked) {
+      rec.parked = { ...rec.parked, connecting: true, connected: false, connectError: null };
+    }
+    updateTabMeta(sessionId, { connecting: true, connected: false });
+    wireSocket(sessionId, socket, params);
+  };
+
+  const reconnectSessionRef = useRef(reconnectSession);
+  reconnectSessionRef.current = reconnectSession;
+
+  // Per-session backoff so a persistently unreachable gateway doesn't get
+  // hammered with back-to-back reconnect attempts (each one fails near-
+  // instantly, which without a delay would tight-loop). Reset to 0 once a
+  // session actually reaches "connected" again (see the two spots below).
+  const reconnectAttemptsRef = useRef<Map<string, number>>(new Map());
+  const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const scheduleReconnect = (sessionId: string) => {
+    if (reconnectTimersRef.current.has(sessionId)) return; // already scheduled
+    const attempt = reconnectAttemptsRef.current.get(sessionId) ?? 0;
+    const delay = Math.min(1000 * 2 ** attempt, 30_000);
+    reconnectAttemptsRef.current.set(sessionId, attempt + 1);
+    const timer = setTimeout(() => {
+      reconnectTimersRef.current.delete(sessionId);
+      // A manual disconnect meanwhile drops the session's stored params, so
+      // reconnectSession() below is a no-op in that case — no explicit
+      // cancellation needed.
+      reconnectSessionRef.current(sessionId);
+    }, delay);
+    reconnectTimersRef.current.set(sessionId, timer);
+  };
+  const scheduleReconnectRef = useRef(scheduleReconnect);
+  scheduleReconnectRef.current = scheduleReconnect;
+
+  // Android/mobile browsers aggressively suspend backgrounded or screen-off
+  // tabs — timers stall and the OS/browser can silently drop a WebSocket
+  // without ever firing onerror/onclose while hidden. There's no event for
+  // that; the only reliable signal is coming back to a socket that isn't
+  // OPEN anymore. Wake Lock keeps the screen (and the tab's throttling) at
+  // bay while any session is live — active tab AND parked background ones,
+  // same as a real TS3 client keeping every joined server connected, mic
+  // only ever live for the foreground tab. The visibilitychange re-check
+  // below catches whatever still slips through (screen-off ignores Wake
+  // Lock on some devices, the lock request can be refused, full app
+  // backgrounding on Android isn't preventable from a web page at all) by
+  // reconnecting every dropped session with the params used last time.
+  useEffect(() => {
+    if (sessionTabs.length === 0) return;
+
+    let wakeLock: { release: () => Promise<void> } | null = null;
+    const releaseWakeLock = () => {
+      wakeLock?.release().catch(() => {});
+      wakeLock = null;
+    };
+    const requestWakeLock = () => {
+      const wl = (navigator as { wakeLock?: { request: (type: "screen") => Promise<any> } }).wakeLock;
+      if (!wl || document.visibilityState !== "visible") return;
+      wl.request("screen")
+        .then((lock) => {
+          wakeLock = lock;
+          lock.addEventListener("release", () => {
+            if (wakeLock === lock) wakeLock = null;
+          });
+        })
+        .catch(() => {
+          /* refused (battery saver, unsupported, …) — non-fatal */
+        });
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      requestWakeLock();
+      for (const id of sessionsRef.current.keys()) {
+        reconnectSessionRef.current(id);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    requestWakeLock();
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      releaseWakeLock();
+    };
+  }, [sessionTabs.length]);
 
   const handleDisconnect = () => {
     const id = activeSessionIdRef.current;

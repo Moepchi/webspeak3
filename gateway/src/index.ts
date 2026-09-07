@@ -86,6 +86,36 @@ const server = createServer((req, res) => {
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
+// Heartbeat: a browser tab that loses its network mid-session (mobile
+// handover, Wi-Fi drop, backgrounded/frozen tab) often never sends a proper
+// WS close frame — the OS-level TCP timeout that would eventually notice can
+// take minutes, during which the connector child process (and the TS3/TeaSpeak
+// session it holds open) stays alive even though the frontend has already
+// given up and shown "disconnected". Standard `ws` ping/pong liveness check
+// closes those zombie sockets (and their connector) promptly instead.
+const HEARTBEAT_INTERVAL_MS = 20_000;
+
+interface HeartbeatState {
+  isAlive: boolean;
+}
+
+const heartbeats = new WeakMap<WebSocket, HeartbeatState>();
+
+const heartbeatTimer = setInterval(() => {
+  for (const socket of wss.clients) {
+    const state = heartbeats.get(socket);
+    if (!state) continue;
+    if (!state.isAlive) {
+      socket.terminate();
+      continue;
+    }
+    state.isAlive = false;
+    socket.ping();
+  }
+}, HEARTBEAT_INTERVAL_MS);
+
+wss.on("close", () => clearInterval(heartbeatTimer));
+
 server.listen(PORT, () => {
   console.log(`WebSpeak3 gateway listening on http://localhost:${PORT} (WebSocket at /ws)`);
   if (SERVE_STATIC) {
@@ -100,6 +130,12 @@ wss.on("connection", (socket: WebSocket) => {
   // One browser WebSocket ↔ one Rust connector. Multi-join in the UI opens
   // multiple /ws connections in parallel (one per server tab).
   let connection: Ts3Connection | undefined;
+
+  heartbeats.set(socket, { isAlive: true });
+  socket.on("pong", () => {
+    const state = heartbeats.get(socket);
+    if (state) state.isAlive = true;
+  });
 
   socket.on("message", async (raw) => {
     const msg = JSON.parse(raw.toString());
@@ -338,6 +374,7 @@ wss.on("connection", (socket: WebSocket) => {
   });
 
   socket.on("close", () => {
+    heartbeats.delete(socket);
     connection?.disconnect();
   });
 });
