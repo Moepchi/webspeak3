@@ -746,7 +746,16 @@ Try a self-hosted TeaSpeak with TeamSpeak-compat enabled, or use GreenTeaSpeak 2
 async fn run(args: Args) -> Result<()> {
 	// stdout is a strict newline-delimited-JSON channel for the gateway to parse;
 	// all diagnostic logging must go to stderr instead.
-	tracing_subscriber::fmt().with_env_filter("warn").with_writer(std::io::stderr).init();
+	//
+	// ts_bookkeeping::messages::s2c logs a WARN for every server/property field
+	// it doesn't have a parser for - harmless (the field is just ignored) but,
+	// on TeaSpeak/GreenTeaSpeak servers especially, noisy enough on every
+	// ServerUpdated/ClientEnterView to drown out warnings that actually matter.
+	// Downgraded to error by default; RUST_LOG still overrides this entirely
+	// when set, e.g. RUST_LOG=debug for full tracing.
+	let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+		.unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn,ts_bookkeeping::messages::s2c=error"));
+	tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
 
 	let address = args.address.clone();
 	// Accepts either our own persisted JSON blob (serialized below) or a raw
