@@ -22,6 +22,12 @@ function parsePrivilegeKey(msg: { privilegeKey?: unknown; token?: unknown }): st
 
 const PORT = Number(process.env.PORT ?? 8080);
 
+// Opt-in only, off by default: this is an open-source, self-hostable image,
+// and other instances shouldn't get connection logging just because it's in
+// the codebase. Set LOG_CONNECTIONS=1 in the .env of the instance you want it
+// on. Logs only host/server-name/timestamp — no nickname, no IP.
+const LOG_CONNECTIONS = process.env.LOG_CONNECTIONS === "1";
+
 // In production (Docker), the built web app lives alongside the gateway and
 // is served from the same port as the WebSocket endpoint, so a single
 // reverse-proxied origin (e.g. a Zoraxy subdomain) is enough for everything.
@@ -164,7 +170,18 @@ wss.on("connection", (socket: WebSocket) => {
           privilegeKey: parsePrivilegeKey(msg),
         };
         connection = new Ts3Connection(options);
-        connection.onEvent((event) => socket.send(JSON.stringify(event)));
+        connection.onEvent((event) => {
+          if (LOG_CONNECTIONS) {
+            if (event.type === "connected") {
+              console.log(
+                `[connections] connected host=${options.host} server=${event.serverName} at=${new Date().toISOString()}`
+              );
+            } else if (event.type === "disconnected") {
+              console.log(`[connections] disconnected host=${options.host} at=${new Date().toISOString()}`);
+            }
+          }
+          socket.send(JSON.stringify(event));
+        });
         await connection.connect();
         break;
       }
