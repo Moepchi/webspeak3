@@ -21,6 +21,24 @@ export interface ChannelInfo {
   hasPassword: boolean;
 }
 
+/**
+ * The `setupstream` arguments. TS6 always sends all of them, so none are
+ * optional here - the defaults live in the caller, not on the wire.
+ */
+export interface StreamSetupOptions {
+  name: string;
+  /** Source kind; a real TS6 screen share sends 3. */
+  type: number;
+  bitrate: number;
+  /** TS6's Privacy setting: who may join without being asked. */
+  accessibility: number;
+  /** Connection mode - peer-to-peer or via the server's SFU. */
+  mode: number;
+  /** 0 means unlimited. */
+  viewerLimit: number;
+  audio: boolean;
+}
+
 export interface ClientInfo {
   id: number;
   channel: number;
@@ -809,6 +827,49 @@ export class Ts3Connection {
   async sendStreamSignal(streamId: string, clientId: number, payload: unknown): Promise<void> {
     const id = streamId.replace(/[\s]+/g, "");
     if (id) this.child?.stdin.write(`streamsignal ${id} ${clientId} ${JSON.stringify(payload)}\n`);
+  }
+
+  /** Announces a stream we publish. The server assigns the id and reports it
+   *  back as a `notifystreamstarted` streamEvent naming our own client id. */
+  async setupStream(options: StreamSetupOptions): Promise<void> {
+    const payload = {
+      name: options.name.replace(/[\r\n]+/g, " ").trim() || "Stream",
+      type: options.type,
+      bitrate: options.bitrate,
+      accessibility: options.accessibility,
+      mode: options.mode,
+      viewerLimit: options.viewerLimit,
+      audio: options.audio,
+    };
+    this.child?.stdin.write(`streamsetup ${JSON.stringify(payload)}\n`);
+  }
+
+  /** Accepts or refuses a viewer that asked to watch our stream. On accept,
+   *  `offer` is our SDP - the publisher offers, which is the mirror of how a
+   *  TS6 publisher answered us. JSON-encoded because an SDP is multi-line. */
+  async respondJoinStream(
+    streamId: string,
+    clientId: number,
+    accept: boolean,
+    offer = "",
+    message = "",
+  ): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    if (!id) return;
+    const payload = {
+      id,
+      clid: clientId,
+      msg: message.replace(/[\r\n]+/g, " ").trim(),
+      offer,
+      decision: accept ? 1 : 0,
+    };
+    this.child?.stdin.write(`streamrespond ${JSON.stringify(payload)}\n`);
+  }
+
+  async stopStream(streamId: string, reason = ""): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    const sanitized = reason.replace(/[\r\n]+/g, " ").trim();
+    if (id) this.child?.stdin.write(`streamstop ${id} ${sanitized}\n`);
   }
 
   async setAway(away: boolean, message: string): Promise<void> {

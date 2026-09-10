@@ -441,6 +441,35 @@ wss.on("connection", (socket: WebSocket) => {
         }
         break;
       }
+      case "setupStream": {
+        await connection?.setupStream({
+          name: String(msg.name ?? "Stream"),
+          type: Number(msg.streamType ?? 3),
+          bitrate: Number(msg.bitrate ?? 1_500_000),
+          accessibility: Number(msg.accessibility ?? 1),
+          mode: Number(msg.mode ?? 1),
+          viewerLimit: Number(msg.viewerLimit ?? 0),
+          audio: Boolean(msg.audio),
+        });
+        break;
+      }
+      case "respondJoinStream": {
+        const clientId = Number(msg.clientId);
+        if (Number.isFinite(clientId)) {
+          await connection?.respondJoinStream(
+            String(msg.streamId ?? ""),
+            clientId,
+            Boolean(msg.accept),
+            String(msg.offer ?? ""),
+            String(msg.message ?? ""),
+          );
+        }
+        break;
+      }
+      case "stopStream": {
+        await connection?.stopStream(String(msg.streamId ?? ""), String(msg.reason ?? ""));
+        break;
+      }
       case "setAway": {
         await connection?.setAway(msg.away, msg.message ?? "");
         break;

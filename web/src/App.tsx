@@ -26,6 +26,7 @@ import {
   pickAudioOutputDevice,
 } from "./voice";
 import { LanguageProvider, useLanguage, useT, type LangPref } from "./i18n";
+import { StreamPublisher, type PublishState } from "./publish";
 import { StreamViewer, parseStreamInfo, type StreamEvent, type StreamInfo } from "./stream";
 import { DEMO_HOST, DEMO_MODE, DemoSocket } from "./demoMode";
 import {
@@ -5380,6 +5381,11 @@ function AppInner() {
   const [streamState, setStreamState] = useState<RTCPeerConnectionState>("new");
   const [streamError, setStreamError] = useState<string | null>(null);
   const streamViewerRef = useRef<StreamViewer | null>(null);
+  const [publishState, setPublishState] = useState<PublishState>("idle");
+  const [publishViewers, setPublishViewers] = useState<number[]>([]);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const publisherRef = useRef<StreamPublisher | null>(null);
+  const publishPreviewRef = useRef<HTMLVideoElement | null>(null);
   const streamVideoRef = useRef<HTMLVideoElement | null>(null);
   /** Clients we already pulled a `notifystreaminfo` for, so we ask only once. */
   const requestedStreamInfoRef = useRef<Set<number>>(new Set());
@@ -6274,6 +6280,7 @@ function AppInner() {
             }
           }
           streamViewerRef.current?.handleEvent(streamEvent);
+          publisherRef.current?.handleEvent(streamEvent);
           break;
         }
         case "poke": {
@@ -6335,6 +6342,10 @@ function AppInner() {
           setStreamMedia(null);
           setStreamInfos({});
           requestedStreamInfoRef.current.clear();
+          publisherRef.current?.stop();
+          publisherRef.current = null;
+          setPublishState("idle");
+          setPublishViewers([]);
           removeSession(sessionId, { skipSocketClose: true });
           break;
         }
@@ -7597,6 +7608,15 @@ function AppInner() {
     if (video && video.srcObject !== streamMedia) video.srcObject = streamMedia;
   }, [streamMedia, watchedStream]);
 
+  useEffect(() => {
+    // The publisher owns the capture; the preview only mirrors it, so it is
+    // read off the peer connection's senders rather than kept in state.
+    const video = publishPreviewRef.current;
+    if (!video) return;
+    const media = publisherRef.current?.previewStream ?? null;
+    if (video.srcObject !== media) video.srcObject = media;
+  }, [publishState, publishViewers]);
+
   const handleStopWatchingStream = () => {
     // close() sends leaveStream and fires onClosed, which clears the rest.
     streamViewerRef.current?.close();
@@ -7626,6 +7646,43 @@ function AppInner() {
     streamViewerRef.current = viewer;
     setWatchedStream(info);
     viewer.join();
+  };
+
+  const handleStopPublishing = () => {
+    publisherRef.current?.stop();
+    publisherRef.current = null;
+    setPublishState("idle");
+    setPublishViewers([]);
+  };
+
+  const handleStartPublishing = () => {
+    if (ownClientId === null) return;
+    if (publisherRef.current) {
+      handleStopPublishing();
+      return;
+    }
+    setPublishError(null);
+    const publisher = new StreamPublisher({
+      send: (message) => socketRef.current?.send(JSON.stringify(message)),
+      ownClientId,
+      onStateChange: (state) => {
+        setPublishState(state);
+        // "stopped" is also how the browser's own stop-sharing bar reports in,
+        // so the ref has to be dropped here and not only in the click handler.
+        if (state === "stopped" || state === "idle") {
+          publisherRef.current = null;
+          setPublishViewers([]);
+        }
+      },
+      onViewersChange: setPublishViewers,
+      onError: setPublishError,
+    });
+    publisherRef.current = publisher;
+    void publisher.start({
+      name: `${ownClient?.name ?? "WebSpeak3"} - ${t("publish.screen")}`,
+      bitrate: 1_500_000,
+      audio: true,
+    });
   };
 
   const handleShowClientConnectionInfo = (clientId: number, clientName: string) => {
@@ -8726,6 +8783,14 @@ function AppInner() {
               onChange={(e) => setVadThreshold(Number(e.target.value))}
             />
           </label>
+          <button
+            className={`ts-icon-button${publishState === "live" ? " ts-mic-on" : ""}`}
+            onClick={handleStartPublishing}
+            disabled={!connected || ownClientId === null}
+            title={publishState === "live" ? t("publish.stop") : t("publish.start")}
+          >
+            {publishState === "live" ? "🛑" : "🖥️"}
+          </button>
           <span className="ts-toolbar-sep" />
           <button
             className={`ts-icon-button${outputMuted ? " ts-muted-on" : ""}`}
@@ -9264,6 +9329,30 @@ function AppInner() {
         </div>
       ))}
 
+      {(watchedStream || (publishState !== "idle" && publishState !== "stopped")) && (
+      <div className="ts-stream-panels">
+      {publishState !== "idle" && publishState !== "stopped" && (
+        <div className="ts-stream-panel ts-stream-panel-publish">
+          <div className="ts-stream-panel-header">
+            <span className="ts-stream-panel-title">🖥️ {t("publish.title")}</span>
+            <span className="ts-stream-panel-state">
+              {publishState === "live"
+                ? t("publish.viewers", { count: String(publishViewers.length) })
+                : t("publish.starting")}
+            </span>
+            <button
+              className="ts-stream-panel-close"
+              onClick={handleStopPublishing}
+              title={t("publish.stop")}
+            >
+              ✕
+            </button>
+          </div>
+          {/* muted: this is our own capture playing back locally */}
+          <video ref={publishPreviewRef} autoPlay playsInline muted />
+          {publishError && <div className="ts-stream-panel-error">{publishError}</div>}
+        </div>
+      )}
       {watchedStream && (
         <div className="ts-stream-panel">
           <div className="ts-stream-panel-header">
@@ -9285,6 +9374,8 @@ function AppInner() {
           <video ref={streamVideoRef} autoPlay playsInline muted controls />
           {streamError && <div className="ts-stream-panel-error">{streamError}</div>}
         </div>
+      )}
+      </div>
       )}
       {clientContextMenu && (
         <div
