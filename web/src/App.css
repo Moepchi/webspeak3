@@ -1409,6 +1409,65 @@
   background: var(--border-soft);
 }
 
+/* Floating viewer for a TS6 Stream/Call broadcast. */
+.ts-stream-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 29;
+  display: flex;
+  flex-direction: column;
+  width: min(480px, calc(100vw - 2rem));
+  background: var(--bg-toolbar-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.ts-stream-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.ts-stream-panel-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.ts-stream-panel-state {
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
+.ts-stream-panel-close {
+  padding: 0 0.35rem;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ts-stream-panel video {
+  width: 100%;
+  /* Letterbox rather than crop - TS6 screen shares are not always 16:9. */
+  aspect-ratio: 16 / 9;
+  background: #000;
+  object-fit: contain;
+}
+
+.ts-stream-panel-error {
+  padding: 0.35rem 0.5rem;
+  color: var(--danger, #e05a5a);
+  font-size: 0.85em;
+}
+
 .ts-context-menu {
   position: fixed;
   z-index: 30;

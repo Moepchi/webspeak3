@@ -39,6 +39,8 @@ export interface ClientInfo {
   hasTalkPower: boolean;
   /** ServerQuery client; UI may hide these unless enabled per favorite. */
   isQuery: boolean;
+  /** Broadcasting a TS6 Stream/Call. The stream id is fetched separately. */
+  isStreaming: boolean;
 }
 
 export interface GroupEntry {
@@ -184,7 +186,9 @@ export type Ts3ConnectionEvent =
   | { type: "fileDownloadData"; cid: number; path: string; data: string }
   | { type: "fileUploadDone"; cid: number; path: string }
   | { type: "permList"; scope: PermScope; id1: number; id2: number | null; entries: PermissionOverviewEntry[] }
-  | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] };
+  | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] }
+  /** TS6 Stream/Call signaling, forwarded verbatim; `args` is already unescaped. */
+  | { type: "streamEvent"; name: string; args: Record<string, string> };
 
 export type ServerType = "teamspeak" | "teaspeak" | "auto";
 
@@ -255,6 +259,7 @@ export class Ts3Connection {
           server_groups: number[];
           has_talk_power: boolean;
           is_query?: boolean;
+          is_streaming?: boolean;
         }
 
         interface RawChannelInfo {
@@ -384,7 +389,8 @@ export class Ts3Connection {
           | { type: "fileDownloadData"; cid: number; path: string; data: string }
           | { type: "fileUploadDone"; cid: number; path: string }
           | { type: "permList"; scope: PermScope; id1: number; id2: number | null; entries: PermissionOverviewEntry[] }
-          | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] };
+          | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] }
+          | { type: "streamEvent"; name: string; args: Record<string, string> };
 
         if (event.type === "connected") {
           this.emit({
@@ -428,6 +434,7 @@ export class Ts3Connection {
               serverGroups: c.server_groups,
               hasTalkPower: c.has_talk_power,
               isQuery: Boolean(c.is_query),
+              isStreaming: Boolean(c.is_streaming),
             })),
             ownClientId: event.own_client_id ?? 0,
             serverMaxClients: event.server_max_clients ?? 0,
@@ -772,6 +779,12 @@ export class Ts3Connection {
 
   async sendAudio(pcmBase64: string): Promise<void> {
     this.child?.stdin.write(`audio ${pcmBase64}\n`);
+  }
+
+  /** Pulls a streaming client's stream details; answered with a
+   *  `notifystreaminfo` streamEvent carrying the stream id. */
+  async requestStreamInfo(clientId: number): Promise<void> {
+    this.child?.stdin.write(`streaminfo ${clientId}\n`);
   }
 
   /** Ask the client publishing a TS6 stream to let us watch. The answer comes

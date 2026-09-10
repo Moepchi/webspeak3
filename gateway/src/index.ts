@@ -415,6 +415,11 @@ wss.on("connection", (socket: WebSocket) => {
         await connection?.sendAudio(msg.pcm);
         break;
       }
+      case "requestStreamInfo": {
+        const clientId = Number(msg.clientId);
+        if (Number.isFinite(clientId)) await connection?.requestStreamInfo(clientId);
+        break;
+      }
       case "joinStream": {
         const clientId = Number(msg.clientId);
         if (Number.isFinite(clientId)) {

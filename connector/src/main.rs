@@ -108,6 +108,11 @@ struct ClientInfo {
 	/// ServerQuery client (`ClientType::Query`). Always included in the
 	/// snapshot; the UI hides these unless the user enables them per favorite.
 	is_query: bool,
+	/// Whether this client is broadcasting a TS6 Stream/Call right now. This is
+	/// the only way a client that joins late learns a stream exists - the server
+	/// sends no stream command in that case, so the id has to be fetched with
+	/// `requeststreaminfo`. Always `false` on servers that don't report it.
+	is_streaming: bool,
 }
 
 /// Payload for the "serveredit " stdin command - every field is optional so
@@ -621,6 +626,7 @@ fn snapshot(con: &data::Connection) -> Event {
 				server_groups: c.server_groups.iter().map(|g| g.0).collect(),
 				has_talk_power,
 				is_query: matches!(c.client_type, ClientType::Query { .. }),
+				is_streaming: c.is_streaming.unwrap_or(false),
 			}
 		})
 		.collect::<Vec<_>>();

@@ -26,6 +26,7 @@ import {
   pickAudioOutputDevice,
 } from "./voice";
 import { LanguageProvider, useLanguage, useT, type LangPref } from "./i18n";
+import { StreamViewer, parseStreamInfo, type StreamEvent, type StreamInfo } from "./stream";
 import { DEMO_HOST, DEMO_MODE, DemoSocket } from "./demoMode";
 import {
   SOUND_EVENTS,
@@ -506,6 +507,8 @@ interface ClientInfo {
   channelGroup: number;
   serverGroups: number[];
   hasTalkPower: boolean;
+  /** TS6 Stream/Call broadcast running; absent on servers that don't report it. */
+  isStreaming?: boolean;
   /** ServerQuery client; filtered from the tree unless a favorite enables them. */
   isQuery?: boolean;
 }
@@ -705,6 +708,7 @@ function ClientStatusIcons({ client }: { client: ClientInfo }) {
         <span title={t("tree.noTalkPower")}>🔒</span>
       )}
       {client.outputMuted && <span title={t("tree.soundMuted")}>🔕</span>}
+      {client.isStreaming && <span title={t("tree.streaming")}>📺</span>}
     </span>
   );
 }
@@ -5355,6 +5359,16 @@ function AppInner() {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [clients, setClients] = useState<ClientInfo[]>([]);
+  /** Stream metadata per publishing client id, keyed by clid. */
+  const [streamInfos, setStreamInfos] = useState<Record<number, StreamInfo>>({});
+  const [watchedStream, setWatchedStream] = useState<StreamInfo | null>(null);
+  const [streamMedia, setStreamMedia] = useState<MediaStream | null>(null);
+  const [streamState, setStreamState] = useState<RTCPeerConnectionState>("new");
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const streamViewerRef = useRef<StreamViewer | null>(null);
+  const streamVideoRef = useRef<HTMLVideoElement | null>(null);
+  /** Clients we already pulled a `notifystreaminfo` for, so we ask only once. */
+  const requestedStreamInfoRef = useRef<Set<number>>(new Set());
   /** Stable self id from the connector (`own_client_id`); nickname match is fallback only. */
   const [ownClientId, setOwnClientId] = useState<number | null>(null);
   const [serverName, setServerName] = useState("");
@@ -6228,6 +6242,26 @@ function AppInner() {
         case "talkers":
           setTalkers(new Set<number>(data.clients));
           break;
+        case "streamEvent": {
+          const streamEvent = data as StreamEvent;
+          if (streamEvent.name === "notifystreaminfo" || streamEvent.name === "notifystreamstarted") {
+            const info = parseStreamInfo(streamEvent.args);
+            if (info) setStreamInfos((prev) => ({ ...prev, [info.clientId]: info }));
+          }
+          if (streamEvent.name === "notifystreamstopped") {
+            const clid = Number(streamEvent.args.clid);
+            if (Number.isFinite(clid)) {
+              setStreamInfos((prev) => {
+                if (!(clid in prev)) return prev;
+                const next = { ...prev };
+                delete next[clid];
+                return next;
+              });
+            }
+          }
+          streamViewerRef.current?.handleEvent(streamEvent);
+          break;
+        }
         case "poke": {
           const id = ++pokeIdRef.current;
           setPokes((prev) => [...prev, { id, from: data.from, message: data.message }]);
@@ -6281,6 +6315,12 @@ function AppInner() {
           appendLog({ text: `Disconnected: ${data.reason}`, kind: "info" });
           logClient("info", "Connection", `Disconnected: ${data.reason}`);
           if (wasConnected) void playSound("disconnect");
+          streamViewerRef.current?.close();
+          streamViewerRef.current = null;
+          setWatchedStream(null);
+          setStreamMedia(null);
+          setStreamInfos({});
+          requestedStreamInfoRef.current.clear();
           removeSession(sessionId, { skipSocketClose: true });
           break;
         }
@@ -7510,6 +7550,68 @@ function AppInner() {
       setIdentities((prev) => [...prev, identity]);
     };
     reader.readAsText(file);
+  };
+
+  // --- TS6 Stream/Call -----------------------------------------------------
+  //
+  // A client that was already streaming when we joined announces nothing: TS6
+  // only sets the `client_is_streaming` property, and the stream id has to be
+  // pulled with `requeststreaminfo` (ts6-re findings 6b). So whenever a
+  // streaming client shows up in the tree, ask once.
+  useEffect(() => {
+    const streaming = new Set(clients.filter((c) => c.isStreaming).map((c) => c.id));
+    for (const id of streaming) {
+      if (requestedStreamInfoRef.current.has(id)) continue;
+      requestedStreamInfoRef.current.add(id);
+      socketRef.current?.send(JSON.stringify({ type: "requestStreamInfo", clientId: id }));
+    }
+    // Forget clients that stopped, so a later stream is looked up again.
+    for (const id of requestedStreamInfoRef.current) {
+      if (!streaming.has(id)) requestedStreamInfoRef.current.delete(id);
+    }
+    setStreamInfos((prev) => {
+      const stale = Object.keys(prev).filter((id) => !streaming.has(Number(id)));
+      if (stale.length === 0) return prev;
+      const next = { ...prev };
+      for (const id of stale) delete next[Number(id)];
+      return next;
+    });
+  }, [clients]);
+
+  useEffect(() => {
+    const video = streamVideoRef.current;
+    if (video && video.srcObject !== streamMedia) video.srcObject = streamMedia;
+  }, [streamMedia, watchedStream]);
+
+  const handleStopWatchingStream = () => {
+    // close() sends leaveStream and fires onClosed, which clears the rest.
+    streamViewerRef.current?.close();
+    streamViewerRef.current = null;
+    setWatchedStream(null);
+    setStreamMedia(null);
+    setStreamState("new");
+  };
+
+  const handleWatchStream = (clientId: number) => {
+    const info = streamInfos[clientId];
+    if (!info) return;
+    handleStopWatchingStream();
+    setStreamError(null);
+    const viewer = new StreamViewer(info.id, info.clientId, {
+      send: (message) => socketRef.current?.send(JSON.stringify(message)),
+      onTrack: setStreamMedia,
+      onStateChange: setStreamState,
+      onError: setStreamError,
+      onClosed: () => {
+        // Also reached when the publisher stops, not just via the close button.
+        streamViewerRef.current = null;
+        setWatchedStream(null);
+        setStreamMedia(null);
+      },
+    });
+    streamViewerRef.current = viewer;
+    setWatchedStream(info);
+    viewer.join();
   };
 
   const handleShowClientConnectionInfo = (clientId: number, clientName: string) => {
@@ -9148,6 +9250,28 @@ function AppInner() {
         </div>
       ))}
 
+      {watchedStream && (
+        <div className="ts-stream-panel">
+          <div className="ts-stream-panel-header">
+            <span className="ts-stream-panel-title">
+              📺 {watchedStream.name || t("stream.untitled")}
+            </span>
+            <span className="ts-stream-panel-state">
+              {streamState === "connected" ? t("stream.live") : t(`stream.state.${streamState}`)}
+            </span>
+            <button
+              className="ts-stream-panel-close"
+              onClick={handleStopWatchingStream}
+              title={t("stream.stop")}
+            >
+              ✕
+            </button>
+          </div>
+          {/* muted so autoplay is never blocked; the user unmutes via the controls */}
+          <video ref={streamVideoRef} autoPlay playsInline muted controls />
+          {streamError && <div className="ts-stream-panel-error">{streamError}</div>}
+        </div>
+      )}
       {clientContextMenu && (
         <div
           ref={clientContextMenuRef}
@@ -9177,6 +9301,18 @@ function AppInner() {
             <span className="ts-menu-item-icon">👉</span>
             <span className="ts-menu-item-label">{t("clientContext.poke")}</span>
           </button>
+          {!clientContextMenu.isSelf && streamInfos[clientContextMenu.clientId] && (
+            <button
+              className="ts-menu-item"
+              onClick={() => {
+                handleWatchStream(clientContextMenu.clientId);
+                setClientContextMenu(null);
+              }}
+            >
+              <span className="ts-menu-item-icon">📺</span>
+              <span className="ts-menu-item-label">{t("clientContext.watchStream")}</span>
+            </button>
+          )}
           {!clientContextMenu.isSelf && (
             <button
               className="ts-menu-item"

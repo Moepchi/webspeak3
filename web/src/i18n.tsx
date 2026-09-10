@@ -375,6 +375,17 @@ const translations: Record<Lang, Record<string, string>> = {
     "tree.talking": "Spricht",
     "tree.noTalkPower": "Keine Redeerlaubnis in diesem Channel",
     "tree.soundMuted": "Ton stummgeschaltet (deafened)",
+    "tree.streaming": "Überträgt einen Stream",
+
+    "stream.untitled": "Stream",
+    "stream.stop": "Stream schließen",
+    "stream.live": "Live",
+    "stream.state.new": "Warte auf Angebot…",
+    "stream.state.connecting": "Verbinde…",
+    "stream.state.connected": "Live",
+    "stream.state.disconnected": "Verbindung unterbrochen",
+    "stream.state.failed": "Verbindung fehlgeschlagen",
+    "stream.state.closed": "Beendet",
 
     "chat.server": "Server",
     "chat.channel": "Channel",
@@ -544,6 +555,7 @@ const translations: Record<Lang, Record<string, string>> = {
 
     "clientContext.privateChat": "Privater Chat",
     "clientContext.poke": "Anstupsen",
+    "clientContext.watchStream": "Stream ansehen",
     "clientContext.moveTo": "Verschieben in…",
     "clientContext.copyName": "Namen kopieren",
     "clientContext.connectionInfo": "Verbindungsinformationen anzeigen",
@@ -964,6 +976,17 @@ const translations: Record<Lang, Record<string, string>> = {
     "tree.talking": "Talking",
     "tree.noTalkPower": "No talk power in this channel",
     "tree.soundMuted": "Sound muted (deafened)",
+    "tree.streaming": "Broadcasting a stream",
+
+    "stream.untitled": "Stream",
+    "stream.stop": "Close stream",
+    "stream.live": "Live",
+    "stream.state.new": "Waiting for offer…",
+    "stream.state.connecting": "Connecting…",
+    "stream.state.connected": "Live",
+    "stream.state.disconnected": "Connection interrupted",
+    "stream.state.failed": "Connection failed",
+    "stream.state.closed": "Ended",
 
     "chat.server": "Server",
     "chat.channel": "Channel",
@@ -1133,6 +1156,7 @@ const translations: Record<Lang, Record<string, string>> = {
 
     "clientContext.privateChat": "Private chat",
     "clientContext.poke": "Poke",
+    "clientContext.watchStream": "Watch stream",
     "clientContext.moveTo": "Move to…",
     "clientContext.copyName": "Copy name",
     "clientContext.connectionInfo": "Show connection info",
