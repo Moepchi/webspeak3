@@ -219,8 +219,6 @@ export class StreamPublisher {
     // is_remove=1 is how TS6 says "stop watching"; the same notify carries it.
     if (args.is_remove === "1") {
       this.dropViewer(clid);
-      this.pending.delete(clid);
-      this.notifyPending();
       return;
     }
     if (this.viewers.has(clid) || this.pending.has(clid)) return;
@@ -421,6 +419,11 @@ export class StreamPublisher {
   }
 
   private dropViewer(clid: number): void {
+    // Someone can also leave while their request is still queued - by closing
+    // TS6, or by giving up on "waiting for access". The row has to go with
+    // them, or the user is left approving a viewer who is no longer there.
+    if (this.pending.delete(clid)) this.notifyPending();
+
     const viewer = this.viewers.get(clid);
     if (!viewer) return;
     this.viewers.delete(clid);
