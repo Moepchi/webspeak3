@@ -24,10 +24,11 @@ export interface StreamEvent {
 /**
  * The payload shape inside `notifystreamsignaling`'s `json` argument.
  *
- * `args` is not always an object: TS6's dispatcher reads it as a bare string
- * for `offer`/`reconnectOffer`/`answer` and as an object only for
- * `iceCandidate` (`sdp`/`mid`/`mLine`) and `joinResponse`
- * (`decision`/`offer`) - see the note on ANSWER_ARGS_ARE_A_BARE_STRING.
+ * Each `cmd` names its own key inside `args`, and the key is *not* `sdp`
+ * except for `iceCandidate`: an answer is `{answer: "<sdp>"}`, an offer
+ * `{offer: "<sdp>"}`, a candidate `{sdp, mid, mLine}`. Live-verified against
+ * TS6 6.0.0-beta12.1 - `{sdp: "<sdp>"}` and a bare string are both accepted
+ * by the server and then silently dropped by the client.
  */
 interface SignalingMessage {
   cmd: string;
@@ -60,23 +61,6 @@ export interface StreamViewerOptions {
    */
   iceServers?: RTCIceServer[];
 }
-
-/**
- * Whether `{cmd:"answer"}` carries the SDP as `args` itself rather than as
- * `args.sdp`.
- *
- * Derived from TeamSpeak.dll: the inbound dispatcher LEAs a key literal in
- * every branch that reads an object (`decision`/`offer` for joinResponse,
- * `sdp`/`mid`/`mLine` for iceCandidate) and none at all in the `answer` and
- * `offer` branches, whose handler ends in `StreamP2P::SetAnswerString(const
- * std::string&)`. That is static evidence, not a capture - TS6 has never had
- * an answer from us to react to - so the viewer falls back to the object form
- * if the connection has not come up in time (see ANSWER_FALLBACK_MS).
- */
-const ANSWER_ARGS_ARE_A_BARE_STRING = true;
-
-/** How long to wait before retrying the answer in the other shape. */
-const ANSWER_FALLBACK_MS = 5000;
 
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:turn.teamspeak.com:3478" },
@@ -114,7 +98,6 @@ export class StreamViewer {
   private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
   private remoteDescriptionSet = false;
   private closed = false;
-  private answerFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly streamId: string;
   readonly peerClientId: number;
@@ -178,33 +161,10 @@ export class StreamViewer {
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      this.sendAnswer(answer.sdp ?? "");
+      this.signal("answer", { answer: answer.sdp ?? "" });
     } catch (err) {
       this.fail(`Could not answer the stream offer: ${describe(err)}`);
     }
-  }
-
-  /**
-   * Sends the answer in the shape the DLL suggests, and re-sends it in the
-   * other one if that produced no connection. TS6 drops a payload it cannot
-   * read without complaining, so a silent stall is the only symptom of
-   * guessing wrong here.
-   */
-  private sendAnswer(sdp: string): void {
-    this.clearAnswerFallback();
-    this.signal("answer", ANSWER_ARGS_ARE_A_BARE_STRING ? sdp : { sdp });
-    this.answerFallbackTimer = setTimeout(() => {
-      this.answerFallbackTimer = null;
-      if (this.closed || this.pc?.connectionState === "connected") return;
-      console.warn("[stream] no connection after the answer; retrying in the other args shape");
-      this.signal("answer", ANSWER_ARGS_ARE_A_BARE_STRING ? { sdp } : sdp);
-    }, ANSWER_FALLBACK_MS);
-  }
-
-  private clearAnswerFallback(): void {
-    if (this.answerFallbackTimer === null) return;
-    clearTimeout(this.answerFallbackTimer);
-    this.answerFallbackTimer = null;
   }
 
   private async handleSignaling(args: Record<string, string>): Promise<void> {
@@ -241,14 +201,17 @@ export class StreamViewer {
       case "offer":
       case "reconnectOffer": {
         // Renegotiation from the publisher, e.g. after it switches source.
-        // Accept both shapes: the bare string is what the DLL reads, the
-        // object is cheap to tolerate and costs nothing if it never arrives.
+        // `offer` mirrors the `answer` key we send; the other two are cheap
+        // to tolerate and cost nothing if they never arrive.
+        const a = msg.args as Record<string, unknown> | string | null;
         const sdp =
-          typeof msg.args === "string"
-            ? msg.args
-            : typeof (msg.args as { sdp?: unknown } | null)?.sdp === "string"
-              ? (msg.args as { sdp: string }).sdp
-              : null;
+          typeof a === "string"
+            ? a
+            : typeof a?.offer === "string"
+              ? a.offer
+              : typeof a?.sdp === "string"
+                ? a.sdp
+                : null;
         if (sdp) await this.acceptOffer(sdp);
         break;
       }
@@ -292,7 +255,6 @@ export class StreamViewer {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "connected") this.clearAnswerFallback();
       this.opts.onStateChange?.(pc.connectionState);
       if (pc.connectionState === "failed") this.fail("The stream connection failed");
     };
@@ -318,7 +280,6 @@ export class StreamViewer {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    this.clearAnswerFallback();
 
     this.opts.send({
       type: "leaveStream",

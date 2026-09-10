@@ -1516,11 +1516,17 @@ async fn run(args: Args) -> Result<()> {
 								packet.write_arg("id", &id);
 								packet.write_arg("clid", &clid);
 								packet.write_arg("json", &json);
-								// Fire and forget: ICE candidates arrive in bursts
-								// and a return_code round trip per candidate would
-								// only add latency to the handshake.
-								if let Err(e) = packet.send(&mut con) {
-									emit(&Event::Error { message: format!("streamsignaling failed: {e}") });
+								// Not fire-and-forget: a signaling command the server refuses
+								// (a stale clid, say) is otherwise indistinguishable from a peer
+								// that simply ignored the payload, and the whole handshake then
+								// stalls with nothing to look at.
+								match packet.send_with_result(&mut con) {
+									Ok(handle) => {
+										pending_messages.insert(handle, "Stream signaling".into());
+									}
+									Err(e) => emit(&Event::Error {
+										message: format!("streamsignaling failed: {e}"),
+									}),
 								}
 							}
 							_ => emit(&Event::Error {
