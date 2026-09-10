@@ -3457,6 +3457,42 @@
   max-width: 90vw;
 }
 
+.ts-update-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--panel-bg, #23262e);
+  color: var(--text, #eee);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.7rem 0.6rem 0.9rem;
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.ts-update-toast button {
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--accent, #4a7dfc);
+  color: #fff;
+  font-size: 12px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.ts-update-toast-dismiss {
+  background: transparent !important;
+  color: var(--text-muted, #999) !important;
+  border: none !important;
+  padding: 0 0.2rem !important;
+  font-size: 12px;
+}
+
 .ts-feedback-fab-wrap {
   position: fixed;
   right: 1.25rem;

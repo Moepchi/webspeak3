@@ -7,7 +7,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
+      // We register the service worker ourselves (see useSwUpdatePrompt in
+      // App.tsx) via the virtual:pwa-register/react module so we can show a
+      // "new version available" toast instead of updating silently — a
+      // stale-cache tab would otherwise keep running old JS/CSS until the
+      // user manually reloads (or worse, clears storage), which bit us
+      // repeatedly while verifying deploys.
+      injectRegister: false,
       // Dev-time Workbox would sit in front of Vite's own HMR/WS traffic and
       // stale-cache the app shell while iterating — only ever ship the SW in
       // production builds.

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRegisterSW } from "virtual:pwa-register/react";
 import "./App.css";
 
 /** Only dismiss on a genuine backdrop click, not a text-selection drag that
@@ -1562,6 +1563,38 @@ function ChannelPasswordDialog({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function UpdatePrompt() {
+  const t = useT();
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      // Poll for a new service worker in the background — otherwise an app
+      // left open for hours/days only checks for updates on next full load.
+      if (!registration) return;
+      const CHECK_INTERVAL_MS = 60 * 60 * 1000;
+      window.setInterval(() => {
+        registration.update().catch(() => {});
+      }, CHECK_INTERVAL_MS);
+    },
+  });
+
+  if (!needRefresh) return null;
+
+  return (
+    <div className="ts-update-toast">
+      <span>{t("pwa.updateAvailable")}</span>
+      <button type="button" onClick={() => updateServiceWorker(true)}>
+        {t("pwa.reload")}
+      </button>
+      <button type="button" className="ts-update-toast-dismiss" onClick={() => setNeedRefresh(false)}>
+        ✕
+      </button>
     </div>
   );
 }
@@ -8641,6 +8674,8 @@ function AppInner() {
           onOpenOptions={() => setOptionsDialogOpen(true)}
         />
       )}
+
+      <UpdatePrompt />
 
       {IS_OWN_HOSTED_INSTANCE && !feedbackOpen && (
         <FeedbackFab onOpen={() => setFeedbackOpen(true)} />
