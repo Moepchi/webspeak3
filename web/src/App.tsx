@@ -155,6 +155,20 @@ interface Identity {
   blob: string | null;
 }
 
+// randomId() only exists in a secure context, so it is missing on a
+// plain-http origin - which is exactly how a self-hosted instance is reached
+// on a LAN before TLS is set up. It used to throw at module load and leave a
+// blank page; these ids are local identifiers, not secrets, so fall back.
+function randomId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 // One-time migration from the old single flat identity key to a list of named
 // identities (so users can maintain more than one persona), and to seed a
 // default entry for users who never had one either. Runs once at module load.
@@ -162,7 +176,7 @@ interface Identity {
   if (localStorage.getItem(IDENTITIES_KEY) !== null) return;
   const legacyBlob = localStorage.getItem(IDENTITY_KEY);
   const legacyNickname = localStorage.getItem(LAST_NICKNAME_KEY) ?? "";
-  const id = crypto.randomUUID();
+  const id = randomId();
   const identities: Identity[] = [
     { id, name: "Standard", nickname: legacyNickname, phoneticName: "", blob: legacyBlob },
   ];
@@ -179,7 +193,7 @@ function loadIdentities(): Identity[] {
       // Backfill fields older saves (before per-identity nickname/phonetic
       // name existed) don't have.
       return parsed.map((i) => ({
-        id: i.id ?? crypto.randomUUID(),
+        id: i.id ?? randomId(),
         name: i.name ?? "Standard",
         nickname: i.nickname ?? "",
         phoneticName: i.phoneticName ?? "",
@@ -189,7 +203,7 @@ function loadIdentities(): Identity[] {
   } catch {
     // fall through
   }
-  return [{ id: crypto.randomUUID(), name: "Standard", nickname: "", phoneticName: "", blob: null }];
+  return [{ id: randomId(), name: "Standard", nickname: "", phoneticName: "", blob: null }];
 }
 
 const FAVORITES_KEY = "webspeak3:favorites";
@@ -1824,7 +1838,7 @@ function FavoritesDialog({
   const pendingNewRef = useRef<Favorite | null>(
     prefillNew
       ? {
-          id: crypto.randomUUID(),
+          id: randomId(),
           bookmarkName: prefillNew.host || t("favorites.newFavoriteName"),
           ...prefillNew,
           showServerQueryClients: prefillNew.showServerQueryClients === true,
@@ -1847,7 +1861,7 @@ function FavoritesDialog({
 
   const handleNewFavorite = () => {
     const nf: Favorite = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       bookmarkName: t("favorites.newFavoriteName"),
       nickname: "",
       host: "",
@@ -6557,7 +6571,7 @@ function AppInner() {
 
     ensureAudioContext();
 
-    const sessionId = crypto.randomUUID();
+    const sessionId = randomId();
     sessionParamsRef.current.set(sessionId, params);
 
     const socket = DEMO_MODE ? new DemoSocket() : new WebSocket(GATEWAY_URL);
@@ -7379,7 +7393,7 @@ function AppInner() {
     const channelNames = channels.filter((c) => whisperChannelIds.has(c.id)).map((c) => c.name);
     const clientNames = clients.filter((c) => whisperClientIds.has(c.id)).map((c) => c.name);
     if (channelNames.length === 0 && clientNames.length === 0) return;
-    setWhisperLists((prev) => [...prev, { id: crypto.randomUUID(), name, channelNames, clientNames }]);
+    setWhisperLists((prev) => [...prev, { id: randomId(), name, channelNames, clientNames }]);
   };
 
   const handleActivateWhisperList = (list: WhisperList) => {
@@ -7407,7 +7421,7 @@ function AppInner() {
 
   const handleAddIdentity = () => {
     const identity: Identity = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       name: t("identities.newName"),
       nickname: "",
       phoneticName: "",
@@ -7530,7 +7544,7 @@ function AppInner() {
       const ini = parseIniIdentity(text);
       if (ini) {
         const identity: Identity = {
-          id: crypto.randomUUID(),
+          id: randomId(),
           name: ini.name || file.name.replace(/\.ini$/i, "") || t("identities.newName"),
           nickname: ini.nickname,
           phoneticName: ini.phonetic,
@@ -7546,7 +7560,7 @@ function AppInner() {
         return;
       }
       const name = file.name.replace(/\.(ts3identity\.)?json$/i, "") || t("identities.newName");
-      const identity: Identity = { id: crypto.randomUUID(), name, nickname: "", phoneticName: "", blob: text };
+      const identity: Identity = { id: randomId(), name, nickname: "", phoneticName: "", blob: text };
       setIdentities((prev) => [...prev, identity]);
     };
     reader.readAsText(file);
