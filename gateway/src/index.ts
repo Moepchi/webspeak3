@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer as createSecureServer } from "node:https";
+import { readFileSync } from "node:fs";
 import { readFile, appendFile, rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -249,7 +251,26 @@ const DEV_HINT = `<!doctype html><html><body style="font:14px system-ui;padding:
 to serve the UI from this port again.</p>
 </body></html>`;
 
-const server = createServer((req, res) => {
+/**
+ * TLS material, when configured.
+ *
+ * Not a nicety: `getDisplayMedia`, `getUserMedia` and `crypto.randomUUID` are
+ * secure-context-only, so a LAN instance reached over plain http can neither
+ * share a screen nor use the microphone. Chrome also hides host ICE candidates
+ * behind mDNS names until a media permission is granted, which keeps a
+ * peer-to-peer stream from connecting at all.
+ *
+ * Set TLS_CERT and TLS_KEY to enable; a self-signed pair is enough, the
+ * browser only has to be told once to trust it.
+ */
+const TLS_CERT = process.env.TLS_CERT;
+const TLS_KEY = process.env.TLS_KEY;
+const tlsOptions =
+  TLS_CERT && TLS_KEY
+    ? { cert: readFileSync(TLS_CERT), key: readFileSync(TLS_KEY) }
+    : null;
+
+const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
   void (async () => {
     try {
       const requestUrl = new URL(req.url ?? "/", "http://localhost");
@@ -284,7 +305,13 @@ const server = createServer((req, res) => {
       res.end(DEV_HINT);
     }
   })();
-});
+};
+
+// The frontend derives ws:// or wss:// from the page's own scheme, so the
+// WebSocket follows this choice without any further configuration.
+const server = tlsOptions
+  ? createSecureServer(tlsOptions, requestHandler)
+  : createServer(requestHandler);
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
@@ -319,7 +346,10 @@ const heartbeatTimer = setInterval(() => {
 wss.on("close", () => clearInterval(heartbeatTimer));
 
 server.listen(PORT, () => {
-  console.log(`WebSpeak3 gateway listening on http://localhost:${PORT} (WebSocket at /ws)`);
+  const scheme = tlsOptions ? "https" : "http";
+  console.log(
+    `WebSpeak3 gateway listening on ${scheme}://localhost:${PORT} (WebSocket at /ws)`
+  );
   if (SERVE_STATIC) {
     console.log(`Serving static UI from ${WEB_DIST}`);
     console.log(`Dev tip: use http://localhost:5173/ for live UI; rebuild web/dist after UI changes if you open :${PORT}`);
