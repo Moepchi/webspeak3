@@ -203,6 +203,22 @@ export class StreamPublisher {
     }
     if (this.viewers.has(clid)) return;
 
+    // `viewer_limit` goes out with setupstream, but nothing guarantees the
+    // server turns anyone away - so the publisher enforces its own limit. This
+    // is the only place that can: we are the one handing out peer connections,
+    // and in P2P mode each one costs another encode.
+    const limit = this.options?.viewerLimit ?? 0;
+    if (limit > 0 && this.viewers.size >= limit) {
+      this.opts.send({
+        type: "respondJoinStream",
+        streamId: this.streamId,
+        clientId: clid,
+        accept: false,
+        message: "Stream is full",
+      });
+      return;
+    }
+
     const pc = new RTCPeerConnection({ iceServers: this.opts.iceServers ?? DEFAULT_ICE_SERVERS });
     const viewer: Viewer = { pc, pending: [], answered: false };
     this.viewers.set(clid, viewer);
