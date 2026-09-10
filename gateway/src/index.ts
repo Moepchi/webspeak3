@@ -1,5 +1,5 @@
-import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { readFile, appendFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -50,6 +50,165 @@ const MIME_TYPES: Record<string, string> = {
   ".webmanifest": "application/manifest+json",
 };
 
+// --- Feedback endpoint ---------------------------------------------------
+//
+// Opt-in only, same convention as LOG_CONNECTIONS above: this is an open-
+// source, self-hostable image, so other instances don't get a public
+// feedback inbox (and potential GitHub-issue creator) just because it's in
+// the codebase. Set FEEDBACK_ENABLED=1 on the instance you want it on. The
+// web client only shows the "Feedback" menu entry on specific hostnames
+// (see IS_OWN_HOSTED_INSTANCE in web/src/App.tsx), but this endpoint
+// enforces its own opt-in independently since it's reachable directly over
+// HTTP by anyone who finds the gateway's address, not just from that UI.
+const FEEDBACK_ENABLED = process.env.FEEDBACK_ENABLED === "1";
+// The web app is commonly hosted on a different origin than the gateway
+// (see mem:deployment / GATEWAY_URL in web/), so this needs its own CORS
+// allowance; default "*" since the endpoint is opt-in, rate-limited, and
+// only ever accepts a feedback submission, nothing that reads data back.
+const FEEDBACK_ALLOWED_ORIGIN = process.env.FEEDBACK_ALLOWED_ORIGIN ?? "*";
+// A token with "Issues: write" access on the target repo. Without it,
+// feedback is still accepted and logged, just never turned into an issue.
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_REPO = process.env.GITHUB_REPO ?? "Moepchi/webspeak3";
+// Plain JSON-lines file, not a database - this is a low-volume inbox, not
+// analytics. Defaults under the container's WORKDIR (/app in the Docker
+// image); mount a volume over it if you want submissions to survive a
+// container recreate.
+const FEEDBACK_LOG_FILE = process.env.FEEDBACK_LOG_FILE ?? path.resolve(process.cwd(), "feedback.log");
+const FEEDBACK_CATEGORIES = new Set(["bug", "idea", "other"]);
+const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
+
+// Small in-memory rate limit: a handful of submissions per IP per hour is
+// far more than any real user needs, and keeps one abusive client from
+// spamming the log file or (worse) the GitHub issue tracker. In-memory is
+// fine here - it only needs to survive as long as the process does.
+const FEEDBACK_RATE_LIMIT = 5;
+const FEEDBACK_RATE_WINDOW_MS = 60 * 60 * 1000;
+const feedbackSubmissionTimes = new Map<string, number[]>();
+
+function isFeedbackRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const recent = (feedbackSubmissionTimes.get(ip) ?? []).filter((t) => now - t < FEEDBACK_RATE_WINDOW_MS);
+  recent.push(now);
+  feedbackSubmissionTimes.set(ip, recent);
+  return recent.length > FEEDBACK_RATE_LIMIT;
+}
+
+async function createGithubIssue(payload: {
+  category: string;
+  message: string;
+  email?: string;
+}): Promise<string | undefined> {
+  if (!GITHUB_TOKEN) return undefined;
+  const title = `[Feedback/${payload.category}] ${payload.message.replace(/\s+/g, " ").trim().slice(0, 72)}`;
+  const body = [
+    payload.message,
+    "",
+    "---",
+    `Category: ${payload.category}`,
+    payload.email ? `Contact: ${payload.email}` : undefined,
+    "_Submitted via the in-client feedback form._",
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/issues`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "webspeak3-gateway",
+    },
+    body: JSON.stringify({ title, body, labels: ["feedback"] }),
+  });
+  if (!res.ok) {
+    console.error(`[feedback] GitHub issue creation failed (${res.status}): ${await res.text().catch(() => "")}`);
+    return undefined;
+  }
+  const json = (await res.json()) as { html_url?: string };
+  return json.html_url;
+}
+
+async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
+  res.setHeader("Access-Control-Allow-Origin", FEEDBACK_ALLOWED_ORIGIN);
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  if (!FEEDBACK_ENABLED) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found" }));
+    return;
+  }
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "method_not_allowed" }));
+    return;
+  }
+
+  const ip = (req.socket.remoteAddress ?? "unknown").replace(/^::ffff:/, "");
+  if (isFeedbackRateLimited(ip)) {
+    res.writeHead(429, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "rate_limited" }));
+    return;
+  }
+
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 20_000) {
+      res.writeHead(413, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "payload_too_large" }));
+      return;
+    }
+  }
+
+  let body: { category?: unknown; message?: unknown; email?: unknown; publishAsIssue?: unknown };
+  try {
+    body = JSON.parse(raw || "{}");
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid_json" }));
+    return;
+  }
+
+  const category = typeof body.category === "string" && FEEDBACK_CATEGORIES.has(body.category) ? body.category : "other";
+  const message =
+    typeof body.message === "string" ? body.message.trim().slice(0, FEEDBACK_MESSAGE_MAX_LENGTH) : "";
+  const email = typeof body.email === "string" ? body.email.trim().slice(0, 200) || undefined : undefined;
+  const publishAsIssue = body.publishAsIssue === true;
+
+  if (!message) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "message_required" }));
+    return;
+  }
+
+  try {
+    const entry = { at: new Date().toISOString(), category, message, email };
+    await appendFile(FEEDBACK_LOG_FILE, JSON.stringify(entry) + "\n", "utf-8");
+  } catch (err) {
+    console.error("[feedback] Failed to write feedback log:", err);
+  }
+
+  let githubIssueUrl: string | undefined;
+  if (publishAsIssue) {
+    try {
+      githubIssueUrl = await createGithubIssue({ category, message, email });
+    } catch (err) {
+      console.error("[feedback] Failed to create GitHub issue:", err);
+    }
+  }
+
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, githubIssueUrl }));
+}
+
 const DEV_HINT = `<!doctype html><html><body style="font:14px system-ui;padding:2rem;max-width:40rem">
 <h1>WebSpeak3 gateway</h1>
 <p>WebSocket: <code>/ws</code></p>
@@ -62,13 +221,18 @@ to serve the UI from this port again.</p>
 const server = createServer((req, res) => {
   void (async () => {
     try {
+      const requestUrl = new URL(req.url ?? "/", "http://localhost");
+      if (requestUrl.pathname === "/api/feedback") {
+        await handleFeedback(req, res);
+        return;
+      }
+
       if (!SERVE_STATIC) {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(DEV_HINT);
         return;
       }
-      const url = new URL(req.url ?? "/", "http://localhost");
-      let filePath = path.join(WEB_DIST, decodeURIComponent(url.pathname));
+      let filePath = path.join(WEB_DIST, decodeURIComponent(requestUrl.pathname));
       if (!filePath.startsWith(WEB_DIST)) {
         res.writeHead(403);
         res.end();

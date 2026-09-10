@@ -75,6 +75,27 @@ const GATEWAY_URL = import.meta.env.DEV
     ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "")}/ws`
     : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
 
+// Same derivation as GATEWAY_URL above, but for a plain HTTP POST (the
+// feedback form) instead of the WebSocket - see gateway/src/index.ts's
+// /api/feedback handler.
+const FEEDBACK_URL = import.meta.env.DEV
+  ? "http://localhost:8080/api/feedback"
+  : import.meta.env.VITE_GATEWAY_URL
+    ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "")}/api/feedback`
+    : `${window.location.protocol}//${window.location.host}/api/feedback`;
+
+// This file's frontend is deployed as multiple Cloudflare Pages projects
+// from the same repo/build (see mem:deployment) - only the maintainer's own
+// production instance talks to a gateway they actually operate and read
+// feedback from, so the "Feedback" menu entry only appears there. Every
+// other deployment (self-hosted forks, and the public demo - which has no
+// real gateway at all, see DEMO_MODE) simply never shows it. This is a UI
+// nicety, not a security boundary: the gateway's own FEEDBACK_ENABLED
+// opt-in (see gateway/src/index.ts) is what actually decides whether
+// submissions are accepted at all.
+const OWN_HOSTED_HOSTNAMES = new Set(["client.webspeak3.de"]);
+const IS_OWN_HOSTED_INSTANCE = !DEMO_MODE && OWN_HOSTED_HOSTNAMES.has(window.location.hostname);
+
 // One-time migration from the pre-rename "ts-web-client:*" localStorage
 // namespace so existing users don't lose their favorites/preferences.
 (function migrateLegacyStorageKeys() {
@@ -1538,6 +1559,118 @@ function ChannelPasswordDialog({
             <button type="button" onClick={() => onSubmit(password)}>
               {t("channelPasswordDialog.submit")}
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type FeedbackCategory = "bug" | "idea" | "other";
+
+function FeedbackDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const backdrop = useBackdropDismiss(onClose);
+  const [category, setCategory] = useState<FeedbackCategory>("bug");
+  const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
+  const [publishAsIssue, setPublishAsIssue] = useState(false);
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [issueUrl, setIssueUrl] = useState<string | undefined>(undefined);
+
+  const handleSend = async () => {
+    const trimmed = message.trim();
+    if (!trimmed || status === "sending") return;
+    setStatus("sending");
+    try {
+      const res = await fetch(FEEDBACK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          message: trimmed,
+          email: email.trim() || undefined,
+          publishAsIssue,
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const json = (await res.json()) as { ok?: boolean; githubIssueUrl?: string };
+      setIssueUrl(json.githubIssueUrl);
+      setStatus("sent");
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  return (
+    <div className="ts-dialog-backdrop" {...backdrop}>
+      <div className="ts-dialog ts-feedback-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="ts-dialog-titlebar">
+          <span>{t("feedback.dialog.title")}</span>
+          <button onClick={onClose} title={t("dialog.close")}>
+            ✕
+          </button>
+        </div>
+        <div className="ts-dialog-body">
+          {status === "sent" ? (
+            <p className="ts-feedback-success">
+              {issueUrl ? (
+                <>
+                  {t("feedback.dialog.successWithIssue")}{" "}
+                  <a href={issueUrl} target="_blank" rel="noreferrer">
+                    {issueUrl}
+                  </a>
+                </>
+              ) : (
+                t("feedback.dialog.success")
+              )}
+            </p>
+          ) : (
+            <>
+              <p className="ts-feedback-intro">{t("feedback.dialog.intro")}</p>
+              <label className="ts-dialog-field">
+                {t("feedback.dialog.category")}
+                <select value={category} onChange={(e) => setCategory(e.target.value as FeedbackCategory)}>
+                  <option value="bug">{t("feedback.dialog.category.bug")}</option>
+                  <option value="idea">{t("feedback.dialog.category.idea")}</option>
+                  <option value="other">{t("feedback.dialog.category.other")}</option>
+                </select>
+              </label>
+              <label className="ts-dialog-field">
+                {t("feedback.dialog.message")}
+                <textarea
+                  autoFocus
+                  rows={5}
+                  value={message}
+                  placeholder={t("feedback.dialog.messagePlaceholder")}
+                  onChange={(e) => setMessage(e.target.value)}
+                />
+              </label>
+              <label className="ts-dialog-field">
+                {t("feedback.dialog.email")}
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </label>
+              <label className="ts-feedback-checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={publishAsIssue}
+                  onChange={(e) => setPublishAsIssue(e.target.checked)}
+                />
+                {t("feedback.dialog.publishAsIssue")}
+              </label>
+              <p className="ts-feedback-hint">{t("feedback.dialog.publishAsIssueHint")}</p>
+              {status === "error" && <p className="ts-feedback-error">{t("feedback.dialog.error")}</p>}
+            </>
+          )}
+        </div>
+        <div className="ts-dialog-buttons">
+          <div className="ts-dialog-buttons-right">
+            {status !== "sent" && (
+              <button onClick={() => void handleSend()} disabled={!message.trim() || status === "sending"}>
+                {status === "sending" ? t("feedback.dialog.sending") : t("feedback.dialog.send")}
+              </button>
+            )}
+            <button onClick={onClose}>{status === "sent" ? t("dialog.close") : t("feedback.dialog.cancel")}</button>
           </div>
         </div>
       </div>
@@ -5087,6 +5220,7 @@ function AppInner() {
     wrongPassword: boolean;
   } | null>(null);
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [connectDialogExpanded, setConnectDialogExpanded] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
@@ -8168,6 +8302,18 @@ function AppInner() {
                 <span className="ts-menu-item-label">{t("menu.extras.options")}</span>
                 <span className="ts-menu-item-shortcut">Alt+P</span>
               </button>
+              {IS_OWN_HOSTED_INSTANCE && (
+                <button
+                  className="ts-menu-item"
+                  onClick={() => {
+                    setFeedbackOpen(true);
+                    setExtrasMenuOpen(false);
+                  }}
+                >
+                  <span className="ts-menu-item-icon">💬</span>
+                  <span className="ts-menu-item-label">{t("menu.extras.feedback")}</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -8429,6 +8575,8 @@ function AppInner() {
           onOpenOptions={() => setOptionsDialogOpen(true)}
         />
       )}
+
+      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
 
       {favoritesDialogMode && (
         <FavoritesDialog

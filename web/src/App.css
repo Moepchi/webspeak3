@@ -3441,6 +3441,48 @@
   opacity: 0.5;
 }
 
+.ts-dialog-field textarea {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0.4rem;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--input-bg);
+  color: var(--input-text);
+}
+
+.ts-feedback-dialog {
+  width: 26rem;
+  max-width: 90vw;
+}
+
+.ts-feedback-intro,
+.ts-feedback-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.ts-feedback-checkbox-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 12px;
+}
+
+.ts-feedback-error {
+  font-size: 12px;
+  color: var(--danger, #e0637a);
+  margin: 0;
+}
+
+.ts-feedback-success {
+  font-size: 13px;
+  margin: 0.5rem 0;
+}
+
 .ts-dialog-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
