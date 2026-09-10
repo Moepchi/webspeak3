@@ -1464,6 +1464,27 @@ async fn run(args: Args) -> Result<()> {
 							}
 							Err(e) => emit(&Event::Error { message: e.to_string() }),
 						}
+					} else if let Some(rest) = l.strip_prefix("streaminfo ") {
+						// A late joiner only learns *that* someone streams, from
+						// the client_is_streaming property; the stream id has to
+						// be pulled per client with this.
+						match rest.trim().parse::<u16>() {
+							Ok(clid) => {
+								let mut packet = OutCommand::new(
+									Direction::C2S,
+									Flags::empty(),
+									PacketType::Command,
+									"requeststreaminfo",
+								);
+								packet.write_arg("clid", &clid);
+								if let Err(e) = packet.send(&mut con) {
+									emit(&Event::Error { message: format!("requeststreaminfo failed: {e}") });
+								}
+							}
+							Err(_) => emit(&Event::Error {
+								message: format!("Invalid client id: {rest}"),
+							}),
+						}
 					} else if let Some(rest) = l.strip_prefix("streamjoin ") {
 						// "streamjoin <stream-id> <clid> [msg]" - ask the client
 						// publishing a TS6 stream to let us in. Its reply is a
@@ -2470,6 +2491,10 @@ async fn run(args: Args) -> Result<()> {
 					}
 				}
 				Some(Ok(StreamItem::UnknownCommand { name, content })) => {
+					// Undeclared commands are invisible everywhere else, so name
+					// them on stderr - that is the only way to tell "the server
+					// sent nothing" apart from "we filtered it out".
+					eprintln!("[unknown-command] {name}");
 					// TS6 Stream/Call signaling. Everything else undeclared is
 					// dropped on purpose - forwarding every unknown command
 					// would turn this into a firehose, and nothing downstream
