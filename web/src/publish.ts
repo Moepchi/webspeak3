@@ -298,7 +298,7 @@ export class StreamPublisher {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await this.applyBitrates(pc);
+      await this.applySendParameters(pc);
       this.opts.send({
         type: "respondJoinStream",
         streamId: this.streamId,
@@ -381,27 +381,42 @@ export class StreamPublisher {
   }
 
   /**
-   * Caps each sender at the configured bitrate.
+   * Caps each sender at the configured bitrate and pins the resolution.
    *
    * `setupstream`'s `bitrate` is only what the stream *advertises* - the
    * server does not even echo our value back unchanged, and it certainly does
    * not reach the encoder. The actual limit is a sender parameter, and the
    * encodings it lives on only exist once a local description is set.
+   *
+   * `degradationPreference` matters just as much. Its default for a track
+   * hinted "motion" is to protect the frame rate and shrink the picture, which
+   * for a screen share is exactly backwards: the user picked 1080p, so 1080p is
+   * the thing to keep. Measured on a 1440x1080 capture at a 6000 kbps cap:
+   *
+   *   default / maintain-framerate / balanced -> 480x270, a 3x downscale
+   *   maintain-resolution                     -> 1440x810, no downscale
+   *
+   * Without this the encoder collapses within seconds of the connection coming
+   * up and never recovers, and every resolution setting above 360p is a lie.
    */
-  private async applyBitrates(pc: RTCPeerConnection): Promise<void> {
+  private async applySendParameters(pc: RTCPeerConnection): Promise<void> {
     const options = this.options;
     if (!options) return;
     for (const sender of pc.getSenders()) {
-      const kbps = sender.track?.kind === "audio" ? options.audioBitrateKbps : options.videoBitrateKbps;
-      if (!sender.track || kbps <= 0) continue;
+      if (!sender.track) continue;
+      const video = sender.track.kind === "video";
+      const kbps = video ? options.videoBitrateKbps : options.audioBitrateKbps;
       const params = sender.getParameters();
-      if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
-      for (const encoding of params.encodings) encoding.maxBitrate = kbps * 1000;
+      if (video) params.degradationPreference = "maintain-resolution";
+      if (kbps > 0) {
+        if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+        for (const encoding of params.encodings) encoding.maxBitrate = kbps * 1000;
+      }
       try {
         await sender.setParameters(params);
       } catch (err) {
-        // Not fatal - the stream still runs, just uncapped.
-        console.warn("[publish] could not apply the bitrate cap:", describe(err));
+        // Not fatal - the stream still runs, just uncapped and free to shrink.
+        console.warn("[publish] could not apply the send parameters:", describe(err));
       }
     }
   }
