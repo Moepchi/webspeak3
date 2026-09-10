@@ -3457,6 +3457,15 @@
   max-width: 90vw;
 }
 
+.ts-feedback-honeypot {
+  position: absolute;
+  left: -5000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .ts-update-toast {
   position: fixed;
   left: 50%;

@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFile, appendFile } from "node:fs/promises";
+import { readFile, appendFile, rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -75,8 +75,26 @@ const GITHUB_REPO = process.env.GITHUB_REPO ?? "Moepchi/webspeak3";
 // image); mount a volume over it if you want submissions to survive a
 // container recreate.
 const FEEDBACK_LOG_FILE = process.env.FEEDBACK_LOG_FILE ?? path.resolve(process.cwd(), "feedback.log");
+// Simple size-based rotation: once the log crosses this size, the current
+// file is moved to feedback.log.1 (overwriting any previous one) and a
+// fresh file is started. Keeps disk usage bounded on a plain JSON-lines
+// file with no other retention policy.
+const FEEDBACK_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const FEEDBACK_CATEGORIES = new Set(["bug", "idea", "other"]);
 const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
+
+async function rotateFeedbackLogIfNeeded(): Promise<void> {
+  try {
+    const { size } = await stat(FEEDBACK_LOG_FILE);
+    if (size < FEEDBACK_LOG_MAX_BYTES) return;
+    await rename(FEEDBACK_LOG_FILE, `${FEEDBACK_LOG_FILE}.1`);
+  } catch (err) {
+    // ENOENT just means there's no log yet - nothing to rotate.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error("[feedback] Failed to rotate feedback log:", err);
+    }
+  }
+}
 
 // Small in-memory rate limit: a handful of submissions per IP per hour is
 // far more than any real user needs, and keeps one abusive client from
@@ -120,7 +138,9 @@ async function createGithubIssue(payload: {
       "Content-Type": "application/json",
       "User-Agent": "webspeak3-gateway",
     },
-    body: JSON.stringify({ title, body, labels: ["feedback"] }),
+    // GitHub auto-creates labels that don't already exist in the repo, so
+    // the category label needs no manual setup on first use.
+    body: JSON.stringify({ title, body, labels: ["feedback", payload.category] }),
   });
   if (!res.ok) {
     console.error(`[feedback] GitHub issue creation failed (${res.status}): ${await res.text().catch(() => "")}`);
@@ -168,12 +188,22 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
     }
   }
 
-  let body: { category?: unknown; message?: unknown; email?: unknown; publishAsIssue?: unknown };
+  let body: { category?: unknown; message?: unknown; email?: unknown; publishAsIssue?: unknown; website?: unknown };
   try {
     body = JSON.parse(raw || "{}");
   } catch {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "invalid_json" }));
+    return;
+  }
+
+  // Honeypot: a field named to look attractive to form-filling bots, kept
+  // hidden from real users via CSS. Any value here means a bot filled it in
+  // blindly - report success without actually logging or filing anything,
+  // so the bot has no signal to adapt on.
+  if (typeof body.website === "string" && body.website.trim() !== "") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
     return;
   }
 
@@ -190,6 +220,7 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
   }
 
   try {
+    await rotateFeedbackLogIfNeeded();
     const entry = { at: new Date().toISOString(), category, message, email };
     await appendFile(FEEDBACK_LOG_FILE, JSON.stringify(entry) + "\n", "utf-8");
   } catch (err) {

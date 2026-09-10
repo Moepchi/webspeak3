@@ -1678,6 +1678,10 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
   const [publishAsIssue, setPublishAsIssue] = useState(false);
+  // Honeypot: real users never see or fill this (hidden via CSS, no label,
+  // excluded from tab order); bots that blindly fill every field do. Kept
+  // in sync with the gateway's "website" field name.
+  const [website, setWebsite] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [issueUrl, setIssueUrl] = useState<string | undefined>(undefined);
 
@@ -1694,12 +1698,22 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
           message: trimmed,
           email: email.trim() || undefined,
           publishAsIssue,
+          website,
         }),
       });
       if (!res.ok) throw new Error(String(res.status));
       const json = (await res.json()) as { ok?: boolean; githubIssueUrl?: string };
       setIssueUrl(json.githubIssueUrl);
       setStatus("sent");
+      // Someone who just sent feedback doesn't need the nudge bubble asking
+      // them to do exactly that again for a while - push its cooldown out
+      // from this moment rather than leaving it on whatever schedule it was
+      // already on.
+      try {
+        localStorage.setItem(FEEDBACK_BUBBLE_STORAGE_KEY, String(Date.now()));
+      } catch {
+        // ignore
+      }
     } catch {
       setStatus("error");
     }
@@ -1731,6 +1745,16 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <p className="ts-feedback-intro">{t("feedback.dialog.intro")}</p>
+              <input
+                type="text"
+                name="website"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                className="ts-feedback-honeypot"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+              />
               <label className="ts-dialog-field">
                 {t("feedback.dialog.category")}
                 <select value={category} onChange={(e) => setCategory(e.target.value as FeedbackCategory)}>
