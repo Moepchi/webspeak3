@@ -3745,6 +3745,28 @@
     gap: 0.6rem;
   }
 
+  /* Dropdowns normally open flush with the left edge of the menu item
+     that triggered them (.ts-menubar-dropdown is the positioning
+     anchor). On a narrow screen that overflows off-screen for any
+     item that isn't near the left edge. Anchor to the whole menubar
+     instead so the panel always stays within the viewport width. */
+  .ts-menubar {
+    position: relative;
+  }
+
+  .ts-menubar-dropdown {
+    position: static;
+  }
+
+  .ts-menu {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    min-width: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
   .ts-toolbar {
     flex-wrap: wrap;
   }
