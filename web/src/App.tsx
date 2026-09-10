@@ -8302,21 +8302,17 @@ function AppInner() {
                 <span className="ts-menu-item-label">{t("menu.extras.options")}</span>
                 <span className="ts-menu-item-shortcut">Alt+P</span>
               </button>
-              {IS_OWN_HOSTED_INSTANCE && (
-                <button
-                  className="ts-menu-item"
-                  onClick={() => {
-                    setFeedbackOpen(true);
-                    setExtrasMenuOpen(false);
-                  }}
-                >
-                  <span className="ts-menu-item-icon">💬</span>
-                  <span className="ts-menu-item-label">{t("menu.extras.feedback")}</span>
-                </button>
-              )}
             </div>
           )}
         </div>
+        {IS_OWN_HOSTED_INSTANCE && (
+          <span
+            className="ts-menubar-item"
+            onClick={() => setFeedbackOpen(true)}
+          >
+            💬 {t("menu.extras.feedback")}
+          </span>
+        )}
         <span className="ts-menubar-item">{t("menu.help")}</span>
         </div>
         </div>
@@ -8574,6 +8570,17 @@ function AppInner() {
           nova={designTheme === "nova"}
           onOpenOptions={() => setOptionsDialogOpen(true)}
         />
+      )}
+
+      {IS_OWN_HOSTED_INSTANCE && !feedbackOpen && (
+        <button
+          type="button"
+          className="ts-feedback-fab"
+          onClick={() => setFeedbackOpen(true)}
+          title={t("menu.extras.feedback")}
+        >
+          💬
+        </button>
       )}
 
       {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
