@@ -774,6 +774,30 @@ export class Ts3Connection {
     this.child?.stdin.write(`audio ${pcmBase64}\n`);
   }
 
+  /** Ask the client publishing a TS6 stream to let us watch. The answer comes
+   *  back as a `streamEvent` of type `notifyrespondjoinstreamrequest`, which
+   *  carries the SDP offer. */
+  async joinStream(streamId: string, clientId: number, message = ""): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    const sanitized = message.replace(/[\r\n]+/g, " ").trim();
+    if (id) this.child?.stdin.write(`streamjoin ${id} ${clientId} ${sanitized}\n`);
+  }
+
+  async leaveStream(streamId: string, clientId: number): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    if (id) this.child?.stdin.write(`streamleave ${id} ${clientId}\n`);
+  }
+
+  /** Relays one signaling payload (SDP answer, ICE candidate) to a stream peer.
+   *  `payload` is passed straight through - the connector only escapes it for
+   *  the TS wire, nobody in this path interprets it. Serializing here rather
+   *  than accepting a string keeps literal newlines out of the line-based
+   *  stdin protocol. */
+  async sendStreamSignal(streamId: string, clientId: number, payload: unknown): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    if (id) this.child?.stdin.write(`streamsignal ${id} ${clientId} ${JSON.stringify(payload)}\n`);
+  }
+
   async setAway(away: boolean, message: string): Promise<void> {
     if (away) {
       const sanitized = message.replace(/[\r\n]+/g, " ").trim();

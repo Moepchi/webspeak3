@@ -415,6 +415,27 @@ wss.on("connection", (socket: WebSocket) => {
         await connection?.sendAudio(msg.pcm);
         break;
       }
+      case "joinStream": {
+        const clientId = Number(msg.clientId);
+        if (Number.isFinite(clientId)) {
+          await connection?.joinStream(String(msg.streamId ?? ""), clientId, msg.message ?? "");
+        }
+        break;
+      }
+      case "leaveStream": {
+        const clientId = Number(msg.clientId);
+        if (Number.isFinite(clientId)) {
+          await connection?.leaveStream(String(msg.streamId ?? ""), clientId);
+        }
+        break;
+      }
+      case "streamSignal": {
+        const clientId = Number(msg.clientId);
+        if (Number.isFinite(clientId) && msg.payload !== undefined) {
+          await connection?.sendStreamSignal(String(msg.streamId ?? ""), clientId, msg.payload);
+        }
+        break;
+      }
       case "setAway": {
         await connection?.setAway(msg.away, msg.message ?? "");
         break;
