@@ -1464,6 +1464,106 @@
   font-size: 0.85em;
 }
 
+/* TS6's stream dialog, rebuilt: labelled rows with a segmented control on the
+   right. The segments wrap on narrow screens rather than overflowing. */
+.ts-stream-settings {
+  width: min(680px, calc(100vw - 2rem));
+}
+
+.ts-stream-settings-section {
+  margin: 0.9rem 0 0.4rem;
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.ts-stream-settings-expand {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ts-stream-settings-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 0.35rem 0;
+}
+
+.ts-stream-settings-row > span:first-child {
+  opacity: 0.85;
+}
+
+.ts-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-toolbar-2, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+}
+
+.ts-segmented button {
+  padding: 0.25rem 0.7rem;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ts-segmented button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ts-segmented button.ts-segmented-on {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.ts-stream-settings-stepper {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.ts-stream-settings-stepper input {
+  width: 5.5rem;
+  text-align: center;
+}
+
+.ts-stream-settings-stepper button {
+  width: 1.9rem;
+  border-radius: 999px;
+}
+
+.ts-stream-settings-unit {
+  opacity: 0.7;
+}
+
+.ts-stream-settings-toggle input {
+  width: 2.4rem;
+  height: 1.3rem;
+}
+
+.ts-stream-settings-go {
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  padding-inline: 1.2rem;
+}
+
 .ts-stream-panel-publish {
   border-color: var(--accent);
 }

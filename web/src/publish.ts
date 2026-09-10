@@ -17,18 +17,32 @@
 
 import type { StreamEvent } from "./stream";
 
-/** Source kind in `setupstream`. A real TS6 screen share sends 3. */
-export const STREAM_TYPE_SCREEN = 3;
+// The three enums below are read straight out of TS6's own UI bundle
+// (main.js), not inferred - see ts6-re/findings §10.
 
-/** `mode` in `setupstream`. 1 is what a real TS6 client sends for P2P. */
-export const STREAM_MODE_P2P = 1;
+/** `type` in `setupstream`: what is being captured. */
+export const StreamSource = {
+  NONE: 0,
+  CAMERA: 1,
+  SCREEN: 2,
+  WINDOW: 3,
+  EXISTING_SESSION: 4,
+} as const;
 
-/**
- * `accessibility` in `setupstream` - TS6's Privacy setting. 1 is what the
- * observed client sent; the three UI choices are public / contacts / private,
- * and which number maps to which is still unverified.
- */
-export const STREAM_ACCESS_DEFAULT = 1;
+/** `accessibility` in `setupstream`: TS6's Privacy setting. */
+export const StreamAccess = {
+  NONE: 0,
+  PUBLIC: 1,
+  CONTACTS_ONLY: 2,
+  PRIVATE: 3,
+} as const;
+
+/** `mode` in `setupstream`: TS6's Connection Mode. */
+export const StreamMode = {
+  NONE: 0,
+  P2P: 1,
+  SFU: 2,
+} as const;
 
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:turn.teamspeak.com:3478" },
@@ -38,11 +52,25 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
 
 export interface StreamPublishOptions {
   name: string;
-  bitrate: number;
   /** Send the capture's audio track too, when the source has one. */
   audio: boolean;
+  /** One of StreamAccess. */
+  accessibility: number;
+  /** One of StreamMode. Only P2P is implemented; SFU needs the mediasoup path. */
+  mode: number;
   /** 0 means unlimited. */
-  viewerLimit?: number;
+  viewerLimit: number;
+  /** Capture height in pixels; 0 keeps the source's own resolution. */
+  height: number;
+  /** Capture frame rate; 0 leaves it to the browser. */
+  fps: number;
+  videoBitrateKbps: number;
+  audioBitrateKbps: number;
+  /**
+   * What the encoder should protect when it runs out of bitrate. Slides and
+   * code want "detail" (keep text sharp, drop frames); a game wants "motion".
+   */
+  contentHint: "motion" | "detail";
 }
 
 export interface StreamPublisherOptions {
@@ -69,6 +97,7 @@ export class StreamPublisher {
   private readonly viewers = new Map<number, Viewer>();
   private media: MediaStream | null = null;
   private state: PublishState = "idle";
+  private options: StreamPublishOptions | null = null;
 
   /** Assigned by the server, not by us; null until notifystreamstarted. */
   streamId: string | null = null;
@@ -96,9 +125,15 @@ export class StreamPublisher {
     }
 
     this.setState("starting");
+    this.options = options;
+
+    const video: MediaTrackConstraints = {};
+    if (options.height > 0) video.height = { ideal: options.height };
+    if (options.fps > 0) video.frameRate = { ideal: options.fps };
+
     try {
       this.media = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+        video: Object.keys(video).length > 0 ? video : true,
         audio: options.audio,
       });
     } catch (err) {
@@ -106,6 +141,8 @@ export class StreamPublisher {
       this.fail(`Could not capture the screen: ${describe(err)}`);
       return;
     }
+
+    for (const track of this.media.getVideoTracks()) track.contentHint = options.contentHint;
 
     // The browser's own "stop sharing" bar bypasses our UI entirely, so the
     // track ending is the authoritative signal that the stream is over.
@@ -116,11 +153,14 @@ export class StreamPublisher {
     this.opts.send({
       type: "setupStream",
       name: options.name,
-      streamType: STREAM_TYPE_SCREEN,
-      bitrate: options.bitrate,
-      accessibility: STREAM_ACCESS_DEFAULT,
-      mode: STREAM_MODE_P2P,
-      viewerLimit: options.viewerLimit ?? 0,
+      // The browser's own picker decides whether this is a whole screen or a
+      // single window, so the type is read back off the track rather than
+      // asked for up front.
+      streamType: this.detectSourceType(),
+      bitrate: options.videoBitrateKbps * 1000,
+      accessibility: options.accessibility,
+      mode: options.mode,
+      viewerLimit: options.viewerLimit,
       audio: options.audio && this.media.getAudioTracks().length > 0,
     });
   }
@@ -184,6 +224,7 @@ export class StreamPublisher {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      await this.applyBitrates(pc);
       this.opts.send({
         type: "respondJoinStream",
         streamId: this.streamId,
@@ -265,6 +306,44 @@ export class StreamPublisher {
     }
   }
 
+  /**
+   * Caps each sender at the configured bitrate.
+   *
+   * `setupstream`'s `bitrate` is only what the stream *advertises* - the
+   * server does not even echo our value back unchanged, and it certainly does
+   * not reach the encoder. The actual limit is a sender parameter, and the
+   * encodings it lives on only exist once a local description is set.
+   */
+  private async applyBitrates(pc: RTCPeerConnection): Promise<void> {
+    const options = this.options;
+    if (!options) return;
+    for (const sender of pc.getSenders()) {
+      const kbps = sender.track?.kind === "audio" ? options.audioBitrateKbps : options.videoBitrateKbps;
+      if (!sender.track || kbps <= 0) continue;
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+      for (const encoding of params.encodings) encoding.maxBitrate = kbps * 1000;
+      try {
+        await sender.setParameters(params);
+      } catch (err) {
+        // Not fatal - the stream still runs, just uncapped.
+        console.warn("[publish] could not apply the bitrate cap:", describe(err));
+      }
+    }
+  }
+
+  /**
+   * Maps the capture to TS6's source enum.
+   *
+   * `displaySurface` is what the user actually picked in the browser's own
+   * share dialog, so it is more truthful than anything we could ask for in
+   * advance. A browser tab has no TS6 equivalent and reads closest to a window.
+   */
+  private detectSourceType(): number {
+    const surface = this.media?.getVideoTracks()[0]?.getSettings().displaySurface;
+    return surface === "monitor" ? StreamSource.SCREEN : StreamSource.WINDOW;
+  }
+
   private dropViewer(clid: number): void {
     const viewer = this.viewers.get(clid);
     if (!viewer) return;
@@ -286,6 +365,7 @@ export class StreamPublisher {
     for (const track of this.media?.getTracks() ?? []) track.stop();
     this.media = null;
     this.streamId = null;
+    this.options = null;
     this.notifyViewers();
     this.setState(state);
   }
