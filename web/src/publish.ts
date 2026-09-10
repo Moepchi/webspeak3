@@ -79,6 +79,8 @@ export interface StreamPublisherOptions {
   ownClientId: number;
   onStateChange?: (state: PublishState) => void;
   onViewersChange?: (viewers: number[]) => void;
+  /** Join requests awaiting a decision, as [clid, message] pairs. */
+  onPendingChange?: (pending: [number, string][]) => void;
   onError?: (error: string) => void;
   iceServers?: RTCIceServer[];
 }
@@ -95,6 +97,10 @@ interface Viewer {
 export class StreamPublisher {
   private readonly opts: StreamPublisherOptions;
   private readonly viewers = new Map<number, Viewer>();
+  /** Requests waiting for the user to decide: clid -> the viewer's message. */
+  private readonly pending = new Map<number, string>();
+  /** Clients denied with "block"; they are refused without asking again. */
+  private readonly blocked = new Set<number>();
   private media: MediaStream | null = null;
   private state: PublishState = "idle";
   private options: StreamPublishOptions | null = null;
@@ -191,7 +197,21 @@ export class StreamPublisher {
     }
   }
 
-  /** Accepts a viewer and sends it our offer. */
+  /**
+   * Decides what to do with an incoming join request.
+   *
+   * This mirrors TS6's own publisher-side rule, which is the only place either
+   * setting is enforced at all - the server stores `accessibility` and
+   * `viewer_limit`, echoes them back, and then forwards every request anyway
+   * (verified live: a PRIVATE stream at viewer_limit=1 still had both viewers
+   * announced to us).
+   *
+   * The important half is what happens to a request we do not take: TS6 leaves
+   * it *pending* rather than refusing it. A refusal is not sticky - TS6's own
+   * "block" path is deny plus a ban - so a refused client simply asks again, in
+   * a loop, and shows its user nothing. Left pending, it asks once and displays
+   * "waiting for access" until we answer.
+   */
   private async admit(args: Record<string, string>): Promise<void> {
     const clid = Number(args.clid);
     if (!Number.isFinite(clid) || !this.media || !this.streamId) return;
@@ -199,25 +219,65 @@ export class StreamPublisher {
     // is_remove=1 is how TS6 says "stop watching"; the same notify carries it.
     if (args.is_remove === "1") {
       this.dropViewer(clid);
+      this.pending.delete(clid);
+      this.notifyPending();
       return;
     }
-    if (this.viewers.has(clid)) return;
+    if (this.viewers.has(clid) || this.pending.has(clid)) return;
 
-    // `viewer_limit` goes out with setupstream, but nothing guarantees the
-    // server turns anyone away - so the publisher enforces its own limit. This
-    // is the only place that can: we are the one handing out peer connections,
-    // and in P2P mode each one costs another encode.
-    const limit = this.options?.viewerLimit ?? 0;
-    if (limit > 0 && this.viewers.size >= limit) {
-      this.opts.send({
-        type: "respondJoinStream",
-        streamId: this.streamId,
-        clientId: clid,
-        accept: false,
-        message: "Stream is full",
-      });
+    // Explicitly blocked earlier: refuse without bothering the user again.
+    if (this.blocked.has(clid)) {
+      this.refuse(clid, "Blocked");
       return;
     }
+
+    const limit = this.options?.viewerLimit ?? 0;
+    const full = limit > 0 && this.viewers.size >= limit;
+    const autoAccept = this.options?.accessibility === StreamAccess.PUBLIC && !full;
+
+    if (!autoAccept) {
+      // CONTACTS_ONLY behaves as PRIVATE here: the contact list is a TS6
+      // account feature webspeak3 has no access to, so it cannot be consulted.
+      this.pending.set(clid, args.msg ?? "");
+      this.notifyPending();
+      return;
+    }
+
+    await this.openTo(clid);
+  }
+
+  /** Lets a pending viewer in. Called by admit() or by the user. */
+  async approve(clid: number): Promise<void> {
+    if (!this.pending.delete(clid)) return;
+    this.notifyPending();
+    await this.openTo(clid);
+  }
+
+  /**
+   * Turns a pending viewer away. `block` also remembers the refusal, which is
+   * what makes it stick - TS6 pairs its deny with a ban for the same reason.
+   */
+  deny(clid: number, block = false): void {
+    this.pending.delete(clid);
+    if (block) this.blocked.add(clid);
+    this.notifyPending();
+    this.refuse(clid, block ? "Blocked" : "Denied");
+  }
+
+  private refuse(clid: number, message: string): void {
+    if (!this.streamId) return;
+    this.opts.send({
+      type: "respondJoinStream",
+      streamId: this.streamId,
+      clientId: clid,
+      accept: false,
+      message,
+    });
+  }
+
+  /** Builds the peer connection for a viewer we have decided to let in. */
+  private async openTo(clid: number): Promise<void> {
+    if (!this.media || !this.streamId || this.viewers.has(clid)) return;
 
     const pc = new RTCPeerConnection({ iceServers: this.opts.iceServers ?? DEFAULT_ICE_SERVERS });
     const viewer: Viewer = { pc, pending: [], answered: false };
@@ -378,11 +438,14 @@ export class StreamPublisher {
   private teardown(state: PublishState): void {
     for (const [, viewer] of this.viewers) viewer.pc.close();
     this.viewers.clear();
+    this.pending.clear();
+    this.blocked.clear();
     for (const track of this.media?.getTracks() ?? []) track.stop();
     this.media = null;
     this.streamId = null;
     this.options = null;
     this.notifyViewers();
+    this.notifyPending();
     this.setState(state);
   }
 
@@ -402,6 +465,10 @@ export class StreamPublisher {
 
   private notifyViewers(): void {
     this.opts.onViewersChange?.([...this.viewers.keys()]);
+  }
+
+  private notifyPending(): void {
+    this.opts.onPendingChange?.([...this.pending.entries()]);
   }
 
   private fail(message: string): void {

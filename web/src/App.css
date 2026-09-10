@@ -4111,3 +4111,55 @@
     min-width: 160px;
   }
 }
+
+/* A join request waiting for a decision. TS6 shows the viewer "waiting for
+   access" the whole time this is on screen, so it should not be subtle. */
+.ts-stream-request {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border-top: 1px solid var(--ts-border, #2a2f3a);
+  background: var(--ts-accent-soft, rgba(90, 140, 255, 0.12));
+  font-size: 0.82rem;
+}
+
+.ts-stream-request-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ts-stream-request-who em {
+  opacity: 0.7;
+  font-size: 0.75rem;
+  font-style: normal;
+}
+
+.ts-stream-request button {
+  flex: none;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--ts-border, #2a2f3a);
+  border-radius: 4px;
+  background: var(--ts-surface, #1b1f27);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.ts-stream-request button:hover {
+  border-color: var(--ts-accent, #5a8cff);
+}
+
+.ts-stream-request-allow {
+  background: var(--ts-accent, #5a8cff) !important;
+  color: #fff;
+}
+
+.ts-stream-request-block {
+  opacity: 0.65;
+}

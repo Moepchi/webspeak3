@@ -5660,6 +5660,7 @@ function AppInner() {
   const streamViewerRef = useRef<StreamViewer | null>(null);
   const [publishState, setPublishState] = useState<PublishState>("idle");
   const [publishViewers, setPublishViewers] = useState<number[]>([]);
+  const [publishPending, setPublishPending] = useState<[number, string][]>([]);
   const [publishError, setPublishError] = useState<string | null>(null);
   const publisherRef = useRef<StreamPublisher | null>(null);
   const publishPreviewRef = useRef<HTMLVideoElement | null>(null);
@@ -6624,6 +6625,7 @@ function AppInner() {
           publisherRef.current = null;
           setPublishState("idle");
           setPublishViewers([]);
+          setPublishPending([]);
           removeSession(sessionId, { skipSocketClose: true });
           break;
         }
@@ -7931,6 +7933,7 @@ function AppInner() {
     publisherRef.current = null;
     setPublishState("idle");
     setPublishViewers([]);
+    setPublishPending([]);
   };
 
   const handleStreamButton = () => {
@@ -7940,6 +7943,9 @@ function AppInner() {
     }
     setStreamSettingsOpen(true);
   };
+
+  const publishClientName = (clid: number) =>
+    clients.find((c) => c.id === clid)?.name ?? `#${clid}`;
 
   const handleStartPublishing = (options: StreamPublishOptions) => {
     if (ownClientId === null) return;
@@ -7955,9 +7961,11 @@ function AppInner() {
         if (state === "stopped" || state === "idle") {
           publisherRef.current = null;
           setPublishViewers([]);
+          setPublishPending([]);
         }
       },
       onViewersChange: setPublishViewers,
+      onPendingChange: setPublishPending,
       onError: setPublishError,
     });
     publisherRef.current = publisher;
@@ -9636,6 +9644,30 @@ function AppInner() {
           </div>
           {/* muted: this is our own capture playing back locally */}
           <video ref={publishPreviewRef} autoPlay playsInline muted />
+          {publishPending.map(([clid, message]) => (
+            <div className="ts-stream-request" key={clid}>
+              <span className="ts-stream-request-who">
+                {publishClientName(clid)}
+                {message && <em>{message}</em>}
+              </span>
+              <button
+                className="ts-stream-request-allow"
+                onClick={() => void publisherRef.current?.approve(clid)}
+              >
+                {t("publish.request.allow")}
+              </button>
+              <button onClick={() => publisherRef.current?.deny(clid)}>
+                {t("publish.request.deny")}
+              </button>
+              <button
+                className="ts-stream-request-block"
+                onClick={() => publisherRef.current?.deny(clid, true)}
+                title={t("publish.request.blockHint")}
+              >
+                {t("publish.request.block")}
+              </button>
+            </div>
+          ))}
           {publishError && <div className="ts-stream-panel-error">{publishError}</div>}
         </div>
       )}
