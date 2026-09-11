@@ -1,4 +1,4 @@
 [submodule "tsclientlib"]
 	path = tsclientlib
-	url = https://github.com/GreenTeaSpeak/tsclientlib.git
+	url = https://github.com/Moepchi/tsclientlib.git
 	branch = webspeak3
