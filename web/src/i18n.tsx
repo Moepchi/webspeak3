@@ -378,6 +378,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "tree.streaming": "Überträgt einen Stream",
     "publish.alpha": "Alpha",
     "publish.alphaTitle": "Alpha – instabil, kann sich jederzeit ändern oder brechen",
+    "publish.demoUnavailable": "Übertragen ist in der Demo nicht verfügbar – dafür braucht es einen echten TeamSpeak-6-Server.",
     "publish.alphaNote":
       "Streaming ist Alpha. Es spricht TeamSpeak 6s Stream/Call-Protokoll, das nicht dokumentiert ist – Verbindungsaufbau, Bildqualität und Zuschauerverwaltung können fehlschlagen oder sich ohne Vorankündigung ändern. Nicht für produktive Nutzung gedacht.",
     "publish.start": "Bildschirm übertragen",
@@ -1015,6 +1016,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "tree.streaming": "Broadcasting a stream",
     "publish.alpha": "Alpha",
     "publish.alphaTitle": "Alpha - unstable, may change or break at any time",
+    "publish.demoUnavailable": "Streaming is not available in the demo - it needs a real TeamSpeak 6 server.",
     "publish.alphaNote":
       "Streaming is alpha. It speaks TeamSpeak 6's undocumented Stream/Call protocol, so connecting, picture quality and viewer handling can fail or change without notice. Not meant for production use.",
     "publish.start": "Share your screen",

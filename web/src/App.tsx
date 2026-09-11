@@ -9088,8 +9088,15 @@ function AppInner() {
           <button
             className={`ts-icon-button${publishState === "live" ? " ts-mic-on" : ""}`}
             onClick={handleStreamButton}
-            disabled={!connected || ownClientId === null}
-            title={`${publishState === "live" ? t("publish.stop") : t("publish.start")} (${t("publish.alpha")})`}
+            // DemoSocket has no answer for setupstream, so in demo mode the
+            // panel would sit at "starting" forever - after the browser has
+            // already asked the visitor to pick a screen. Don't offer it.
+            disabled={!connected || ownClientId === null || DEMO_MODE}
+            title={
+              DEMO_MODE
+                ? t("publish.demoUnavailable")
+                : `${publishState === "live" ? t("publish.stop") : t("publish.start")} (${t("publish.alpha")})`
+            }
           >
             {publishState === "live" ? "🛑" : "🖥️"}
           </button>
