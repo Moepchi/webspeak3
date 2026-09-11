@@ -1625,10 +1625,14 @@ const AUDIO_BITRATE_CHOICES = [64, 96, 128, 192, 256, 320];
 // error, it is silence: the publish panel waits at "starting" forever, after
 // the browser has already asked the user to share a screen.
 //
-// Flip this back to true once the deployed gateway is on v0.11.0-beta.1 or
-// newer. The durable fix is a capability handshake so the client can tell on
-// its own; see ROADMAP.md.
-const STREAM_UI_ENABLED = false;
+// Flip this to false again whenever the frontend gains a stream feature the
+// deployed gateway does not have yet, and back once it has caught up. The
+// durable fix is a capability handshake so the client can tell on its own;
+// see ROADMAP.md.
+//
+// On since 2026-09-11: the gateway on client.webspeak3.de was rebuilt on the
+// v0.11.0-beta.1 image and answers setupStream/joinStream/sendStreamSignal.
+const STREAM_UI_ENABLED = true;
 
 // Streaming talks to TS6 over a protocol nobody published, so it is marked
 // alpha everywhere the user can reach it: the settings dialog, both stream
