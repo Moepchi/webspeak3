@@ -86,11 +86,14 @@ const GATEWAY_URL = import.meta.env.DEV
 
 // Same derivation as GATEWAY_URL above, but for a plain HTTP POST (the
 // feedback form) instead of the WebSocket - see gateway/src/index.ts's
-// /api/feedback handler.
+// /api/feedback handler. VITE_GATEWAY_URL names a WebSocket origin, so its
+// scheme has to be mapped back to http(s) here: fetch() refuses anything
+// else outright ("TypeError: unknown scheme"), so with VITE_GATEWAY_URL set
+// the form could not submit at all.
 const FEEDBACK_URL = import.meta.env.DEV
   ? "http://localhost:8080/api/feedback"
   : import.meta.env.VITE_GATEWAY_URL
-    ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "")}/api/feedback`
+    ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "").replace(/^ws(s?):\/\//, "http$1://")}/api/feedback`
     : `${window.location.protocol}//${window.location.host}/api/feedback`;
 
 // This file's frontend is deployed as multiple Cloudflare Pages projects

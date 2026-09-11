@@ -245,10 +245,23 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
 const DEV_HINT = `<!doctype html><html><body style="font:14px system-ui;padding:2rem;max-width:40rem">
 <h1>WebSpeak3 gateway</h1>
 <p>WebSocket: <code>/ws</code></p>
-<p>Static UI is disabled (<code>WEB_STATIC=0</code>) or <code>web/dist</code> is missing.</p>
+<p><code>web/dist</code> is missing — the UI has not been built yet.</p>
 <p>For local development open the Vite app at <a href="http://localhost:5173/">http://localhost:5173/</a>
 (run <code>npm run dev</code> in <code>web/</code>). Rebuild with <code>npm run build</code> in <code>web/</code>
 to serve the UI from this port again.</p>
+</body></html>`;
+
+/**
+ * Shown at "/" when WEB_STATIC=0, i.e. when this process deliberately is not
+ * the app server. Deployment-neutral on purpose: where the UI actually lives
+ * is the operator's business, and this host may well be reachable publicly.
+ */
+const NO_UI_NOTICE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>WebSpeak3 gateway</title></head>
+<body style="font:14px system-ui;padding:2rem;max-width:40rem">
+<h1>WebSpeak3 gateway</h1>
+<p>WebSocket endpoint: <code>/ws</code></p>
+<p>No web UI is served from this host.</p>
 </body></html>`;
 
 /**
@@ -280,8 +293,16 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
       }
 
       if (!SERVE_STATIC) {
+        // No SPA fallback here: with the UI hosted elsewhere, answering every
+        // path with a page would put a second, stale-looking "app" on this
+        // hostname. Only "/" gets a notice, everything else is simply absent.
+        if (requestUrl.pathname !== "/") {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Not found\n");
+          return;
+        }
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(DEV_HINT);
+        res.end(NO_UI_NOTICE);
         return;
       }
       let filePath = path.join(WEB_DIST, decodeURIComponent(requestUrl.pathname));
