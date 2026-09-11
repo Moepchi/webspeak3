@@ -376,6 +376,10 @@ const translations: Record<Lang, Record<string, string>> = {
     "tree.noTalkPower": "Keine Redeerlaubnis in diesem Channel",
     "tree.soundMuted": "Ton stummgeschaltet (deafened)",
     "tree.streaming": "Überträgt einen Stream",
+    "publish.alpha": "Alpha",
+    "publish.alphaTitle": "Alpha – instabil, kann sich jederzeit ändern oder brechen",
+    "publish.alphaNote":
+      "Streaming ist Alpha. Es spricht TeamSpeak 6s Stream/Call-Protokoll, das nicht dokumentiert ist – Verbindungsaufbau, Bildqualität und Zuschauerverwaltung können fehlschlagen oder sich ohne Vorankündigung ändern. Nicht für produktive Nutzung gedacht.",
     "publish.start": "Bildschirm übertragen",
     "publish.stop": "Übertragung beenden",
     "publish.title": "Deine Übertragung",
@@ -1009,6 +1013,10 @@ const translations: Record<Lang, Record<string, string>> = {
     "tree.noTalkPower": "No talk power in this channel",
     "tree.soundMuted": "Sound muted (deafened)",
     "tree.streaming": "Broadcasting a stream",
+    "publish.alpha": "Alpha",
+    "publish.alphaTitle": "Alpha - unstable, may change or break at any time",
+    "publish.alphaNote":
+      "Streaming is alpha. It speaks TeamSpeak 6's undocumented Stream/Call protocol, so connecting, picture quality and viewer handling can fail or change without notice. Not meant for production use.",
     "publish.start": "Share your screen",
     "publish.stop": "Stop sharing",
     "publish.title": "Your broadcast",

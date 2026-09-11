@@ -19,6 +19,13 @@ This roadmap is intentionally outcome-focused. It does not promise fixed dates.
 
 ## Experimental or still being validated
 
+- **Screen streaming to and from TeamSpeak 6 (alpha, unstable).** WebSpeak3 can
+  publish a screen share that a native TS6 client can watch, and watch a stream
+  a TS6 client publishes. It speaks TS6's Stream/Call protocol, which TeamSpeak
+  does not document, so the wire format was derived from observed behavior and
+  may break with any TS6 update. Connection setup, picture quality, and viewer
+  admission are not yet dependable. The "Server" connection mode (TS6's SFU) is
+  not implemented; only direct P2P works.
 - Safari and Mobile Safari audio/microphone behavior
 - Uncommon TeamSpeak permission combinations and large permission sets
 - Very large servers and long-running browser sessions

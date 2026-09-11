@@ -1615,6 +1615,18 @@ const RESOLUTION_CHOICES = [360, 480, 720, 1080, 1440, 0];
 const FPS_CHOICES = [5, 30, 60];
 const AUDIO_BITRATE_CHOICES = [64, 96, 128, 192, 256, 320];
 
+// Streaming talks to TS6 over a protocol nobody published, so it is marked
+// alpha everywhere the user can reach it: the settings dialog, both stream
+// panels, and the toolbar button's tooltip.
+function AlphaBadge() {
+  const t = useT();
+  return (
+    <span className="ts-alpha-badge" title={t("publish.alphaTitle")}>
+      {t("publish.alpha")}
+    </span>
+  );
+}
+
 function SegmentedChoice<T extends string | number>({
   value,
   options,
@@ -1690,12 +1702,15 @@ function StreamSettingsDialog({
     <div className="ts-dialog-backdrop" {...backdrop}>
       <div className="ts-dialog ts-stream-settings" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
-          <span>{t("publish.dialog.title")}</span>
+          <span>
+            {t("publish.dialog.title")} <AlphaBadge />
+          </span>
           <button onClick={onCancel} title={t("dialog.close")}>
             ✕
           </button>
         </div>
         <div className="ts-dialog-body">
+          <p className="ts-alpha-note">{t("publish.alphaNote")}</p>
           <h4 className="ts-stream-settings-section">{t("publish.dialog.basic")}</h4>
 
           <div className="ts-stream-settings-row">
@@ -9074,7 +9089,7 @@ function AppInner() {
             className={`ts-icon-button${publishState === "live" ? " ts-mic-on" : ""}`}
             onClick={handleStreamButton}
             disabled={!connected || ownClientId === null}
-            title={publishState === "live" ? t("publish.stop") : t("publish.start")}
+            title={`${publishState === "live" ? t("publish.stop") : t("publish.start")} (${t("publish.alpha")})`}
           >
             {publishState === "live" ? "🛑" : "🖥️"}
           </button>
@@ -9628,7 +9643,9 @@ function AppInner() {
       {publishState !== "idle" && publishState !== "stopped" && (
         <div className="ts-stream-panel ts-stream-panel-publish">
           <div className="ts-stream-panel-header">
-            <span className="ts-stream-panel-title">🖥️ {t("publish.title")}</span>
+            <span className="ts-stream-panel-title">
+              🖥️ {t("publish.title")} <AlphaBadge />
+            </span>
             <span className="ts-stream-panel-state">
               {publishState === "live"
                 ? t("publish.viewers", { count: String(publishViewers.length) })
@@ -9675,7 +9692,7 @@ function AppInner() {
         <div className="ts-stream-panel">
           <div className="ts-stream-panel-header">
             <span className="ts-stream-panel-title">
-              📺 {watchedStream.name || t("stream.untitled")}
+              📺 {watchedStream.name || t("stream.untitled")} <AlphaBadge />
             </span>
             <span className="ts-stream-panel-state">
               {streamState === "connected" ? t("stream.live") : t(`stream.state.${streamState}`)}
