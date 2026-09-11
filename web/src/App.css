@@ -26,6 +26,7 @@
   --log-bg: #f7f8f9;
   --log-text: #333;
   --log-error: #b3261e;
+  --alpha-badge: #a15c07;
 
   display: flex;
   flex-direction: column;
@@ -68,6 +69,7 @@
   --log-bg: #202124;
   --log-text: #c7c9cc;
   --log-error: #f2867a;
+  --alpha-badge: #e0a23c;
   color-scheme: dark;
 }
 
@@ -97,6 +99,7 @@
   --log-bg: oklch(0.17 0.014 258);
   --log-text: oklch(0.62 0.014 258);
   --log-error: oklch(0.68 0.16 25);
+  --alpha-badge: oklch(0.75 0.14 70);
   color-scheme: dark;
   font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -827,6 +830,7 @@
   --log-bg: oklch(0.155 0.018 290);
   --log-text: oklch(0.64 0.014 290);
   --log-error: oklch(0.68 0.16 25);
+  --alpha-badge: oklch(0.75 0.14 70);
   color-scheme: dark;
   font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -1407,6 +1411,206 @@
   height: 1px;
   margin: 0.25rem 0.3rem;
   background: var(--border-soft);
+}
+
+/* Floating viewer for a TS6 Stream/Call broadcast. */
+.ts-stream-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, calc(100vw - 2rem));
+  background: var(--bg-toolbar-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.ts-stream-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.ts-stream-panel-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.ts-stream-panel-state {
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
+/* Deliberately loud: the feature speaks an undocumented TS6 protocol, so the
+   user should never be in doubt that it is experimental. */
+.ts-alpha-badge {
+  display: inline-block;
+  padding: 0 0.35em;
+  border: 1px solid var(--alpha-badge);
+  border-radius: 3px;
+  color: var(--alpha-badge);
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.ts-alpha-note {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.6rem;
+  border-left: 3px solid var(--alpha-badge);
+  background: var(--log-bg);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.ts-stream-panel-close {
+  padding: 0 0.35rem;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ts-stream-panel video {
+  width: 100%;
+  /* Letterbox rather than crop - TS6 screen shares are not always 16:9. */
+  aspect-ratio: 16 / 9;
+  background: #000;
+  object-fit: contain;
+}
+
+.ts-stream-panel-error {
+  padding: 0.35rem 0.5rem;
+  color: var(--danger, #e05a5a);
+  font-size: 0.85em;
+}
+
+/* TS6's stream dialog, rebuilt: labelled rows with a segmented control on the
+   right. The segments wrap on narrow screens rather than overflowing. */
+.ts-stream-settings {
+  width: min(680px, calc(100vw - 2rem));
+}
+
+.ts-stream-settings-section {
+  margin: 0.9rem 0 0.4rem;
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.ts-stream-settings-expand {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ts-stream-settings-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 0.35rem 0;
+}
+
+.ts-stream-settings-row > span:first-child {
+  opacity: 0.85;
+}
+
+.ts-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-toolbar-2, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+}
+
+.ts-segmented button {
+  padding: 0.25rem 0.7rem;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ts-segmented button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ts-segmented button.ts-segmented-on {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.ts-stream-settings-stepper {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.ts-stream-settings-stepper input {
+  width: 5.5rem;
+  text-align: center;
+}
+
+.ts-stream-settings-stepper button {
+  width: 1.9rem;
+  border-radius: 999px;
+}
+
+.ts-stream-settings-unit {
+  opacity: 0.7;
+}
+
+.ts-stream-settings-toggle input {
+  width: 2.4rem;
+  height: 1.3rem;
+}
+
+.ts-stream-settings-go {
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  padding-inline: 1.2rem;
+}
+
+.ts-stream-panel-publish {
+  border-color: var(--accent);
+}
+
+/* Watching and broadcasting can run at the same time, so the two panels stack
+   instead of each anchoring itself to the same corner. */
+.ts-stream-panels {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 29;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
 }
 
 .ts-context-menu {
@@ -3936,4 +4140,56 @@
   .ts-poke-compose input {
     min-width: 160px;
   }
+}
+
+/* A join request waiting for a decision. TS6 shows the viewer "waiting for
+   access" the whole time this is on screen, so it should not be subtle. */
+.ts-stream-request {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border-top: 1px solid var(--ts-border, #2a2f3a);
+  background: var(--ts-accent-soft, rgba(90, 140, 255, 0.12));
+  font-size: 0.82rem;
+}
+
+.ts-stream-request-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ts-stream-request-who em {
+  opacity: 0.7;
+  font-size: 0.75rem;
+  font-style: normal;
+}
+
+.ts-stream-request button {
+  flex: none;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--ts-border, #2a2f3a);
+  border-radius: 4px;
+  background: var(--ts-surface, #1b1f27);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.ts-stream-request button:hover {
+  border-color: var(--ts-accent, #5a8cff);
+}
+
+.ts-stream-request-allow {
+  background: var(--ts-accent, #5a8cff) !important;
+  color: #fff;
+}
+
+.ts-stream-request-block {
+  opacity: 0.65;
 }

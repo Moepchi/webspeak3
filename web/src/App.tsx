@@ -26,6 +26,14 @@ import {
   pickAudioOutputDevice,
 } from "./voice";
 import { LanguageProvider, useLanguage, useT, type LangPref } from "./i18n";
+import {
+  StreamAccess,
+  StreamMode,
+  StreamPublisher,
+  type PublishState,
+  type StreamPublishOptions,
+} from "./publish";
+import { StreamViewer, parseStreamInfo, type StreamEvent, type StreamInfo } from "./stream";
 import { DEMO_HOST, DEMO_MODE, DemoSocket } from "./demoMode";
 import {
   SOUND_EVENTS,
@@ -154,6 +162,20 @@ interface Identity {
   blob: string | null;
 }
 
+// randomId() only exists in a secure context, so it is missing on a
+// plain-http origin - which is exactly how a self-hosted instance is reached
+// on a LAN before TLS is set up. It used to throw at module load and leave a
+// blank page; these ids are local identifiers, not secrets, so fall back.
+function randomId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 // One-time migration from the old single flat identity key to a list of named
 // identities (so users can maintain more than one persona), and to seed a
 // default entry for users who never had one either. Runs once at module load.
@@ -161,7 +183,7 @@ interface Identity {
   if (localStorage.getItem(IDENTITIES_KEY) !== null) return;
   const legacyBlob = localStorage.getItem(IDENTITY_KEY);
   const legacyNickname = localStorage.getItem(LAST_NICKNAME_KEY) ?? "";
-  const id = crypto.randomUUID();
+  const id = randomId();
   const identities: Identity[] = [
     { id, name: "Standard", nickname: legacyNickname, phoneticName: "", blob: legacyBlob },
   ];
@@ -178,7 +200,7 @@ function loadIdentities(): Identity[] {
       // Backfill fields older saves (before per-identity nickname/phonetic
       // name existed) don't have.
       return parsed.map((i) => ({
-        id: i.id ?? crypto.randomUUID(),
+        id: i.id ?? randomId(),
         name: i.name ?? "Standard",
         nickname: i.nickname ?? "",
         phoneticName: i.phoneticName ?? "",
@@ -188,7 +210,7 @@ function loadIdentities(): Identity[] {
   } catch {
     // fall through
   }
-  return [{ id: crypto.randomUUID(), name: "Standard", nickname: "", phoneticName: "", blob: null }];
+  return [{ id: randomId(), name: "Standard", nickname: "", phoneticName: "", blob: null }];
 }
 
 const FAVORITES_KEY = "webspeak3:favorites";
@@ -506,6 +528,8 @@ interface ClientInfo {
   channelGroup: number;
   serverGroups: number[];
   hasTalkPower: boolean;
+  /** TS6 Stream/Call broadcast running; absent on servers that don't report it. */
+  isStreaming?: boolean;
   /** ServerQuery client; filtered from the tree unless a favorite enables them. */
   isQuery?: boolean;
 }
@@ -705,6 +729,7 @@ function ClientStatusIcons({ client }: { client: ClientInfo }) {
         <span title={t("tree.noTalkPower")}>🔒</span>
       )}
       {client.outputMuted && <span title={t("tree.soundMuted")}>🔕</span>}
+      {client.isStreaming && <span title={t("tree.streaming")}>📺</span>}
     </span>
   );
 }
@@ -1567,6 +1592,292 @@ function ChannelPasswordDialog({
   );
 }
 
+/**
+ * Presets from TS6's own stream dialog. Each one fills in the advanced
+ * fields; "source" keeps the capture's native resolution and "presentation"
+ * trades frame rate for sharp text, which is what the encoder's content hint
+ * is for.
+ */
+const STREAM_PRESETS: Record<
+  string,
+  { height: number; fps: number; videoBitrateKbps: number; contentHint: "motion" | "detail" }
+> = {
+  "360": { height: 360, fps: 30, videoBitrateKbps: 1000, contentHint: "motion" },
+  "480": { height: 480, fps: 30, videoBitrateKbps: 1500, contentHint: "motion" },
+  "720": { height: 720, fps: 30, videoBitrateKbps: 2500, contentHint: "motion" },
+  "1080": { height: 1080, fps: 30, videoBitrateKbps: 4000, contentHint: "motion" },
+  "1440": { height: 1440, fps: 30, videoBitrateKbps: 6000, contentHint: "motion" },
+  source: { height: 0, fps: 60, videoBitrateKbps: 8000, contentHint: "motion" },
+  presentation: { height: 0, fps: 5, videoBitrateKbps: 3000, contentHint: "detail" },
+};
+
+const RESOLUTION_CHOICES = [360, 480, 720, 1080, 1440, 0];
+const FPS_CHOICES = [5, 30, 60];
+const AUDIO_BITRATE_CHOICES = [64, 96, 128, 192, 256, 320];
+
+// Streaming talks to TS6 over a protocol nobody published, so it is marked
+// alpha everywhere the user can reach it: the settings dialog, both stream
+// panels, and the toolbar button's tooltip.
+function AlphaBadge() {
+  const t = useT();
+  return (
+    <span className="ts-alpha-badge" title={t("publish.alphaTitle")}>
+      {t("publish.alpha")}
+    </span>
+  );
+}
+
+function SegmentedChoice<T extends string | number>({
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  value: T;
+  options: { value: T; label: string; title?: string; disabled?: boolean }[];
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="ts-segmented">
+      {options.map((option) => (
+        <button
+          key={String(option.value)}
+          type="button"
+          className={option.value === value ? "ts-segmented-on" : ""}
+          disabled={disabled || option.disabled}
+          title={option.title}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StreamSettingsDialog({
+  defaultName,
+  onStart,
+  onCancel,
+}: {
+  defaultName: string;
+  onStart: (options: StreamPublishOptions) => void;
+  onCancel: () => void;
+}) {
+  const t = useT();
+  const backdrop = useBackdropDismiss(onCancel);
+  const [preset, setPreset] = useState<string | null>("720");
+  const [audio, setAudio] = useState(true);
+  const [accessibility, setAccessibility] = useState<number>(StreamAccess.PUBLIC);
+  const [advanced, setAdvanced] = useState(false);
+  const [height, setHeight] = useState(STREAM_PRESETS["720"]!.height);
+  const [fps, setFps] = useState(STREAM_PRESETS["720"]!.fps);
+  const [videoBitrateKbps, setVideoBitrateKbps] = useState(STREAM_PRESETS["720"]!.videoBitrateKbps);
+  const [audioBitrateKbps, setAudioBitrateKbps] = useState(128);
+  const [viewerLimit, setViewerLimit] = useState(0);
+  const [mode, setMode] = useState<number>(StreamMode.P2P);
+  const [contentHint, setContentHint] = useState<"motion" | "detail">("motion");
+
+  const applyPreset = (key: string) => {
+    const p = STREAM_PRESETS[key];
+    if (!p) return;
+    setPreset(key);
+    setHeight(p.height);
+    setFps(p.fps);
+    setVideoBitrateKbps(p.videoBitrateKbps);
+    setContentHint(p.contentHint);
+  };
+
+  // Any hand-tuned value means the result is no longer one of the presets, so
+  // the highlight is dropped rather than left lying about what will be sent.
+  const custom = <T,>(setter: (value: T) => void) => (value: T) => {
+    setter(value);
+    setPreset(null);
+  };
+
+  const resolutionLabel = (value: number) => (value === 0 ? t("publish.res.source") : String(value));
+
+  return (
+    <div className="ts-dialog-backdrop" {...backdrop}>
+      <div className="ts-dialog ts-stream-settings" onClick={(e) => e.stopPropagation()}>
+        <div className="ts-dialog-titlebar">
+          <span>
+            {t("publish.dialog.title")} <AlphaBadge />
+          </span>
+          <button onClick={onCancel} title={t("dialog.close")}>
+            ✕
+          </button>
+        </div>
+        <div className="ts-dialog-body">
+          <p className="ts-alpha-note">{t("publish.alphaNote")}</p>
+          <h4 className="ts-stream-settings-section">{t("publish.dialog.basic")}</h4>
+
+          <div className="ts-stream-settings-row">
+            <span>{t("publish.preset")}</span>
+            <SegmentedChoice
+              value={preset ?? ""}
+              onChange={applyPreset}
+              options={[
+                ...["360", "480", "720", "1080", "1440"].map((k) => ({ value: k, label: k })),
+                { value: "source", label: t("publish.res.source") },
+                { value: "presentation", label: t("publish.preset.presentation") },
+              ]}
+            />
+          </div>
+
+          <div className="ts-stream-settings-row">
+            <span>{t("publish.audio")}</span>
+            <label className="ts-stream-settings-toggle">
+              <input type="checkbox" checked={audio} onChange={(e) => setAudio(e.target.checked)} />
+              <span />
+            </label>
+          </div>
+
+          <div className="ts-stream-settings-row">
+            <span>{t("publish.privacy")}</span>
+            <SegmentedChoice
+              value={accessibility}
+              onChange={setAccessibility}
+              options={[
+                { value: StreamAccess.PUBLIC, label: `🌐 ${t("publish.privacy.public")}` },
+                { value: StreamAccess.CONTACTS_ONLY, label: `👥 ${t("publish.privacy.contacts")}` },
+                { value: StreamAccess.PRIVATE, label: `🔒 ${t("publish.privacy.private")}` },
+              ]}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="ts-stream-settings-section ts-stream-settings-expand"
+            onClick={() => setAdvanced((v) => !v)}
+          >
+            {t("publish.dialog.advanced")} <span>{advanced ? "⌄" : "›"}</span>
+          </button>
+
+          {advanced && (
+            <>
+              <div className="ts-stream-settings-row">
+                <span>{t("publish.resolution")}</span>
+                <SegmentedChoice
+                  value={height}
+                  onChange={custom(setHeight)}
+                  options={RESOLUTION_CHOICES.map((v) => ({ value: v, label: resolutionLabel(v) }))}
+                />
+              </div>
+
+              <div className="ts-stream-settings-row">
+                <span>{t("publish.fps")}</span>
+                <SegmentedChoice
+                  value={fps}
+                  onChange={custom(setFps)}
+                  options={FPS_CHOICES.map((v) => ({ value: v, label: String(v) }))}
+                />
+              </div>
+
+              <div className="ts-stream-settings-row">
+                <span>{t("publish.bitrate")}</span>
+                <div className="ts-stream-settings-stepper">
+                  <button type="button" onClick={() => custom(setVideoBitrateKbps)(Math.max(200, videoBitrateKbps - 500))}>
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={200}
+                    step={100}
+                    value={videoBitrateKbps}
+                    onChange={(e) => custom(setVideoBitrateKbps)(Math.max(200, Number(e.target.value) || 200))}
+                  />
+                  <span className="ts-stream-settings-unit">Kbps</span>
+                  <button type="button" onClick={() => custom(setVideoBitrateKbps)(videoBitrateKbps + 500)}>
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div className="ts-stream-settings-row">
+                <span>{t("publish.audioBitrate")}</span>
+                <SegmentedChoice
+                  value={audioBitrateKbps}
+                  onChange={custom(setAudioBitrateKbps)}
+                  disabled={!audio}
+                  options={AUDIO_BITRATE_CHOICES.map((v) => ({ value: v, label: String(v) }))}
+                />
+              </div>
+
+              <div className="ts-stream-settings-row">
+                <span>{t("publish.viewerLimit")}</span>
+                <div className="ts-stream-settings-stepper">
+                  <button type="button" onClick={() => setViewerLimit(Math.max(0, viewerLimit - 1))}>
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    value={viewerLimit}
+                    onChange={(e) => setViewerLimit(Math.max(0, Number(e.target.value) || 0))}
+                  />
+                  <button type="button" onClick={() => setViewerLimit(viewerLimit + 1)}>
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div className="ts-stream-settings-row">
+                <span>{t("publish.mode")}</span>
+                <SegmentedChoice
+                  value={mode}
+                  onChange={setMode}
+                  options={[
+                    { value: StreamMode.P2P, label: `👥 ${t("publish.mode.p2p")}` },
+                    {
+                      value: StreamMode.SFU,
+                      label: `🖧 ${t("publish.mode.server")}`,
+                      // The SFU path is a different transport entirely
+                      // (requestsfuaccessinfo + mediasoup) and is not built
+                      // yet; offering it would announce a stream nobody can
+                      // watch.
+                      disabled: true,
+                      title: t("publish.mode.serverUnavailable"),
+                    },
+                  ]}
+                />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="ts-dialog-buttons">
+          <div className="ts-dialog-buttons-right">
+            <button type="button" onClick={onCancel}>
+              {t("publish.dialog.cancel")}
+            </button>
+            <button
+              type="button"
+              className="ts-stream-settings-go"
+              onClick={() =>
+                onStart({
+                  name: defaultName,
+                  audio,
+                  accessibility,
+                  mode,
+                  viewerLimit,
+                  height,
+                  fps,
+                  videoBitrateKbps,
+                  audioBitrateKbps,
+                  contentHint,
+                })
+              }
+            >
+              {t("publish.dialog.golive")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UpdatePrompt() {
   const t = useT();
   const {
@@ -1820,7 +2131,7 @@ function FavoritesDialog({
   const pendingNewRef = useRef<Favorite | null>(
     prefillNew
       ? {
-          id: crypto.randomUUID(),
+          id: randomId(),
           bookmarkName: prefillNew.host || t("favorites.newFavoriteName"),
           ...prefillNew,
           showServerQueryClients: prefillNew.showServerQueryClients === true,
@@ -1843,7 +2154,7 @@ function FavoritesDialog({
 
   const handleNewFavorite = () => {
     const nf: Favorite = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       bookmarkName: t("favorites.newFavoriteName"),
       nickname: "",
       host: "",
@@ -5355,6 +5666,23 @@ function AppInner() {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [clients, setClients] = useState<ClientInfo[]>([]);
+  /** Stream metadata per publishing client id, keyed by clid. */
+  const [streamInfos, setStreamInfos] = useState<Record<number, StreamInfo>>({});
+  const [watchedStream, setWatchedStream] = useState<StreamInfo | null>(null);
+  const [streamMedia, setStreamMedia] = useState<MediaStream | null>(null);
+  const [streamState, setStreamState] = useState<RTCPeerConnectionState>("new");
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const streamViewerRef = useRef<StreamViewer | null>(null);
+  const [publishState, setPublishState] = useState<PublishState>("idle");
+  const [publishViewers, setPublishViewers] = useState<number[]>([]);
+  const [publishPending, setPublishPending] = useState<[number, string][]>([]);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const publisherRef = useRef<StreamPublisher | null>(null);
+  const publishPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const [streamSettingsOpen, setStreamSettingsOpen] = useState(false);
+  const streamVideoRef = useRef<HTMLVideoElement | null>(null);
+  /** Clients we already pulled a `notifystreaminfo` for, so we ask only once. */
+  const requestedStreamInfoRef = useRef<Set<number>>(new Set());
   /** Stable self id from the connector (`own_client_id`); nickname match is fallback only. */
   const [ownClientId, setOwnClientId] = useState<number | null>(null);
   const [serverName, setServerName] = useState("");
@@ -6228,6 +6556,27 @@ function AppInner() {
         case "talkers":
           setTalkers(new Set<number>(data.clients));
           break;
+        case "streamEvent": {
+          const streamEvent = data as StreamEvent;
+          if (streamEvent.name === "notifystreaminfo" || streamEvent.name === "notifystreamstarted") {
+            const info = parseStreamInfo(streamEvent.args);
+            if (info) setStreamInfos((prev) => ({ ...prev, [info.clientId]: info }));
+          }
+          if (streamEvent.name === "notifystreamstopped") {
+            const clid = Number(streamEvent.args.clid);
+            if (Number.isFinite(clid)) {
+              setStreamInfos((prev) => {
+                if (!(clid in prev)) return prev;
+                const next = { ...prev };
+                delete next[clid];
+                return next;
+              });
+            }
+          }
+          streamViewerRef.current?.handleEvent(streamEvent);
+          publisherRef.current?.handleEvent(streamEvent);
+          break;
+        }
         case "poke": {
           const id = ++pokeIdRef.current;
           setPokes((prev) => [...prev, { id, from: data.from, message: data.message }]);
@@ -6281,6 +6630,17 @@ function AppInner() {
           appendLog({ text: `Disconnected: ${data.reason}`, kind: "info" });
           logClient("info", "Connection", `Disconnected: ${data.reason}`);
           if (wasConnected) void playSound("disconnect");
+          streamViewerRef.current?.close();
+          streamViewerRef.current = null;
+          setWatchedStream(null);
+          setStreamMedia(null);
+          setStreamInfos({});
+          requestedStreamInfoRef.current.clear();
+          publisherRef.current?.stop();
+          publisherRef.current = null;
+          setPublishState("idle");
+          setPublishViewers([]);
+          setPublishPending([]);
           removeSession(sessionId, { skipSocketClose: true });
           break;
         }
@@ -6517,7 +6877,7 @@ function AppInner() {
 
     ensureAudioContext();
 
-    const sessionId = crypto.randomUUID();
+    const sessionId = randomId();
     sessionParamsRef.current.set(sessionId, params);
 
     const socket = DEMO_MODE ? new DemoSocket() : new WebSocket(GATEWAY_URL);
@@ -7339,7 +7699,7 @@ function AppInner() {
     const channelNames = channels.filter((c) => whisperChannelIds.has(c.id)).map((c) => c.name);
     const clientNames = clients.filter((c) => whisperClientIds.has(c.id)).map((c) => c.name);
     if (channelNames.length === 0 && clientNames.length === 0) return;
-    setWhisperLists((prev) => [...prev, { id: crypto.randomUUID(), name, channelNames, clientNames }]);
+    setWhisperLists((prev) => [...prev, { id: randomId(), name, channelNames, clientNames }]);
   };
 
   const handleActivateWhisperList = (list: WhisperList) => {
@@ -7367,7 +7727,7 @@ function AppInner() {
 
   const handleAddIdentity = () => {
     const identity: Identity = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       name: t("identities.newName"),
       nickname: "",
       phoneticName: "",
@@ -7490,7 +7850,7 @@ function AppInner() {
       const ini = parseIniIdentity(text);
       if (ini) {
         const identity: Identity = {
-          id: crypto.randomUUID(),
+          id: randomId(),
           name: ini.name || file.name.replace(/\.ini$/i, "") || t("identities.newName"),
           nickname: ini.nickname,
           phoneticName: ini.phonetic,
@@ -7506,10 +7866,125 @@ function AppInner() {
         return;
       }
       const name = file.name.replace(/\.(ts3identity\.)?json$/i, "") || t("identities.newName");
-      const identity: Identity = { id: crypto.randomUUID(), name, nickname: "", phoneticName: "", blob: text };
+      const identity: Identity = { id: randomId(), name, nickname: "", phoneticName: "", blob: text };
       setIdentities((prev) => [...prev, identity]);
     };
     reader.readAsText(file);
+  };
+
+  // --- TS6 Stream/Call -----------------------------------------------------
+  //
+  // A client that was already streaming when we joined announces nothing: TS6
+  // only sets the `client_is_streaming` property, and the stream id has to be
+  // pulled with `requeststreaminfo` (ts6-re findings 6b). So whenever a
+  // streaming client shows up in the tree, ask once.
+  useEffect(() => {
+    const streaming = new Set(clients.filter((c) => c.isStreaming).map((c) => c.id));
+    for (const id of streaming) {
+      if (requestedStreamInfoRef.current.has(id)) continue;
+      requestedStreamInfoRef.current.add(id);
+      socketRef.current?.send(JSON.stringify({ type: "requestStreamInfo", clientId: id }));
+    }
+    // Forget clients that stopped, so a later stream is looked up again.
+    for (const id of requestedStreamInfoRef.current) {
+      if (!streaming.has(id)) requestedStreamInfoRef.current.delete(id);
+    }
+    setStreamInfos((prev) => {
+      const stale = Object.keys(prev).filter((id) => !streaming.has(Number(id)));
+      if (stale.length === 0) return prev;
+      const next = { ...prev };
+      for (const id of stale) delete next[Number(id)];
+      return next;
+    });
+  }, [clients]);
+
+  useEffect(() => {
+    const video = streamVideoRef.current;
+    if (video && video.srcObject !== streamMedia) video.srcObject = streamMedia;
+  }, [streamMedia, watchedStream]);
+
+  useEffect(() => {
+    // The publisher owns the capture; the preview only mirrors it, so it is
+    // read off the peer connection's senders rather than kept in state.
+    const video = publishPreviewRef.current;
+    if (!video) return;
+    const media = publisherRef.current?.previewStream ?? null;
+    if (video.srcObject !== media) video.srcObject = media;
+  }, [publishState, publishViewers]);
+
+  const handleStopWatchingStream = () => {
+    // close() sends leaveStream and fires onClosed, which clears the rest.
+    streamViewerRef.current?.close();
+    streamViewerRef.current = null;
+    setWatchedStream(null);
+    setStreamMedia(null);
+    setStreamState("new");
+  };
+
+  const handleWatchStream = (clientId: number) => {
+    const info = streamInfos[clientId];
+    if (!info) return;
+    handleStopWatchingStream();
+    setStreamError(null);
+    const viewer = new StreamViewer(info.id, info.clientId, {
+      send: (message) => socketRef.current?.send(JSON.stringify(message)),
+      onTrack: setStreamMedia,
+      onStateChange: setStreamState,
+      onError: setStreamError,
+      onClosed: () => {
+        // Also reached when the publisher stops, not just via the close button.
+        streamViewerRef.current = null;
+        setWatchedStream(null);
+        setStreamMedia(null);
+      },
+    });
+    streamViewerRef.current = viewer;
+    setWatchedStream(info);
+    viewer.join();
+  };
+
+  const handleStopPublishing = () => {
+    publisherRef.current?.stop();
+    publisherRef.current = null;
+    setPublishState("idle");
+    setPublishViewers([]);
+    setPublishPending([]);
+  };
+
+  const handleStreamButton = () => {
+    if (publisherRef.current) {
+      handleStopPublishing();
+      return;
+    }
+    setStreamSettingsOpen(true);
+  };
+
+  const publishClientName = (clid: number) =>
+    clients.find((c) => c.id === clid)?.name ?? `#${clid}`;
+
+  const handleStartPublishing = (options: StreamPublishOptions) => {
+    if (ownClientId === null) return;
+    setStreamSettingsOpen(false);
+    setPublishError(null);
+    const publisher = new StreamPublisher({
+      send: (message) => socketRef.current?.send(JSON.stringify(message)),
+      ownClientId,
+      onStateChange: (state) => {
+        setPublishState(state);
+        // "stopped" is also how the browser's own stop-sharing bar reports in,
+        // so the ref has to be dropped here and not only in the click handler.
+        if (state === "stopped" || state === "idle") {
+          publisherRef.current = null;
+          setPublishViewers([]);
+          setPublishPending([]);
+        }
+      },
+      onViewersChange: setPublishViewers,
+      onPendingChange: setPublishPending,
+      onError: setPublishError,
+    });
+    publisherRef.current = publisher;
+    void publisher.start(options);
   };
 
   const handleShowClientConnectionInfo = (clientId: number, clientName: string) => {
@@ -8610,6 +9085,21 @@ function AppInner() {
               onChange={(e) => setVadThreshold(Number(e.target.value))}
             />
           </label>
+          <button
+            className={`ts-icon-button${publishState === "live" ? " ts-mic-on" : ""}`}
+            onClick={handleStreamButton}
+            // DemoSocket has no answer for setupstream, so in demo mode the
+            // panel would sit at "starting" forever - after the browser has
+            // already asked the visitor to pick a screen. Don't offer it.
+            disabled={!connected || ownClientId === null || DEMO_MODE}
+            title={
+              DEMO_MODE
+                ? t("publish.demoUnavailable")
+                : `${publishState === "live" ? t("publish.stop") : t("publish.start")} (${t("publish.alpha")})`
+            }
+          >
+            {publishState === "live" ? "🛑" : "🖥️"}
+          </button>
           <span className="ts-toolbar-sep" />
           <button
             className={`ts-icon-button${outputMuted ? " ts-muted-on" : ""}`}
@@ -9148,6 +9638,87 @@ function AppInner() {
         </div>
       ))}
 
+      {streamSettingsOpen && (
+        <StreamSettingsDialog
+          defaultName={`${ownClient?.name ?? "WebSpeak3"} - ${t("publish.screen")}`}
+          onStart={handleStartPublishing}
+          onCancel={() => setStreamSettingsOpen(false)}
+        />
+      )}
+      {(watchedStream || (publishState !== "idle" && publishState !== "stopped")) && (
+      <div className="ts-stream-panels">
+      {publishState !== "idle" && publishState !== "stopped" && (
+        <div className="ts-stream-panel ts-stream-panel-publish">
+          <div className="ts-stream-panel-header">
+            <span className="ts-stream-panel-title">
+              🖥️ {t("publish.title")} <AlphaBadge />
+            </span>
+            <span className="ts-stream-panel-state">
+              {publishState === "live"
+                ? t("publish.viewers", { count: String(publishViewers.length) })
+                : t("publish.starting")}
+            </span>
+            <button
+              className="ts-stream-panel-close"
+              onClick={handleStopPublishing}
+              title={t("publish.stop")}
+            >
+              ✕
+            </button>
+          </div>
+          {/* muted: this is our own capture playing back locally */}
+          <video ref={publishPreviewRef} autoPlay playsInline muted />
+          {publishPending.map(([clid, message]) => (
+            <div className="ts-stream-request" key={clid}>
+              <span className="ts-stream-request-who">
+                {publishClientName(clid)}
+                {message && <em>{message}</em>}
+              </span>
+              <button
+                className="ts-stream-request-allow"
+                onClick={() => void publisherRef.current?.approve(clid)}
+              >
+                {t("publish.request.allow")}
+              </button>
+              <button onClick={() => publisherRef.current?.deny(clid)}>
+                {t("publish.request.deny")}
+              </button>
+              <button
+                className="ts-stream-request-block"
+                onClick={() => publisherRef.current?.deny(clid, true)}
+                title={t("publish.request.blockHint")}
+              >
+                {t("publish.request.block")}
+              </button>
+            </div>
+          ))}
+          {publishError && <div className="ts-stream-panel-error">{publishError}</div>}
+        </div>
+      )}
+      {watchedStream && (
+        <div className="ts-stream-panel">
+          <div className="ts-stream-panel-header">
+            <span className="ts-stream-panel-title">
+              📺 {watchedStream.name || t("stream.untitled")} <AlphaBadge />
+            </span>
+            <span className="ts-stream-panel-state">
+              {streamState === "connected" ? t("stream.live") : t(`stream.state.${streamState}`)}
+            </span>
+            <button
+              className="ts-stream-panel-close"
+              onClick={handleStopWatchingStream}
+              title={t("stream.stop")}
+            >
+              ✕
+            </button>
+          </div>
+          {/* muted so autoplay is never blocked; the user unmutes via the controls */}
+          <video ref={streamVideoRef} autoPlay playsInline muted controls />
+          {streamError && <div className="ts-stream-panel-error">{streamError}</div>}
+        </div>
+      )}
+      </div>
+      )}
       {clientContextMenu && (
         <div
           ref={clientContextMenuRef}
@@ -9177,6 +9748,18 @@ function AppInner() {
             <span className="ts-menu-item-icon">👉</span>
             <span className="ts-menu-item-label">{t("clientContext.poke")}</span>
           </button>
+          {!clientContextMenu.isSelf && streamInfos[clientContextMenu.clientId] && (
+            <button
+              className="ts-menu-item"
+              onClick={() => {
+                handleWatchStream(clientContextMenu.clientId);
+                setClientContextMenu(null);
+              }}
+            >
+              <span className="ts-menu-item-icon">📺</span>
+              <span className="ts-menu-item-label">{t("clientContext.watchStream")}</span>
+            </button>
+          )}
           {!clientContextMenu.isSelf && (
             <button
               className="ts-menu-item"

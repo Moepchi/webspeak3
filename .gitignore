@@ -10,3 +10,6 @@ docker-compose.override.yml
 .claude/
 CLAUDE.md
 .serena/
+
+# TLS material for local HTTPS - a private key never belongs in the repo.
+gateway/certs/

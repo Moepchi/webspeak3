@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::str;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -29,6 +30,7 @@ use tsclientlib::{
 	LicenseType, MaxClients, MessageHandle, MessageTarget, Permission, Reason, ServerGroupId,
 	ServerType, StreamItem, TextMessageTargetMode, TsError,
 };
+use tsproto_packets::commands::{CommandItem, CommandParser};
 use tsproto_packets::packets::{AudioData, CodecType, Direction, Flags, OutAudio, OutCommand, PacketType};
 
 /// 20ms frames at 48kHz, which is what TeamSpeak's Opus voice codec expects.
@@ -106,6 +108,48 @@ struct ClientInfo {
 	/// ServerQuery client (`ClientType::Query`). Always included in the
 	/// snapshot; the UI hides these unless the user enables them per favorite.
 	is_query: bool,
+	/// Whether this client is broadcasting a TS6 Stream/Call right now. This is
+	/// the only way a client that joins late learns a stream exists - the server
+	/// sends no stream command in that case, so the id has to be fetched with
+	/// `requeststreaminfo`. Always `false` on servers that don't report it.
+	is_streaming: bool,
+}
+
+/// Payload for the "streamsetup " stdin command - the `setupstream` args, which
+/// TS6 always sends in full. The server answers by broadcasting
+/// `notifystreamstarted` with the stream id it assigned; there is no id here
+/// because the client does not get to pick one.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamSetupPayload {
+	name: String,
+	/// Source kind. A real TS6 screen share sends 3.
+	#[serde(rename = "type")]
+	kind: u8,
+	bitrate: u32,
+	/// Who may join: TS6's Privacy setting (public / contacts / private).
+	accessibility: u8,
+	/// Connection mode - P2P or via the server's SFU.
+	mode: u8,
+	/// 0 means unlimited.
+	viewer_limit: u32,
+	audio: bool,
+}
+
+/// Payload for the "streamrespond " stdin command - our reply to a
+/// `notifyjoinstreamrequest`. JSON rather than a plain argument line because
+/// `offer` is a multi-line SDP and stdin here is line-based.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamRespondPayload {
+	id: String,
+	clid: u16,
+	#[serde(default)]
+	msg: String,
+	/// The publisher offers, so on accept this carries our whole SDP.
+	#[serde(default)]
+	offer: String,
+	decision: u8,
 }
 
 /// Payload for the "serveredit " stdin command - every field is optional so
@@ -344,6 +388,16 @@ enum Event {
 	/// anywhere), for populating an "add permission" picker.
 	#[serde(rename = "permissionCatalog")]
 	PermissionCatalog { entries: Vec<PermissionCatalogEntry> },
+	/// A TS6 Stream/Call command the server sent us, forwarded verbatim.
+	///
+	/// `tsclientlib` has no declarations for these, so they arrive as
+	/// `StreamItem::UnknownCommand` and are only unescaped here - the payload
+	/// of `notifystreamsignaling` is an opaque JSON blob (SDP offer/answer,
+	/// ICE candidates) that belongs to the browser's `RTCPeerConnection`, not
+	/// to the connector. `name` is the raw command name, e.g.
+	/// `notifystreamsignaling`.
+	#[serde(rename = "streamEvent")]
+	StreamEvent { name: String, args: BTreeMap<String, String> },
 }
 
 #[derive(Serialize)]
@@ -609,6 +663,7 @@ fn snapshot(con: &data::Connection) -> Event {
 				server_groups: c.server_groups.iter().map(|g| g.0).collect(),
 				has_talk_power,
 				is_query: matches!(c.client_type, ClientType::Query { .. }),
+				is_streaming: c.is_streaming.unwrap_or(false),
 			}
 		})
 		.collect::<Vec<_>>();
@@ -638,6 +693,57 @@ fn snapshot(con: &data::Connection) -> Event {
 		server_max_clients: con.server.max_clients,
 		server_clients_online,
 		server_channels_online,
+	}
+}
+
+/// Splits a raw TS command line into its unescaped key/value pairs.
+///
+/// Only the first part of a `|`-separated multi-part command is read; none of
+/// the stream commands use multiple parts. A flag without `=` becomes an empty
+/// string, which is how TeamSpeak treats it too.
+fn parse_ts_args(content: &str) -> BTreeMap<String, String> {
+	let (_, parser) = CommandParser::new(content.as_bytes());
+	let mut args = BTreeMap::new();
+	for item in parser {
+		match item {
+			CommandItem::Argument(arg) => {
+				let (Ok(name), Ok(value)) = (str::from_utf8(arg.name()), arg.value().get_str())
+				else {
+					continue;
+				};
+				args.insert(name.to_string(), value.into_owned());
+			}
+			// Stop at the first part boundary.
+			CommandItem::NextCommand => break,
+		}
+	}
+	args
+}
+
+/// Sends `joinstreamrequest` for a `"<stream-id> <clid> [msg]"` argument line.
+///
+/// Parameter names and order are as recovered from TS6's `TeamSpeak.dll`; `msg`
+/// is written even when empty so the shape matches the native client.
+fn send_join_stream_request(con: &mut tsclientlib::Connection, rest: &str, is_remove: bool) {
+	let mut parts = rest.splitn(3, ' ');
+	let (Some(id), Some(Ok(clid))) = (parts.next(), parts.next().map(|c| c.parse::<u16>())) else {
+		emit(&Event::Error { message: "Usage: streamjoin <stream-id> <clid> [msg]".into() });
+		return;
+	};
+	if id.is_empty() {
+		emit(&Event::Error { message: "Usage: streamjoin <stream-id> <clid> [msg]".into() });
+		return;
+	}
+	let msg = parts.next().unwrap_or("");
+
+	let mut packet =
+		OutCommand::new(Direction::C2S, Flags::empty(), PacketType::Command, "joinstreamrequest");
+	packet.write_arg("id", &id);
+	packet.write_arg("clid", &clid);
+	packet.write_arg("msg", &msg);
+	packet.write_arg("is_remove", &u8::from(is_remove));
+	if let Err(e) = packet.send(con) {
+		emit(&Event::Error { message: format!("joinstreamrequest failed: {e}") });
 	}
 }
 
@@ -1400,6 +1506,150 @@ async fn run(args: Args) -> Result<()> {
 								pending_messages.insert(handle, "Server log".into());
 							}
 							Err(e) => emit(&Event::Error { message: e.to_string() }),
+						}
+					} else if let Some(rest) = l.strip_prefix("streaminfo ") {
+						// A late joiner only learns *that* someone streams, from
+						// the client_is_streaming property; the stream id has to
+						// be pulled per client with this.
+						match rest.trim().parse::<u16>() {
+							Ok(clid) => {
+								let mut packet = OutCommand::new(
+									Direction::C2S,
+									Flags::empty(),
+									PacketType::Command,
+									"requeststreaminfo",
+								);
+								packet.write_arg("clid", &clid);
+								if let Err(e) = packet.send(&mut con) {
+									emit(&Event::Error { message: format!("requeststreaminfo failed: {e}") });
+								}
+							}
+							Err(_) => emit(&Event::Error {
+								message: format!("Invalid client id: {rest}"),
+							}),
+						}
+					} else if let Some(rest) = l.strip_prefix("streamsetup ") {
+						// Announce a stream we publish. The id is assigned by the
+						// server and comes back as notifystreamstarted.
+						match serde_json::from_str::<StreamSetupPayload>(rest) {
+							Ok(s) => {
+								let mut packet = OutCommand::new(
+									Direction::C2S,
+									Flags::empty(),
+									PacketType::Command,
+									"setupstream",
+								);
+								packet.write_arg("name", &s.name);
+								packet.write_arg("type", &s.kind);
+								packet.write_arg("bitrate", &s.bitrate);
+								packet.write_arg("accessibility", &s.accessibility);
+								packet.write_arg("mode", &s.mode);
+								packet.write_arg("viewer_limit", &s.viewer_limit);
+								packet.write_arg("audio", &u8::from(s.audio));
+								match packet.send_with_result(&mut con) {
+									Ok(handle) => {
+										pending_messages.insert(handle, "Start stream".into());
+									}
+									Err(e) => emit(&Event::Error {
+										message: format!("setupstream failed: {e}"),
+									}),
+								}
+							}
+							Err(e) => emit(&Event::Error {
+								message: format!("Invalid streamsetup payload: {e}"),
+							}),
+						}
+					} else if let Some(rest) = l.strip_prefix("streamrespond ") {
+						// Accept or refuse a viewer. decision=1 carries our SDP offer,
+						// which is the mirror of how TS6 answered us when we watched.
+						match serde_json::from_str::<StreamRespondPayload>(rest) {
+							Ok(s) => {
+								let mut packet = OutCommand::new(
+									Direction::C2S,
+									Flags::empty(),
+									PacketType::Command,
+									"respondjoinstreamrequest",
+								);
+								packet.write_arg("id", &s.id);
+								packet.write_arg("clid", &s.clid);
+								packet.write_arg("msg", &s.msg);
+								packet.write_arg("offer", &s.offer);
+								packet.write_arg("decision", &s.decision);
+								match packet.send_with_result(&mut con) {
+									Ok(handle) => {
+										pending_messages.insert(handle, "Stream join response".into());
+									}
+									Err(e) => emit(&Event::Error {
+										message: format!("respondjoinstreamrequest failed: {e}"),
+									}),
+								}
+							}
+							Err(e) => emit(&Event::Error {
+								message: format!("Invalid streamrespond payload: {e}"),
+							}),
+						}
+					} else if let Some(rest) = l.strip_prefix("streamstop ") {
+						// "streamstop <stream-id> [reason]"
+						let mut parts = rest.splitn(2, ' ');
+						match parts.next() {
+							Some(id) if !id.is_empty() => {
+								let mut packet = OutCommand::new(
+									Direction::C2S,
+									Flags::empty(),
+									PacketType::Command,
+									"stopstream",
+								);
+								packet.write_arg("id", &id);
+								packet.write_arg("reason", &parts.next().unwrap_or(""));
+								if let Err(e) = packet.send(&mut con) {
+									emit(&Event::Error { message: format!("stopstream failed: {e}") });
+								}
+							}
+							_ => emit(&Event::Error {
+								message: "Usage: streamstop <stream-id> [reason]".into(),
+							}),
+						}
+					} else if let Some(rest) = l.strip_prefix("streamjoin ") {
+						// "streamjoin <stream-id> <clid> [msg]" - ask the client
+						// publishing a TS6 stream to let us in. Its reply is a
+						// notifyrespondjoinstreamrequest carrying the SDP offer.
+						send_join_stream_request(&mut con, rest, false);
+					} else if let Some(rest) = l.strip_prefix("streamleave ") {
+						// Same command with is_remove=1, which is how TS6 leaves
+						// a stream it has joined.
+						send_join_stream_request(&mut con, rest, true);
+					} else if let Some(rest) = l.strip_prefix("streamsignal ") {
+						// "streamsignal <stream-id> <clid> <json>" - the json is
+						// the rest of the line, opaque to us. Escaping is done by
+						// write_arg.
+						let mut parts = rest.splitn(3, ' ');
+						match (parts.next(), parts.next().and_then(|c| c.parse::<u16>().ok()), parts.next()) {
+							(Some(id), Some(clid), Some(json)) if !id.is_empty() && !json.is_empty() => {
+								let mut packet = OutCommand::new(
+									Direction::C2S,
+									Flags::empty(),
+									PacketType::Command,
+									"streamsignaling",
+								);
+								packet.write_arg("id", &id);
+								packet.write_arg("clid", &clid);
+								packet.write_arg("json", &json);
+								// Not fire-and-forget: a signaling command the server refuses
+								// (a stale clid, say) is otherwise indistinguishable from a peer
+								// that simply ignored the payload, and the whole handshake then
+								// stalls with nothing to look at.
+								match packet.send_with_result(&mut con) {
+									Ok(handle) => {
+										pending_messages.insert(handle, "Stream signaling".into());
+									}
+									Err(e) => emit(&Event::Error {
+										message: format!("streamsignaling failed: {e}"),
+									}),
+								}
+							}
+							_ => emit(&Event::Error {
+								message: "Usage: streamsignal <stream-id> <clid> <json>".into(),
+							}),
 						}
 					} else if l == "banlist" {
 						// No typed builder exists for banlist, so this is built as a raw
@@ -2368,6 +2618,25 @@ async fn run(args: Args) -> Result<()> {
 								emit(&Event::PermissionCatalog { entries });
 							}
 						}
+					}
+				}
+				Some(Ok(StreamItem::UnknownCommand { name, content })) => {
+					// Undeclared commands are invisible everywhere else, so name
+					// them on stderr - that is the only way to tell "the server
+					// sent nothing" apart from "we filtered it out".
+					eprintln!("[unknown-command] {name}");
+					// TS6 Stream/Call signaling. Everything else undeclared is
+					// dropped on purpose - forwarding every unknown command
+					// would turn this into a firehose, and nothing downstream
+					// wants it.
+					// ends_with, not starts_with: the inbound request is
+					// notifyjoinstreamrequest and the reply
+					// notifyrespondjoinstreamrequest. Matching only the latter's
+					// prefix silently dropped every viewer asking to watch *us*,
+					// which is the whole publishing direction.
+					if name.starts_with("notifystream") || name.ends_with("joinstreamrequest")
+					{
+						emit(&Event::StreamEvent { args: parse_ts_args(&content), name });
 					}
 				}
 				Some(Ok(StreamItem::MessageEvent(msg))) => {

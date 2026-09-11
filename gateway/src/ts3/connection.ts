@@ -21,6 +21,24 @@ export interface ChannelInfo {
   hasPassword: boolean;
 }
 
+/**
+ * The `setupstream` arguments. TS6 always sends all of them, so none are
+ * optional here - the defaults live in the caller, not on the wire.
+ */
+export interface StreamSetupOptions {
+  name: string;
+  /** Source kind; a real TS6 screen share sends 3. */
+  type: number;
+  bitrate: number;
+  /** TS6's Privacy setting: who may join without being asked. */
+  accessibility: number;
+  /** Connection mode - peer-to-peer or via the server's SFU. */
+  mode: number;
+  /** 0 means unlimited. */
+  viewerLimit: number;
+  audio: boolean;
+}
+
 export interface ClientInfo {
   id: number;
   channel: number;
@@ -39,6 +57,8 @@ export interface ClientInfo {
   hasTalkPower: boolean;
   /** ServerQuery client; UI may hide these unless enabled per favorite. */
   isQuery: boolean;
+  /** Broadcasting a TS6 Stream/Call. The stream id is fetched separately. */
+  isStreaming: boolean;
 }
 
 export interface GroupEntry {
@@ -184,7 +204,9 @@ export type Ts3ConnectionEvent =
   | { type: "fileDownloadData"; cid: number; path: string; data: string }
   | { type: "fileUploadDone"; cid: number; path: string }
   | { type: "permList"; scope: PermScope; id1: number; id2: number | null; entries: PermissionOverviewEntry[] }
-  | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] };
+  | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] }
+  /** TS6 Stream/Call signaling, forwarded verbatim; `args` is already unescaped. */
+  | { type: "streamEvent"; name: string; args: Record<string, string> };
 
 export type ServerType = "teamspeak" | "teaspeak" | "auto";
 
@@ -255,6 +277,7 @@ export class Ts3Connection {
           server_groups: number[];
           has_talk_power: boolean;
           is_query?: boolean;
+          is_streaming?: boolean;
         }
 
         interface RawChannelInfo {
@@ -384,7 +407,8 @@ export class Ts3Connection {
           | { type: "fileDownloadData"; cid: number; path: string; data: string }
           | { type: "fileUploadDone"; cid: number; path: string }
           | { type: "permList"; scope: PermScope; id1: number; id2: number | null; entries: PermissionOverviewEntry[] }
-          | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] };
+          | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] }
+          | { type: "streamEvent"; name: string; args: Record<string, string> };
 
         if (event.type === "connected") {
           this.emit({
@@ -428,6 +452,7 @@ export class Ts3Connection {
               serverGroups: c.server_groups,
               hasTalkPower: c.has_talk_power,
               isQuery: Boolean(c.is_query),
+              isStreaming: Boolean(c.is_streaming),
             })),
             ownClientId: event.own_client_id ?? 0,
             serverMaxClients: event.server_max_clients ?? 0,
@@ -772,6 +797,79 @@ export class Ts3Connection {
 
   async sendAudio(pcmBase64: string): Promise<void> {
     this.child?.stdin.write(`audio ${pcmBase64}\n`);
+  }
+
+  /** Pulls a streaming client's stream details; answered with a
+   *  `notifystreaminfo` streamEvent carrying the stream id. */
+  async requestStreamInfo(clientId: number): Promise<void> {
+    this.child?.stdin.write(`streaminfo ${clientId}\n`);
+  }
+
+  /** Ask the client publishing a TS6 stream to let us watch. The answer comes
+   *  back as a `streamEvent` of type `notifyrespondjoinstreamrequest`, which
+   *  carries the SDP offer. */
+  async joinStream(streamId: string, clientId: number, message = ""): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    const sanitized = message.replace(/[\r\n]+/g, " ").trim();
+    if (id) this.child?.stdin.write(`streamjoin ${id} ${clientId} ${sanitized}\n`);
+  }
+
+  async leaveStream(streamId: string, clientId: number): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    if (id) this.child?.stdin.write(`streamleave ${id} ${clientId}\n`);
+  }
+
+  /** Relays one signaling payload (SDP answer, ICE candidate) to a stream peer.
+   *  `payload` is passed straight through - the connector only escapes it for
+   *  the TS wire, nobody in this path interprets it. Serializing here rather
+   *  than accepting a string keeps literal newlines out of the line-based
+   *  stdin protocol. */
+  async sendStreamSignal(streamId: string, clientId: number, payload: unknown): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    if (id) this.child?.stdin.write(`streamsignal ${id} ${clientId} ${JSON.stringify(payload)}\n`);
+  }
+
+  /** Announces a stream we publish. The server assigns the id and reports it
+   *  back as a `notifystreamstarted` streamEvent naming our own client id. */
+  async setupStream(options: StreamSetupOptions): Promise<void> {
+    const payload = {
+      name: options.name.replace(/[\r\n]+/g, " ").trim() || "Stream",
+      type: options.type,
+      bitrate: options.bitrate,
+      accessibility: options.accessibility,
+      mode: options.mode,
+      viewerLimit: options.viewerLimit,
+      audio: options.audio,
+    };
+    this.child?.stdin.write(`streamsetup ${JSON.stringify(payload)}\n`);
+  }
+
+  /** Accepts or refuses a viewer that asked to watch our stream. On accept,
+   *  `offer` is our SDP - the publisher offers, which is the mirror of how a
+   *  TS6 publisher answered us. JSON-encoded because an SDP is multi-line. */
+  async respondJoinStream(
+    streamId: string,
+    clientId: number,
+    accept: boolean,
+    offer = "",
+    message = "",
+  ): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    if (!id) return;
+    const payload = {
+      id,
+      clid: clientId,
+      msg: message.replace(/[\r\n]+/g, " ").trim(),
+      offer,
+      decision: accept ? 1 : 0,
+    };
+    this.child?.stdin.write(`streamrespond ${JSON.stringify(payload)}\n`);
+  }
+
+  async stopStream(streamId: string, reason = ""): Promise<void> {
+    const id = streamId.replace(/[\s]+/g, "");
+    const sanitized = reason.replace(/[\r\n]+/g, " ").trim();
+    if (id) this.child?.stdin.write(`streamstop ${id} ${sanitized}\n`);
   }
 
   async setAway(away: boolean, message: string): Promise<void> {
