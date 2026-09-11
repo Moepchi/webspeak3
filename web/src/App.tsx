@@ -1615,6 +1615,21 @@ const RESOLUTION_CHOICES = [360, 480, 720, 1080, 1440, 0];
 const FPS_CHOICES = [5, 30, 60];
 const AUDIO_BITRATE_CHOICES = [64, 96, 128, 192, 256, 320];
 
+// Kill switch for the streaming UI.
+//
+// The frontend and the gateway ship on different schedules: client.webspeak3.de
+// is rebuilt by Cloudflare Pages on every push to main, while the gateway and
+// connector are a Docker image that has to be pulled onto the host by hand. So
+// right after a release the browser can already know about setupStream while
+// the gateway it talks to does not - and an unsupported setupStream is not an
+// error, it is silence: the publish panel waits at "starting" forever, after
+// the browser has already asked the user to share a screen.
+//
+// Flip this back to true once the deployed gateway is on v0.11.0-beta.1 or
+// newer. The durable fix is a capability handshake so the client can tell on
+// its own; see ROADMAP.md.
+const STREAM_UI_ENABLED = false;
+
 // Streaming talks to TS6 over a protocol nobody published, so it is marked
 // alpha everywhere the user can reach it: the settings dialog, both stream
 // panels, and the toolbar button's tooltip.
@@ -9085,6 +9100,7 @@ function AppInner() {
               onChange={(e) => setVadThreshold(Number(e.target.value))}
             />
           </label>
+          {STREAM_UI_ENABLED && (
           <button
             className={`ts-icon-button${publishState === "live" ? " ts-mic-on" : ""}`}
             onClick={handleStreamButton}
@@ -9100,6 +9116,7 @@ function AppInner() {
           >
             {publishState === "live" ? "🛑" : "🖥️"}
           </button>
+          )}
           <span className="ts-toolbar-sep" />
           <button
             className={`ts-icon-button${outputMuted ? " ts-muted-on" : ""}`}
@@ -9748,7 +9765,7 @@ function AppInner() {
             <span className="ts-menu-item-icon">👉</span>
             <span className="ts-menu-item-label">{t("clientContext.poke")}</span>
           </button>
-          {!clientContextMenu.isSelf && streamInfos[clientContextMenu.clientId] && (
+          {STREAM_UI_ENABLED && !clientContextMenu.isSelf && streamInfos[clientContextMenu.clientId] && (
             <button
               className="ts-menu-item"
               onClick={() => {
