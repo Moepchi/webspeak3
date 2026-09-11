@@ -252,19 +252,6 @@ to serve the UI from this port again.</p>
 </body></html>`;
 
 /**
- * Shown at "/" when WEB_STATIC=0, i.e. when this process deliberately is not
- * the app server. Deployment-neutral on purpose: where the UI actually lives
- * is the operator's business, and this host may well be reachable publicly.
- */
-const NO_UI_NOTICE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>WebSpeak3 gateway</title></head>
-<body style="font:14px system-ui;padding:2rem;max-width:40rem">
-<h1>WebSpeak3 gateway</h1>
-<p>WebSocket endpoint: <code>/ws</code></p>
-<p>No web UI is served from this host.</p>
-</body></html>`;
-
-/**
  * TLS material, when configured.
  *
  * Not a nicety: `getDisplayMedia`, `getUserMedia` and `crypto.randomUUID` are
@@ -292,17 +279,24 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
         return;
       }
 
+      // Container healthcheck target (see Dockerfile). Deliberately its own
+      // route rather than "/": with WEB_STATIC=0 every browser-facing path
+      // answers 404, and a probe against "/" would then report the process as
+      // unhealthy for doing exactly what it was configured to do.
+      if (requestUrl.pathname === "/healthz") {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("ok\n");
+        return;
+      }
+
       if (!SERVE_STATIC) {
-        // No SPA fallback here: with the UI hosted elsewhere, answering every
-        // path with a page would put a second, stale-looking "app" on this
-        // hostname. Only "/" gets a notice, everything else is simply absent.
-        if (requestUrl.pathname !== "/") {
-          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("Not found\n");
-          return;
-        }
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(NO_UI_NOTICE);
+        // With the UI hosted elsewhere this process is an API endpoint and
+        // nothing else: no SPA fallback, and not even a notice page at "/",
+        // which would only put a second, stale-looking "app" on a hostname
+        // that is meant to answer /ws and /api/feedback. Everything a browser
+        // asks for is simply absent.
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Not found\n");
         return;
       }
       let filePath = path.join(WEB_DIST, decodeURIComponent(requestUrl.pathname));
