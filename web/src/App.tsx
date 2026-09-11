@@ -96,6 +96,13 @@ const FEEDBACK_URL = import.meta.env.DEV
     ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "").replace(/^ws(s?):\/\//, "http$1://")}/api/feedback`
     : `${window.location.protocol}//${window.location.host}/api/feedback`;
 
+// Ko-fi page of the project (.github/FUNDING.yml). Unlike the feedback button
+// below this is not limited to the maintainer's own instance: it ships in
+// every build, the Docker image included. Self-hosters who would rather not
+// carry someone else's donation link can build with VITE_DONATE_URL= (empty)
+// to drop the button, or point it somewhere else.
+const DONATE_URL = import.meta.env.VITE_DONATE_URL ?? "https://ko-fi.com/moepchi";
+
 // This file's frontend is deployed as multiple Cloudflare Pages projects
 // from the same repo/build (see mem:deployment) - only the maintainer's own
 // production instance talks to a gateway they actually operate and read
@@ -2108,6 +2115,27 @@ function FeedbackFab({ onOpen }: { onOpen: () => void }) {
         💬
       </button>
     </div>
+  );
+}
+
+/**
+ * Small donation pill, pinned above the feedback button (or in its place where
+ * that one is not shown - see `stacked`).
+ */
+function DonateFab({ stacked }: { stacked: boolean }) {
+  const t = useT();
+  if (!DONATE_URL) return null;
+  return (
+    <a
+      className={`ts-donate-fab${stacked ? " ts-donate-fab-stacked" : ""}`}
+      href={DONATE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={t("donate.title")}
+    >
+      <span className="ts-donate-fab-icon" aria-hidden="true">☕</span>
+      {t("donate.label")}
+    </a>
   );
 }
 
@@ -9327,6 +9355,11 @@ function AppInner() {
       {IS_OWN_HOSTED_INSTANCE && !feedbackOpen && (
         <FeedbackFab onOpen={() => setFeedbackOpen(true)} />
       )}
+
+      {/* Sits above the feedback button where that exists, and takes its spot
+          where it does not - the offset follows the instance, not the dialog,
+          so opening feedback does not make the pill jump. */}
+      <DonateFab stacked={IS_OWN_HOSTED_INSTANCE} />
 
       {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
 

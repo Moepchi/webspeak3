@@ -48,6 +48,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "menu.extras.feedback": "Feedback geben",
     "feedback.fab.nudge": "Was denkst du über WebSpeak3? Feedback ist willkommen!",
 
+    "donate.label": "Spenden",
+    "donate.title": "WebSpeak3 auf Ko-fi unterstützen",
+
     "pwa.updateAvailable": "Neue Version verfügbar",
     "pwa.reload": "Neu laden",
 
@@ -685,6 +688,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "menu.extras.options": "Options",
     "menu.extras.feedback": "Send Feedback",
     "feedback.fab.nudge": "What do you think of WebSpeak3? Feedback welcome!",
+
+    "donate.label": "Donate",
+    "donate.title": "Support WebSpeak3 on Ko-fi",
 
     "pwa.updateAvailable": "New version available",
     "pwa.reload": "Reload",

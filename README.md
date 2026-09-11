@@ -178,6 +178,8 @@ Prefer to skip the build entirely? A prebuilt image is published on [Docker Hub]
 docker run -d -p 8080:8080 --name webspeak3 moepchi/webspeak3:latest
 ```
 
+The UI shows a small **Ko-fi donation button** in the bottom right corner. Building it yourself and would rather not carry someone else's donation link? `docker compose build --build-arg DONATE_URL=` removes it (any other value points it somewhere else). Outside Docker the same thing is a build-time variable: `VITE_DONATE_URL= npm run build` in `web/`.
+
 <details>
 <summary><b>🛠️ Manual installation (without Docker)</b></summary>
 

@@ -23,9 +23,16 @@ RUN npm ci
 RUN node -e "require('@rolldown/binding-linux-x64-gnu')" \
     || (rm -rf node_modules package-lock.json && npm install)
 COPY web/ ./
+# The UI carries a small Ko-fi donation button (see web/src/App.tsx).
+# `--build-arg DONATE_URL=` (empty) drops it, any other value points it
+# elsewhere; left alone, the project default is used. The "keep" sentinel
+# exists because an unset build arg and an empty one are indistinguishable
+# inside RUN - without it, "not passed" would silently mean "remove".
+ARG DONATE_URL=keep
 # tsc -b currently fails on pre-existing type errors unrelated to this build;
 # vite build alone is enough to produce the production bundle.
-RUN npx vite build
+RUN if [ "$DONATE_URL" = "keep" ]; then npx vite build; \
+    else VITE_DONATE_URL="$DONATE_URL" npx vite build; fi
 
 # --- Gateway ----------------------------------------------------------------
 FROM node:22-bookworm-slim AS gateway-builder

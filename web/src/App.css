@@ -3739,6 +3739,47 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 
+/* Spenden-Pille. Bewusst nicht in den Theme-Farben: sie soll auffallen, ohne
+   gross zu sein - Ko-fi-Rot, feste Hoehe, Text nur als Beiwerk zum Symbol. */
+.ts-donate-fab {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 5.5rem;
+  z-index: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.25rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #ff5e5b;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+/* Ueber dem Feedback-Button (3rem hoch, bottom: 5.5rem) statt darauf. */
+.ts-donate-fab-stacked {
+  bottom: 9.25rem;
+}
+
+.ts-donate-fab:hover {
+  background: #ff4b47;
+  transform: scale(1.06);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.ts-donate-fab-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
 .ts-feedback-bubble {
   position: relative;
   max-width: 13rem;
