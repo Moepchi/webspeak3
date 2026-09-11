@@ -2053,7 +2053,7 @@ const FEEDBACK_BUBBLE_MIN_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // don't nag mo
 const FEEDBACK_BUBBLE_INITIAL_DELAY_MS = 45_000;
 const FEEDBACK_BUBBLE_AUTO_HIDE_MS = 14_000;
 
-function FeedbackFab({ onOpen }: { onOpen: () => void }) {
+function FeedbackFab({ onOpen, stacked }: { onOpen: () => void; stacked: boolean }) {
   const t = useT();
   const [bubbleVisible, setBubbleVisible] = useState(false);
 
@@ -2086,7 +2086,7 @@ function FeedbackFab({ onOpen }: { onOpen: () => void }) {
   }, [bubbleVisible]);
 
   return (
-    <div className="ts-feedback-fab-wrap">
+    <div className={`ts-feedback-fab-wrap${stacked ? " ts-feedback-fab-wrap-stacked" : ""}`}>
       {bubbleVisible && (
         <div className="ts-feedback-bubble" onClick={onOpen}>
           <button
@@ -2118,16 +2118,13 @@ function FeedbackFab({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-/**
- * Small donation pill, pinned above the feedback button (or in its place where
- * that one is not shown - see `stacked`).
- */
-function DonateFab({ stacked }: { stacked: boolean }) {
+/** Small donation pill, pinned to the bottom right corner. */
+function DonateFab() {
   const t = useT();
   if (!DONATE_URL) return null;
   return (
     <a
-      className={`ts-donate-fab${stacked ? " ts-donate-fab-stacked" : ""}`}
+      className="ts-donate-fab"
       href={DONATE_URL}
       target="_blank"
       rel="noopener noreferrer"
@@ -9352,14 +9349,13 @@ function AppInner() {
 
       <UpdatePrompt />
 
+      {/* The feedback button sits above the donation pill where that one is
+          shown, and takes its spot where it is not. */}
       {IS_OWN_HOSTED_INSTANCE && !feedbackOpen && (
-        <FeedbackFab onOpen={() => setFeedbackOpen(true)} />
+        <FeedbackFab onOpen={() => setFeedbackOpen(true)} stacked={!!DONATE_URL} />
       )}
 
-      {/* Sits above the feedback button where that exists, and takes its spot
-          where it does not - the offset follows the instance, not the dialog,
-          so opening feedback does not make the pill jump. */}
-      <DonateFab stacked={IS_OWN_HOSTED_INSTANCE} />
+      <DonateFab />
 
       {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
 

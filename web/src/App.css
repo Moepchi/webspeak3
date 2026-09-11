@@ -3717,6 +3717,11 @@
   gap: 0.5rem;
 }
 
+/* Ueber der Spenden-Pille (2.25rem hoch, bottom: 5.5rem) statt darauf. */
+.ts-feedback-fab-wrap-stacked {
+  bottom: 8.5rem;
+}
+
 .ts-feedback-fab {
   width: 3rem;
   height: 3rem;
@@ -3762,11 +3767,6 @@
   white-space: nowrap;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
   transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
-}
-
-/* Ueber dem Feedback-Button (3rem hoch, bottom: 5.5rem) statt darauf. */
-.ts-donate-fab-stacked {
-  bottom: 9.25rem;
 }
 
 .ts-donate-fab:hover {
