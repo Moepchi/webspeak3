@@ -375,7 +375,7 @@ server.listen(PORT, () => {
     console.log(`Serving static UI from ${WEB_DIST}`);
     console.log(`Dev tip: use http://localhost:5173/ for live UI; rebuild web/dist after UI changes if you open :${PORT}`);
   } else {
-    console.log(`Static UI disabled (WEB_STATIC=0) — open http://localhost:5173/ for the Vite dev UI`);
+    console.log(`Static UI disabled (WEB_STATIC=0): WebSocket and /api/feedback only, no UI served from this host`);
   }
 });
 
