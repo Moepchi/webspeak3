@@ -5122,6 +5122,11 @@ function AnwendungPanel() {
           <option value="fa">{t("app.language.fa")}</option>
         </select>
       </label>
+      <p className="ts-options-hint">
+        <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
+          {t("app.language.helpTranslate")}
+        </a>
+      </p>
     </>
   );
 }
@@ -9262,6 +9267,16 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">📋</span>
                 <span className="ts-menu-item-label">{t("menu.help.changelog")}</span>
+              </a>
+              <a
+                className="ts-menu-item"
+                href="https://hosted.weblate.org/projects/webspeak3/"
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setHelpMenuOpen(false)}
+              >
+                <span className="ts-menu-item-icon">🌐</span>
+                <span className="ts-menu-item-label">{t("menu.help.translate")}</span>
               </a>
               {IS_OWN_HOSTED_INSTANCE && (
                 <button
