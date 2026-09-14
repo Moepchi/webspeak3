@@ -360,6 +360,23 @@ const heartbeatTimer = setInterval(() => {
 
 wss.on("close", () => clearInterval(heartbeatTimer));
 
+// Docker sends SIGTERM on `docker stop`/`docker compose up -d` (redeploy)
+// before the default ~10s grace period elapses. Warn every connected
+// browser tab so an active call/stream doesn't just silently drop, then
+// exit quickly rather than waiting out the grace period doing nothing.
+process.on("SIGTERM", () => {
+  const payload = JSON.stringify({ type: "notice", messageKey: "restartNotice.body" });
+  for (const socket of wss.clients) {
+    try {
+      socket.send(payload);
+    } catch {
+      /* socket already gone */
+    }
+  }
+  console.log(`[gateway] SIGTERM received, notified ${wss.clients.size} client(s), shutting down`);
+  setTimeout(() => process.exit(0), 500);
+});
+
 server.listen(PORT, () => {
   const scheme = tlsOptions ? "https" : "http";
   console.log(

@@ -115,6 +115,15 @@ const DONATE_URL = import.meta.env.VITE_DONATE_URL ?? "https://ko-fi.com/moepchi
 const OWN_HOSTED_HOSTNAMES = new Set(["client.webspeak3.de"]);
 const IS_OWN_HOSTED_INSTANCE = !DEMO_MODE && OWN_HOSTED_HOSTNAMES.has(window.location.hostname);
 
+// Terms of use, own-hosted instance only (see TODO.md #2/#7.1). Versioned so
+// a rule change can re-surface the modal: bump TOS_VERSION and everyone who
+// accepted an older version is asked again.
+const TOS_VERSION = "v1";
+const TOS_KEY = "webspeak3-tos-accepted";
+function hasAcceptedToS(): boolean {
+  return (localStorage.getItem(TOS_KEY) ?? "").startsWith(TOS_VERSION + ":");
+}
+
 // One-time migration from the pre-rename "ts-web-client:*" localStorage
 // namespace so existing users don't lose their favorites/preferences.
 (function migrateLegacyStorageKeys() {
@@ -1549,6 +1558,72 @@ function ConnectDialog({
   );
 }
 
+// Shown when the gateway broadcasts a "notice" event (currently: a SIGTERM
+// restart warning). Deliberately no backdrop-click-to-close - the point is
+// the user actually reads it before the connection drops, not that it's
+// invisible-easy to swipe away like a cookie banner.
+function RestartNoticeDialog({ message, onAck }: { message: string; onAck: () => void }) {
+  const t = useT();
+  return (
+    <div className="ts-dialog-backdrop">
+      <div className="ts-dialog ts-restart-notice-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="ts-dialog-titlebar">
+          <span>{t("restartNotice.title")}</span>
+        </div>
+        <div className="ts-dialog-body">
+          <p>{message}</p>
+        </div>
+        <div className="ts-dialog-buttons">
+          <div className="ts-dialog-buttons-right">
+            <button type="button" onClick={onAck}>
+              {t("restartNotice.ack")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mandatory (first visit, own-hosted instance): backdrop-click does nothing,
+// only "Accept" closes it. Reopened from the menu afterwards: an ordinary
+// dismissable dialog, since acceptance already happened.
+function ToSDialog({ mandatory, onAccept, onClose }: { mandatory: boolean; onAccept: () => void; onClose: () => void }) {
+  const t = useT();
+  return (
+    <div className="ts-dialog-backdrop" onClick={mandatory ? undefined : onClose}>
+      <div className="ts-dialog ts-tos-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="ts-dialog-titlebar">
+          <span>{t("tos.title")}</span>
+        </div>
+        <div className="ts-dialog-body">
+          <ol className="ts-tos-rules">
+            <li>{t("tos.rule1")}</li>
+            <li>{t("tos.rule2")}</li>
+            <li>{t("tos.rule3")}</li>
+            <li>{t("tos.rule4")}</li>
+            <li>{t("tos.rule5")}</li>
+            <li>{t("tos.rule6")}</li>
+          </ol>
+        </div>
+        <div className="ts-dialog-buttons">
+          <div className="ts-dialog-buttons-right">
+            {mandatory ? (
+              <button type="button" onClick={onAccept}>
+                {t("tos.accept")}
+              </button>
+            ) : (
+              <button type="button" onClick={onClose}>
+                {t("tos.close")}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChannelPasswordDialog({
   channelName,
   wrongPassword,
@@ -2144,7 +2219,10 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
   const [category, setCategory] = useState<FeedbackCategory>("bug");
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
-  const [publishAsIssue, setPublishAsIssue] = useState(false);
+  // Bugs always get filed as a GitHub issue - the checkbox is forced on and
+  // locked while "bug" is selected (see the select's onChange below), so the
+  // initial value has to agree with the initial category.
+  const [publishAsIssue, setPublishAsIssue] = useState(true);
   // Honeypot: real users never see or fill this (hidden via CSS, no label,
   // excluded from tab order); bots that blindly fill every field do. Kept
   // in sync with the gateway's "website" field name.
@@ -2224,7 +2302,14 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
               />
               <label className="ts-dialog-field">
                 {t("feedback.dialog.category")}
-                <select value={category} onChange={(e) => setCategory(e.target.value as FeedbackCategory)}>
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    const next = e.target.value as FeedbackCategory;
+                    setCategory(next);
+                    if (next === "bug") setPublishAsIssue(true);
+                  }}
+                >
                   <option value="bug">{t("feedback.dialog.category.bug")}</option>
                   <option value="idea">{t("feedback.dialog.category.idea")}</option>
                   <option value="other">{t("feedback.dialog.category.other")}</option>
@@ -2248,11 +2333,14 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
                 <input
                   type="checkbox"
                   checked={publishAsIssue}
+                  disabled={category === "bug"}
                   onChange={(e) => setPublishAsIssue(e.target.checked)}
                 />
                 {t("feedback.dialog.publishAsIssue")}
               </label>
-              <p className="ts-feedback-hint">{t("feedback.dialog.publishAsIssueHint")}</p>
+              <p className="ts-feedback-hint">
+                {t(category === "bug" ? "feedback.dialog.publishAsIssueHintBug" : "feedback.dialog.publishAsIssueHint")}
+              </p>
               {status === "error" && <p className="ts-feedback-error">{t("feedback.dialog.error")}</p>}
             </>
           )}
@@ -5815,6 +5903,19 @@ function AppInner() {
   } | null>(null);
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // Gateway-broadcast "notice" (currently: SIGTERM restart warning). Global,
+  // not per-session - it should show no matter which tab is active.
+  const [restartNotice, setRestartNotice] = useState<string | null>(null);
+  // Terms of use, own-hosted instance only (see IS_OWN_HOSTED_INSTANCE): shown
+  // mandatorily on first visit, reopenable any time from the menu afterwards.
+  const [tosOpen, setTosOpen] = useState(false);
+  const [tosMandatory, setTosMandatory] = useState(false);
+  useEffect(() => {
+    if (IS_OWN_HOSTED_INSTANCE && !hasAcceptedToS()) {
+      setTosMandatory(true);
+      setTosOpen(true);
+    }
+  }, []);
   const [connectDialogExpanded, setConnectDialogExpanded] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
@@ -6559,6 +6660,17 @@ function AppInner() {
 
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
+
+      // Broadcast, not tied to any one session - show it regardless of which
+      // tab is active, and regardless of which tab's socket it arrived on
+      // (every open session gets its own copy of the same broadcast).
+      if (data.type === "notice") {
+        // messageKey lets the gateway send a fixed, translated notice (e.g.
+        // the SIGTERM restart warning) without knowing the client's language;
+        // message is a plain-text fallback for anything else.
+        setRestartNotice(data.messageKey ? t(data.messageKey) : String(data.message || ""));
+        return;
+      }
 
       // Inactive tab: update parked snapshot only (no audio playback).
       if (sessionId !== activeSessionIdRef.current) {
@@ -9071,6 +9183,17 @@ function AppInner() {
             💬 {t("menu.extras.feedback")}
           </span>
         )}
+        {IS_OWN_HOSTED_INSTANCE && (
+          <span
+            className="ts-menubar-item"
+            onClick={() => {
+              setTosMandatory(false);
+              setTosOpen(true);
+            }}
+          >
+            📜 {t("menu.extras.tos")}
+          </span>
+        )}
         <span className="ts-menubar-item">{t("menu.help")}</span>
         </div>
         </div>
@@ -9373,6 +9496,20 @@ function AppInner() {
           urls={collectedUrls}
           onClear={() => setCollectedUrls([])}
           onClose={() => setCollectedUrlsOpen(false)}
+        />
+      )}
+
+      {restartNotice && <RestartNoticeDialog message={restartNotice} onAck={() => setRestartNotice(null)} />}
+
+      {tosOpen && (
+        <ToSDialog
+          mandatory={tosMandatory}
+          onAccept={() => {
+            localStorage.setItem(TOS_KEY, `${TOS_VERSION}:${new Date().toISOString().slice(0, 10)}`);
+            setTosOpen(false);
+            setTosMandatory(false);
+          }}
+          onClose={() => setTosOpen(false)}
         />
       )}
 
