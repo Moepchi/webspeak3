@@ -339,7 +339,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "app.language.de": "Deutsch",
     "app.language.en": "English",
     "app.language.zh-CN": "简体中文",
-    "app.language.fa": "فارسی",
+    "app.language.fa": "فارسی (بتا)",
 
     "playback.title": "Wiedergabe",
     "playback.subtitle": "Ändern der Wiedergabeeinstellungen",
@@ -1004,7 +1004,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "app.language.de": "Deutsch",
     "app.language.en": "English",
     "app.language.zh-CN": "简体中文",
-    "app.language.fa": "فارسی",
+    "app.language.fa": "فارسی (بتا)",
 
     "playback.title": "Playback",
     "playback.subtitle": "Change your playback settings",

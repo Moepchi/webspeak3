@@ -252,7 +252,7 @@ export const zhCN: Record<string, string> = {
   "app.language.de": "Deutsch",
   "app.language.en": "English",
   "app.language.zh-CN": "简体中文",
-  "app.language.fa": "فارسی",
+  "app.language.fa": "فارسی (بتا)",
 
   "playback.title": "播放",
   "playback.subtitle": "更改播放设置",
