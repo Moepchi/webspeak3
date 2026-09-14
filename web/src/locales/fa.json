@@ -1,6 +1,4 @@
-// Persian (Farsi) translation. Right-to-left language - see the `dir="rtl"`
-// toggle wired up in i18n.tsx based on `lang`.
-export const fa: Record<string, string> = {
+{
   "menu.connections": "اتصال‌ها",
   "menu.connections.connect": "اتصال",
   "menu.connections.disconnectCurrent": "قطع اتصال از سرور فعلی",
@@ -39,13 +37,10 @@ export const fa: Record<string, string> = {
   "menu.extras.options": "تنظیمات",
   "menu.extras.feedback": "ارسال بازخورد",
   "feedback.fab.nudge": "نظرت درباره WebSpeak3 چیه؟ بازخوردت رو منتظریم!",
-
   "donate.label": "حمایت مالی",
   "donate.title": "حمایت از WebSpeak3 در Ko-fi",
-
   "pwa.updateAvailable": "نسخه جدید موجود است",
   "pwa.reload": "بارگذاری مجدد",
-
   "feedback.dialog.title": "بازخورد",
   "feedback.dialog.intro": "یک اشکال گزارش بده یا ایده‌ای برای بهبود WebSpeak3 به اشتراک بگذار.",
   "feedback.dialog.category": "دسته",
@@ -83,7 +78,6 @@ export const fa: Record<string, string> = {
   "feedback.dialog.success": "از بازخوردت متشکریم!",
   "feedback.dialog.successWithIssue": "متشکریم! Issue ایجاد شد:",
   "feedback.dialog.error": "ارسال ناموفق بود. لطفاً بعداً دوباره امتحان کن.",
-
   "toolbar.setAway": "تنظیم به‌عنوان غایب",
   "toolbar.backOnline": "بازگشت به آنلاین",
   "toolbar.awayOptions": "گزینه‌های غیبت",
@@ -99,10 +93,8 @@ export const fa: Record<string, string> = {
   "toolbar.unmuteSound": "فعال کردن صدا",
   "toolbar.chooseOutputDevice": "انتخاب دستگاه خروجی",
   "toolbar.toggleTheme": "تغییر پوسته",
-
   "away.setGlobal": "تنظیم غیبت سراسری",
   "away.setGlobalStatus": "تنظیم وضعیت غیبت سراسری",
-
   "connect.title": "اتصال",
   "connect.novaSubtitle": "WebSpeak3 به‌طور کامل در مرورگر اجرا می‌شود — بدون نیاز به دانلود",
   "connect.serverAddress": "نام مستعار یا آدرس سرور:",
@@ -127,13 +119,11 @@ export const fa: Record<string, string> = {
   "connect.connecting": "در حال اتصال…",
   "connect.newTab": "در تب جدید",
   "connect.cancel": "لغو",
-
   "channelPasswordDialog.title": "رمز عبور کانال لازم است",
   "channelPasswordDialog.prompt": "این کانال با رمز عبور محافظت می‌شود. لطفاً رمز عبور را وارد کن:",
   "channelPasswordDialog.wrongPassword": "رمز عبور اشتباه است، دوباره امتحان کن:",
   "channelPasswordDialog.submit": "ورود",
   "channelPasswordDialog.cancel": "لغو",
-
   "collectedUrls.title": "لینک‌های جمع‌آوری‌شده",
   "collectedUrls.search": "جستجو:",
   "collectedUrls.url": "لینک",
@@ -141,7 +131,6 @@ export const fa: Record<string, string> = {
   "collectedUrls.lastSeen": "آخرین اشاره",
   "collectedUrls.mentionedBy": "ذکرشده توسط",
   "collectedUrls.clearList": "پاک کردن لیست",
-
   "inviteFriend.title": "دعوت از یک دوست",
   "inviteFriend.type": "نوع دعوت",
   "inviteFriend.includeChannel": "افزودن کانال فعلی",
@@ -149,7 +138,6 @@ export const fa: Record<string, string> = {
   "inviteFriend.addPermissionKey": "افزودن کلید مجوز",
   "inviteFriend.copyToClipboard": "کپی در کلیپ‌بورد",
   "inviteFriend.copied": "کپی شد!",
-
   "clientLog.title": "گزارش کلاینت",
   "clientLog.level.critical": "بحرانی",
   "clientLog.level.error": "خطاها",
@@ -160,14 +148,12 @@ export const fa: Record<string, string> = {
   "clientLog.filter": "فیلتر:",
   "clientLog.caseSensitive": "حساس به بزرگی/کوچکی حروف",
   "clientLog.mark": "علامت‌گذاری",
-
   "whisperHistory.title": "تاریخچه نجوا - {server}",
   "whisperHistory.empty": "هنوز تاریخچه نجوایی وجود ندارد.",
   "whisperHistory.started": "در حال نجوا با: {targets}",
   "whisperHistory.stopped": "نجوا متوقف شد",
   "whisperHistory.clear": "پاک کردن",
   "whisperHistory.options": "گزینه‌ها",
-
   "whisperLists.title": "لیست‌های نجوا",
   "whisperLists.namePlaceholder": "نام لیست",
   "whisperLists.saveCurrent": "ذخیره انتخاب فعلی",
@@ -175,7 +161,6 @@ export const fa: Record<string, string> = {
   "whisperLists.activate": "فعال‌سازی",
   "whisperLists.delete": "حذف",
   "whisperLists.empty": "هنوز لیست نجوایی ذخیره نشده است. مقصدهای نجوا را انتخاب کن و اینجا به‌صورت لیست ذخیره کن.",
-
   "identities.title": "هویت‌ها",
   "identities.activate": "فعال‌سازی",
   "identities.add": "هویت جدید",
@@ -192,7 +177,6 @@ export const fa: Record<string, string> = {
   "identities.isDefault": "در حال حاضر به‌عنوان پیش‌فرض استفاده می‌شود",
   "identities.export": "خروجی گرفتن",
   "identities.import": "وارد کردن",
-
   "connectionInfo.clientTitle": "اطلاعات اتصال - {name}",
   "connectionInfo.serverTitle": "اطلاعات اتصال سرور",
   "connectionInfo.loading": "در حال بارگذاری…",
@@ -219,7 +203,6 @@ export const fa: Record<string, string> = {
   "connectionInfo.bytesReceived": "داده دریافتی:",
   "connectionInfo.bandwidthSent": "پهنای باند ارسالی:",
   "connectionInfo.bandwidthReceived": "پهنای باند دریافتی:",
-
   "menu.self.recordingProfile": "پروفایل ضبط",
   "menu.self.playbackProfile": "پروفایل پخش",
   "menu.self.hotkeyProfile": "پروفایل کلید میانبر",
@@ -234,7 +217,6 @@ export const fa: Record<string, string> = {
   "menu.self.setAvatar": "تنظیم آواتار",
   "menu.self.setPhoneticNickname": "تنظیم تلفظ نام مستعار",
   "menu.self.connectionInfo": "اطلاعات اتصال",
-
   "contacts.title": "مخاطبین",
   "contacts.addOnlineClient": "یک کاربر آنلاین را انتخاب کن...",
   "contacts.add": "افزودن",
@@ -250,7 +232,6 @@ export const fa: Record<string, string> = {
   "contacts.unignore": "لغو نادیده گرفتن",
   "contacts.whisper": "نجوا",
   "contacts.preferences": "ترجیحات",
-
   "favorites.title": "🔖 نشانک‌های myTeamSpeak",
   "favorites.synced": "نشانک‌های همگام‌سازی‌شده",
   "favorites.notLoggedIn": "وارد نشده‌ای",
@@ -266,7 +247,6 @@ export const fa: Record<string, string> = {
   "favorites.ok": "تأیید",
   "favorites.cancel": "لغو",
   "favorites.apply": "اعمال",
-
   "away.dialog.title": "تنظیم پیام غیبت",
   "away.dialog.message": "پیام:",
   "away.dialog.template": "الگو:",
@@ -274,7 +254,6 @@ export const fa: Record<string, string> = {
   "away.dialog.ok": "تأیید",
   "away.dialog.save": "ذخیره",
   "away.dialog.cancel": "لغو",
-
   "options.title": "تنظیمات",
   "options.ok": "تأیید",
   "options.cancel": "لغو",
@@ -318,7 +297,6 @@ export const fa: Record<string, string> = {
   "options.section.nachrichten": "پیام‌ها",
   "options.section.meldungen": "اعلان‌ها",
   "options.section.sounds": "صداها",
-
   "app.title": "برنامه",
   "app.subtitle": "تنظیمات عمومی برنامه",
   "app.language": "زبان",
@@ -327,7 +305,6 @@ export const fa: Record<string, string> = {
   "app.language.en": "English",
   "app.language.zh-CN": "简体中文",
   "app.language.fa": "فارسی (بتا)",
-
   "playback.title": "پخش",
   "playback.subtitle": "تنظیمات پخش را تغییر بده",
   "playback.profile": "پروفایل",
@@ -342,7 +319,6 @@ export const fa: Record<string, string> = {
   "playback.autoVolume": "تنظیم خودکار میزان صدا",
   "playback.ownMicClicks": "پخش کلیک میکروفون برای کاربر خودم",
   "playback.otherMicClicks": "پخش کلیک میکروفون برای سایر کاربران",
-
   "recording.title": "ضبط",
   "recording.subtitle": "تنظیمات ضبط را تغییر بده",
   "recording.device": "دستگاه ضبط:",
@@ -359,7 +335,6 @@ export const fa: Record<string, string> = {
   "recording.echoCancellation": "حذف پژواک",
   "recording.noiseSuppression": "حذف نویز پس‌زمینه",
   "recording.autoGainControl": "کنترل خودکار میزان صدا",
-
   "info.address": "آدرس:",
   "info.version": "نسخه:",
   "info.license": "مجوز:",
@@ -377,7 +352,6 @@ export const fa: Record<string, string> = {
   "info.serverGroups": "گروه‌های سرور:",
   "info.yes": "بله",
   "info.no": "خیر",
-
   "tree.notConnected": "متصل نیست",
   "tree.clickToSelect": "برای انتخاب کلیک کن، برای ورود دوبار کلیک کن",
   "tree.clickToJoin": "برای ورود دوبار کلیک کن",
@@ -428,7 +402,6 @@ export const fa: Record<string, string> = {
   "publish.mode.p2p": "نظیر به نظیر (P2P)",
   "publish.mode.server": "سرور",
   "publish.mode.serverUnavailable": "حالت سرور از طریق SFU در TS6 انجام می‌شود و هنوز پیاده‌سازی نشده است.",
-
   "stream.untitled": "پخش زنده",
   "stream.stop": "بستن پخش زنده",
   "stream.live": "زنده",
@@ -438,7 +411,6 @@ export const fa: Record<string, string> = {
   "stream.state.disconnected": "اتصال قطع شد",
   "stream.state.failed": "اتصال ناموفق بود",
   "stream.state.closed": "پایان یافت",
-
   "chat.server": "سرور",
   "chat.channel": "کانال",
   "chat.notConnected": "متصل نیست",
@@ -447,7 +419,6 @@ export const fa: Record<string, string> = {
   "chat.messagePartner": "پیام به {name}...",
   "chat.send": "ارسال",
   "chat.you": "شما",
-
   "serverLog.clientJoin": "{client} وارد کانال «{channel}» شد",
   "serverLog.clientLeave": "{client} قطع اتصال شد (خروج)",
   "serverLog.clientChannelSwitch": "{client} از کانال «{fromChannel}» به «{toChannel}» منتقل شد",
@@ -457,19 +428,16 @@ export const fa: Record<string, string> = {
   "serverLog.channelEdited": "کانال «{channel}» ویرایش شد",
   "serverLog.serverEdited": "تنظیمات سرور تغییر کرد",
   "serverLog.permissionError": "مجوز کافی نیست: {action}",
-
   "poke.title": "سقلمه",
   "poke.optionalMessage": "پیام اختیاری...",
   "poke.send": "سقلمه",
   "poke.cancel": "لغو",
   "poke.pokedYou": "به تو سقلمه زد",
   "poke.dismiss": "رد کردن",
-
   "kick.title": "اخراج:",
   "kick.reasonPlaceholder": "دلیل (اختیاری)...",
   "kick.confirm": "اخراج",
   "kick.cancel": "لغو",
-
   "ban.title": "مسدود کردن:",
   "ban.reasonPlaceholder": "دلیل (اختیاری)...",
   "ban.duration": "مدت زمان:",
@@ -479,7 +447,6 @@ export const fa: Record<string, string> = {
   "ban.duration1w": "۱ هفته",
   "ban.confirm": "مسدود کردن",
   "ban.cancel": "لغو",
-
   "serverEdit.title": "ویرایش سرور مجازی",
   "serverEdit.tab.host": "میزبان",
   "serverEdit.tab.misc": "متفرقه",
@@ -517,7 +484,6 @@ export const fa: Record<string, string> = {
   "serverEdit.unchanged": "بدون تغییر",
   "serverEdit.save": "ذخیره",
   "serverEdit.cancel": "لغو",
-
   "serverProtocolLog.title": "گزارش سرور",
   "serverProtocolLog.empty": "هیچ رکورد گزارشی وجود ندارد.",
   "banList.title": "لیست مسدودشده‌ها",
@@ -549,23 +515,19 @@ export const fa: Record<string, string> = {
   "offlineMessages.markRead": "علامت‌گذاری به‌عنوان خوانده‌شده",
   "offlineMessages.backToList": "بازگشت به لیست",
   "dialog.cancel": "لغو",
-
   "groupAssign.channelTitle": "اختصاص گروه کانال",
   "groupAssign.serverTitle": "اختصاص گروه سرور",
   "groupAssign.empty": "هیچ گروهی یافت نشد.",
   "groupAssign.clickToRemove": "برای حذف کلیک کن",
-
   "serverQueryLogin.username": "نام کاربری",
   "serverQueryLogin.password": "رمز عبور",
   "serverQueryLogin.login": "ورود",
-
   "permissionOverview.title": "مجوزهای من",
   "permissionOverview.empty": "هیچ مجوزی یافت نشد.",
   "permissionOverview.name": "مجوز",
   "permissionOverview.value": "مقدار",
   "permissionOverview.negated": "معکوس‌شده",
   "permissionOverview.skip": "رد شدن",
-
   "permsEditor.title": "مجوزها",
   "permsEditor.tab.server": "گروه‌های سرور",
   "permsEditor.tab.client": "مجوزهای کاربر",
@@ -578,7 +540,6 @@ export const fa: Record<string, string> = {
   "permsEditor.pickTarget": "یک گروه/کانال را از سمت چپ انتخاب کن یا شناسه کاربر را وارد کن.",
   "permsEditor.addPermission": "افزودن",
   "permsEditor.searchPermission": "جستجوی مجوز...",
-
   "dialog.ok": "تأیید",
   "channelContext.join": "تغییر به این کانال",
   "channelContext.files": "فایل‌ها...",
@@ -598,13 +559,11 @@ export const fa: Record<string, string> = {
   "fileBrowser.deleteConfirm": "واقعاً حذف شود؟",
   "fileBrowser.uploading": "در حال بارگذاری...",
   "fileBrowser.downloading": "در حال دانلود...",
-
   "serverContext.icons": "آیکون‌های سرور...",
   "serverIcons.title": "مدیریت آیکون‌های سرور",
   "serverIcons.upload": "بارگذاری آیکون",
   "serverIcons.iconId": "شناسه آیکون",
   "serverIcons.empty": "هیچ آیکونی یافت نشد.",
-
   "clientContext.privateChat": "گفتگوی خصوصی",
   "clientContext.poke": "سقلمه",
   "clientContext.watchStream": "تماشای پخش زنده",
@@ -619,20 +578,16 @@ export const fa: Record<string, string> = {
   "clientContext.kick": "اخراج از سرور",
   "clientContext.ban": "مسدود کردن",
   "clientContext.notSupported": "هنوز در کلاینت وب پشتیبانی نمی‌شود",
-
   "moveClient.title": "انتقال",
   "moveClient.empty": "هیچ کانالی موجود نیست.",
   "moveClient.current": "کانال فعلی",
   "moveClient.spacer": "فاصله‌گذار",
-
   "serverContext.connectionInfo": "اطلاعات اتصال سرور",
   "serverContext.copyAddress": "کپی آدرس سرور",
   "serverContext.addFavorite": "افزودن به نشانک‌ها",
   "serverContext.disconnect": "قطع اتصال",
-
   "connectError.dismiss": "رد کردن",
   "dialog.close": "بستن",
-
   "sounds.title": "صداها",
   "sounds.subtitle": "پیکربندی اعلان‌های صوتی برای رویدادها",
   "sounds.enable": "فعال‌سازی صداها",
@@ -651,7 +606,6 @@ export const fa: Record<string, string> = {
   "sounds.reset": "بازنشانی",
   "sounds.importSoundpack": "وارد کردن بسته صوتی (.ts3soundpack)",
   "sounds.importResult": "{matched} صدا وارد شد، {unmatched} فایل مطابقت نداشت",
-
   "nachrichten.title": "پیام‌ها",
   "nachrichten.subtitle": "سفارشی‌سازی پیام‌ها",
   "nachrichten.disconnectMessage": "قطع اتصال:",
@@ -662,5 +616,5 @@ export const fa: Record<string, string> = {
   "nachrichten.templateName": "نام الگو",
   "nachrichten.message": "پیام",
   "nachrichten.add": "افزودن",
-  "nachrichten.delete": "حذف",
-};
+  "nachrichten.delete": "حذف"
+}

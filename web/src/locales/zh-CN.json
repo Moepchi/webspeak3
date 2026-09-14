@@ -1,4 +1,4 @@
-export const zhCN: Record<string, string> = {
+{
   "menu.connections": "连接",
   "menu.connections.connect": "连接",
   "menu.connections.disconnectCurrent": "断开当前服务器",
@@ -32,7 +32,6 @@ export const zhCN: Record<string, string> = {
   "menu.extras.startMultitrackRecording": "开始多轨录音",
   "menu.extras.stopRecording": "停止录音",
   "menu.extras.options": "选项",
-
   "toolbar.setAway": "设为离开",
   "toolbar.backOnline": "恢复在线",
   "toolbar.awayOptions": "离开选项",
@@ -48,10 +47,8 @@ export const zhCN: Record<string, string> = {
   "toolbar.unmuteSound": "开启声音（取消拒听）",
   "toolbar.chooseOutputDevice": "选择输出设备",
   "toolbar.toggleTheme": "切换主题",
-
   "away.setGlobal": "全局设为离开",
   "away.setGlobalStatus": "设置全局离开状态",
-
   "connect.title": "连接",
   "connect.serverAddress": "服务器昵称或地址：",
   "connect.serverPassword": "服务器密码：",
@@ -75,7 +72,6 @@ export const zhCN: Record<string, string> = {
   "connect.connecting": "正在连接…",
   "connect.newTab": "在新标签页中打开",
   "connect.cancel": "取消",
-
   "collectedUrls.title": "收集的链接",
   "collectedUrls.search": "搜索：",
   "collectedUrls.url": "链接",
@@ -83,7 +79,6 @@ export const zhCN: Record<string, string> = {
   "collectedUrls.lastSeen": "最后提及",
   "collectedUrls.mentionedBy": "提及者",
   "collectedUrls.clearList": "清空列表",
-
   "inviteFriend.title": "邀请好友",
   "inviteFriend.type": "邀请类型",
   "inviteFriend.includeChannel": "包含当前频道",
@@ -91,7 +86,6 @@ export const zhCN: Record<string, string> = {
   "inviteFriend.addPermissionKey": "添加权限密钥",
   "inviteFriend.copyToClipboard": "复制到剪贴板",
   "inviteFriend.copied": "已复制！",
-
   "clientLog.title": "客户端日志",
   "clientLog.level.critical": "严重",
   "clientLog.level.error": "错误",
@@ -102,14 +96,12 @@ export const zhCN: Record<string, string> = {
   "clientLog.filter": "筛选：",
   "clientLog.caseSensitive": "区分大小写",
   "clientLog.mark": "标记",
-
   "whisperHistory.title": "悄悄话历史 - {server}",
   "whisperHistory.empty": "暂无悄悄话历史。",
   "whisperHistory.started": "正在向以下目标发送悄悄话：{targets}",
   "whisperHistory.stopped": "已停止悄悄话",
   "whisperHistory.clear": "清除",
   "whisperHistory.options": "选项",
-
   "whisperLists.title": "悄悄话列表",
   "whisperLists.namePlaceholder": "列表名称",
   "whisperLists.saveCurrent": "保存当前选择",
@@ -117,7 +109,6 @@ export const zhCN: Record<string, string> = {
   "whisperLists.activate": "启用",
   "whisperLists.delete": "删除",
   "whisperLists.empty": "尚未保存悄悄话列表。请选择悄悄话目标并在此保存为列表。",
-
   "identities.title": "身份",
   "identities.activate": "启用",
   "identities.add": "新建身份",
@@ -134,7 +125,6 @@ export const zhCN: Record<string, string> = {
   "identities.isDefault": "当前用作默认身份",
   "identities.export": "导出",
   "identities.import": "导入",
-
   "connectionInfo.clientTitle": "连接信息 - {name}",
   "connectionInfo.serverTitle": "服务器连接信息",
   "connectionInfo.loading": "正在加载…",
@@ -161,7 +151,6 @@ export const zhCN: Record<string, string> = {
   "connectionInfo.bytesReceived": "已接收数据：",
   "connectionInfo.bandwidthSent": "发送带宽：",
   "connectionInfo.bandwidthReceived": "接收带宽：",
-
   "menu.self.recordingProfile": "录音配置",
   "menu.self.playbackProfile": "播放配置",
   "menu.self.hotkeyProfile": "快捷键配置",
@@ -176,7 +165,6 @@ export const zhCN: Record<string, string> = {
   "menu.self.setAvatar": "设置头像",
   "menu.self.setPhoneticNickname": "设置昵称读音",
   "menu.self.connectionInfo": "连接信息",
-
   "contacts.title": "联系人",
   "contacts.addOnlineClient": "选择在线用户...",
   "contacts.add": "添加",
@@ -192,7 +180,6 @@ export const zhCN: Record<string, string> = {
   "contacts.unignore": "取消忽略",
   "contacts.whisper": "悄悄话",
   "contacts.preferences": "偏好设置",
-
   "favorites.title": "🔖 myTeamSpeak 收藏夹",
   "favorites.synced": "已同步的收藏",
   "favorites.notLoggedIn": "未登录",
@@ -208,7 +195,6 @@ export const zhCN: Record<string, string> = {
   "favorites.ok": "确定",
   "favorites.cancel": "取消",
   "favorites.apply": "应用",
-
   "away.dialog.title": "设置离开消息",
   "away.dialog.message": "消息：",
   "away.dialog.template": "模板：",
@@ -216,7 +202,6 @@ export const zhCN: Record<string, string> = {
   "away.dialog.ok": "确定",
   "away.dialog.save": "保存",
   "away.dialog.cancel": "取消",
-
   "options.title": "选项",
   "options.ok": "确定",
   "options.cancel": "取消",
@@ -244,7 +229,6 @@ export const zhCN: Record<string, string> = {
   "options.section.nachrichten": "消息",
   "options.section.meldungen": "通知",
   "options.section.sounds": "声音",
-
   "app.title": "应用",
   "app.subtitle": "常规应用设置",
   "app.language": "语言",
@@ -253,7 +237,6 @@ export const zhCN: Record<string, string> = {
   "app.language.en": "English",
   "app.language.zh-CN": "简体中文",
   "app.language.fa": "فارسی (بتا)",
-
   "playback.title": "播放",
   "playback.subtitle": "更改播放设置",
   "playback.profile": "配置",
@@ -268,7 +251,6 @@ export const zhCN: Record<string, string> = {
   "playback.autoVolume": "自动调节音量",
   "playback.ownMicClicks": "播放自己的麦克风按键音",
   "playback.otherMicClicks": "播放其他用户的麦克风按键音",
-
   "recording.title": "录音",
   "recording.subtitle": "更改录音设置",
   "recording.device": "录音设备：",
@@ -284,7 +266,6 @@ export const zhCN: Record<string, string> = {
   "recording.typingAttenuation": "键盘声衰减",
   "recording.echoCancellation": "回声消除",
   "recording.noiseSuppression": "消除背景噪声",
-
   "info.address": "地址：",
   "info.version": "版本：",
   "info.license": "许可证：",
@@ -302,7 +283,6 @@ export const zhCN: Record<string, string> = {
   "info.serverGroups": "服务器组：",
   "info.yes": "是",
   "info.no": "否",
-
   "tree.notConnected": "未连接",
   "tree.clickToSelect": "单击选择，双击加入",
   "tree.clickToJoin": "双击加入",
@@ -316,7 +296,6 @@ export const zhCN: Record<string, string> = {
   "tree.talking": "正在说话",
   "tree.noTalkPower": "在此频道中没有发言权限",
   "tree.soundMuted": "声音已关闭（拒听）",
-
   "chat.server": "服务器",
   "chat.channel": "频道",
   "chat.notConnected": "未连接",
@@ -325,7 +304,6 @@ export const zhCN: Record<string, string> = {
   "chat.messagePartner": "向 {name} 发送消息...",
   "chat.send": "发送",
   "chat.you": "你",
-
   "serverLog.clientJoin": "{client} 进入了频道“{channel}”",
   "serverLog.clientLeave": "{client} 已断开连接（离开）",
   "serverLog.clientChannelSwitch": "{client} 从频道“{fromChannel}”移动到“{toChannel}”",
@@ -335,19 +313,16 @@ export const zhCN: Record<string, string> = {
   "serverLog.channelEdited": "频道“{channel}”已编辑",
   "serverLog.serverEdited": "服务器设置已更改",
   "serverLog.permissionError": "缺少权限：{action}",
-
   "poke.title": "戳一戳",
   "poke.optionalMessage": "可选消息...",
   "poke.send": "发送",
   "poke.cancel": "取消",
   "poke.pokedYou": "戳了你一下",
   "poke.dismiss": "关闭",
-
   "kick.title": "踢出：",
   "kick.reasonPlaceholder": "原因（可选）...",
   "kick.confirm": "踢出",
   "kick.cancel": "取消",
-
   "ban.title": "封禁：",
   "ban.reasonPlaceholder": "原因（可选）...",
   "ban.duration": "时长：",
@@ -357,7 +332,6 @@ export const zhCN: Record<string, string> = {
   "ban.duration1w": "1 周",
   "ban.confirm": "封禁",
   "ban.cancel": "取消",
-
   "serverEdit.title": "编辑虚拟服务器",
   "serverEdit.tab.host": "主机",
   "serverEdit.tab.misc": "其他",
@@ -395,7 +369,6 @@ export const zhCN: Record<string, string> = {
   "serverEdit.unchanged": "保持不变",
   "serverEdit.save": "保存",
   "serverEdit.cancel": "取消",
-
   "serverProtocolLog.title": "服务器日志",
   "serverProtocolLog.empty": "暂无日志条目。",
   "banList.title": "封禁列表",
@@ -427,23 +400,19 @@ export const zhCN: Record<string, string> = {
   "offlineMessages.markRead": "标记为已读",
   "offlineMessages.backToList": "返回列表",
   "dialog.cancel": "取消",
-
   "groupAssign.channelTitle": "分配频道组",
   "groupAssign.serverTitle": "分配服务器组",
   "groupAssign.empty": "未找到组。",
   "groupAssign.clickToRemove": "单击移除",
-
   "serverQueryLogin.username": "用户名",
   "serverQueryLogin.password": "密码",
   "serverQueryLogin.login": "登录",
-
   "permissionOverview.title": "我的权限",
   "permissionOverview.empty": "未找到权限。",
   "permissionOverview.name": "权限",
   "permissionOverview.value": "值",
   "permissionOverview.negated": "否定",
   "permissionOverview.skip": "跳过",
-
   "permsEditor.title": "权限",
   "permsEditor.tab.server": "服务器组",
   "permsEditor.tab.client": "用户权限",
@@ -456,7 +425,6 @@ export const zhCN: Record<string, string> = {
   "permsEditor.pickTarget": "请在左侧选择组或频道，或输入用户 ID。",
   "permsEditor.addPermission": "添加",
   "permsEditor.searchPermission": "搜索权限...",
-
   "dialog.ok": "确定",
   "channelContext.join": "切换到频道",
   "channelContext.files": "文件...",
@@ -476,13 +444,11 @@ export const zhCN: Record<string, string> = {
   "fileBrowser.deleteConfirm": "确定要删除吗？",
   "fileBrowser.uploading": "正在上传...",
   "fileBrowser.downloading": "正在下载...",
-
   "serverContext.icons": "服务器图标...",
   "serverIcons.title": "管理服务器图标",
   "serverIcons.upload": "上传图标",
   "serverIcons.iconId": "图标 ID",
   "serverIcons.empty": "未找到图标。",
-
   "clientContext.privateChat": "私聊",
   "clientContext.poke": "戳一戳",
   "clientContext.moveTo": "移动到…",
@@ -496,20 +462,16 @@ export const zhCN: Record<string, string> = {
   "clientContext.kick": "踢出服务器",
   "clientContext.ban": "封禁",
   "clientContext.notSupported": "网页客户端暂不支持此功能",
-
   "moveClient.title": "移动",
   "moveClient.empty": "没有可用频道。",
   "moveClient.current": "当前频道",
   "moveClient.spacer": "间隔频道",
-
   "serverContext.connectionInfo": "服务器连接信息",
   "serverContext.copyAddress": "复制服务器地址",
   "serverContext.addFavorite": "添加到收藏夹",
   "serverContext.disconnect": "断开连接",
-
   "connectError.dismiss": "关闭",
   "dialog.close": "关闭",
-
   "sounds.title": "声音",
   "sounds.subtitle": "配置事件提示音",
   "sounds.enable": "启用声音",
@@ -528,7 +490,6 @@ export const zhCN: Record<string, string> = {
   "sounds.reset": "重置",
   "sounds.importSoundpack": "导入声音包（.ts3soundpack）",
   "sounds.importResult": "已导入 {matched} 个声音，{unmatched} 个文件未匹配",
-
   "nachrichten.title": "消息",
   "nachrichten.subtitle": "自定义消息",
   "nachrichten.disconnectMessage": "断开连接：",
@@ -540,7 +501,6 @@ export const zhCN: Record<string, string> = {
   "nachrichten.message": "消息",
   "nachrichten.add": "添加",
   "nachrichten.delete": "删除",
-
   "menu.help.about": "关于 WebSpeak3",
   "menu.help.github": "GitHub",
   "menu.help.changelog": "更新日志",
@@ -570,11 +530,9 @@ export const zhCN: Record<string, string> = {
   "feedback.dialog.success": "感谢你的反馈！",
   "feedback.dialog.successWithIssue": "谢谢！已创建 Issue：",
   "feedback.dialog.error": "发送失败，请稍后重试。",
-
   "restartNotice.title": "短暂中断",
   "restartNotice.body": "服务器即将短暂重启，你的连接会中断片刻。",
   "restartNotice.ack": "知道了",
-
   "menu.extras.tos": "使用条款",
   "tos.title": "client.webspeak3.de 使用条款",
   "tos.rule1": "本客户端仅供通过浏览器私人、非商业使用 TeamSpeak / TeaSpeak / GreenTeaSpeak 服务器。",
@@ -589,15 +547,12 @@ export const zhCN: Record<string, string> = {
   "tos.rule6": "点击“接受”即表示你同意本条款。你的同意状态仅保存在本地浏览器中；若条款更新，系统会再次询问。",
   "tos.accept": "接受",
   "tos.close": "关闭",
-
   "connect.novaSubtitle": "WebSpeak3 完全在浏览器中运行 —— 无需下载",
-
   "channelPasswordDialog.title": "需要频道密码",
   "channelPasswordDialog.prompt": "此频道受密码保护，请输入密码：",
   "channelPasswordDialog.wrongPassword": "密码错误，请重试：",
   "channelPasswordDialog.submit": "加入",
   "channelPasswordDialog.cancel": "取消",
-
   "design.custom.new": "+ 新建设计",
   "design.custom.import": "导入设计",
   "design.custom.edit": "编辑",
@@ -614,11 +569,8 @@ export const zhCN: Record<string, string> = {
   "design.custom.save": "保存",
   "design.custom.copyOf": "{name} 的副本",
   "design.custom.importError": "该文件无法作为 WebSpeak3 设计读取。",
-
   "recording.autoGainControl": "自动增益控制",
-
   "tree.streaming": "正在直播",
-
   "publish.alpha": "内测",
   "publish.alphaTitle": "内测阶段 —— 不稳定，可能随时变更或失效",
   "publish.demoUnavailable": "演示模式下无法使用直播功能 —— 需要真实的 TeamSpeak 6 服务器。",
@@ -655,7 +607,6 @@ export const zhCN: Record<string, string> = {
   "publish.mode.p2p": "点对点（P2P）",
   "publish.mode.server": "服务器",
   "publish.mode.serverUnavailable": "服务器模式需经过 TS6 的 SFU，尚未实现。",
-
   "stream.untitled": "直播",
   "stream.stop": "关闭直播",
   "stream.live": "直播中",
@@ -665,6 +616,5 @@ export const zhCN: Record<string, string> = {
   "stream.state.disconnected": "连接中断",
   "stream.state.failed": "连接失败",
   "stream.state.closed": "已结束",
-
-  "clientContext.watchStream": "观看直播",
-};
+  "clientContext.watchStream": "观看直播"
+}
