@@ -82,7 +82,7 @@ const FEEDBACK_LOG_FILE = process.env.FEEDBACK_LOG_FILE ?? path.resolve(process.
 // fresh file is started. Keeps disk usage bounded on a plain JSON-lines
 // file with no other retention policy.
 const FEEDBACK_LOG_MAX_BYTES = 5 * 1024 * 1024;
-const FEEDBACK_CATEGORIES = new Set(["bug", "idea", "other"]);
+const FEEDBACK_CATEGORIES = new Set(["bug", "idea", "report", "other"]);
 const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
 
 async function rotateFeedbackLogIfNeeded(): Promise<void> {

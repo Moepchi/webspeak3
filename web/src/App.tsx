@@ -1601,8 +1601,20 @@ function ToSDialog({ mandatory, onAccept, onClose }: { mandatory: boolean; onAcc
             <li>{t("tos.rule1")}</li>
             <li>{t("tos.rule2")}</li>
             <li>{t("tos.rule3")}</li>
-            <li>{t("tos.rule4")}</li>
-            <li>{t("tos.rule5")}</li>
+            <li>
+              {t("tos.rule4Pre")}
+              <a href="https://webspeak3.de/datenschutz.html" target="_blank" rel="noreferrer">
+                {t("tos.privacyLinkText")}
+              </a>
+              {t("tos.rule4Post")}
+            </li>
+            <li>
+              {t("tos.rule5Pre")}
+              <a href="https://webspeak3.de/impressum.html" target="_blank" rel="noreferrer">
+                {t("tos.legalLinkText")}
+              </a>
+              {t("tos.rule5Post")}
+            </li>
             <li>{t("tos.rule6")}</li>
           </ol>
         </div>
@@ -2211,7 +2223,7 @@ function DonateFab() {
   );
 }
 
-type FeedbackCategory = "bug" | "idea" | "other";
+type FeedbackCategory = "bug" | "idea" | "other" | "report";
 
 function FeedbackDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
@@ -2308,10 +2320,14 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
                     const next = e.target.value as FeedbackCategory;
                     setCategory(next);
                     if (next === "bug") setPublishAsIssue(true);
+                    // Reports (e.g. ToS violations) never become a public
+                    // GitHub issue - they may name another user's server.
+                    else if (next === "report") setPublishAsIssue(false);
                   }}
                 >
                   <option value="bug">{t("feedback.dialog.category.bug")}</option>
                   <option value="idea">{t("feedback.dialog.category.idea")}</option>
+                  <option value="report">{t("feedback.dialog.category.report")}</option>
                   <option value="other">{t("feedback.dialog.category.other")}</option>
                 </select>
               </label>
@@ -2329,18 +2345,24 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
                 {t("feedback.dialog.email")}
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
               </label>
-              <label className="ts-feedback-checkbox-field">
-                <input
-                  type="checkbox"
-                  checked={publishAsIssue}
-                  disabled={category === "bug"}
-                  onChange={(e) => setPublishAsIssue(e.target.checked)}
-                />
-                {t("feedback.dialog.publishAsIssue")}
-              </label>
-              <p className="ts-feedback-hint">
-                {t(category === "bug" ? "feedback.dialog.publishAsIssueHintBug" : "feedback.dialog.publishAsIssueHint")}
-              </p>
+              {category === "report" ? (
+                <p className="ts-feedback-hint">{t("feedback.dialog.reportHint")}</p>
+              ) : (
+                <>
+                  <label className="ts-feedback-checkbox-field">
+                    <input
+                      type="checkbox"
+                      checked={publishAsIssue}
+                      disabled={category === "bug"}
+                      onChange={(e) => setPublishAsIssue(e.target.checked)}
+                    />
+                    {t("feedback.dialog.publishAsIssue")}
+                  </label>
+                  <p className="ts-feedback-hint">
+                    {t(category === "bug" ? "feedback.dialog.publishAsIssueHintBug" : "feedback.dialog.publishAsIssueHint")}
+                  </p>
+                </>
+              )}
               {status === "error" && <p className="ts-feedback-error">{t("feedback.dialog.error")}</p>}
             </>
           )}
