@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { zhCN } from "./locales/zh-CN";
+import { fa } from "./locales/fa";
 
-export type Lang = "de" | "en" | "zh-CN";
+export type Lang = "de" | "en" | "zh-CN" | "fa";
+const RTL_LANGS = new Set<Lang>(["fa"]);
 export type LangPref = "auto" | Lang;
 
 const LANGUAGE_KEY = "webspeak3:language";
@@ -337,6 +339,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "app.language.de": "Deutsch",
     "app.language.en": "English",
     "app.language.zh-CN": "简体中文",
+    "app.language.fa": "فارسی",
 
     "playback.title": "Wiedergabe",
     "playback.subtitle": "Ändern der Wiedergabeeinstellungen",
@@ -1001,6 +1004,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "app.language.de": "Deutsch",
     "app.language.en": "English",
     "app.language.zh-CN": "简体中文",
+    "app.language.fa": "فارسی",
 
     "playback.title": "Playback",
     "playback.subtitle": "Change your playback settings",
@@ -1340,12 +1344,14 @@ const translations: Record<Lang, Record<string, string>> = {
     "nachrichten.delete": "Delete",
   },
   "zh-CN": zhCN,
+  fa,
 };
 
 function detectSystemLang(): Lang {
   const nav = typeof navigator !== "undefined" ? navigator.language : "en";
   const normalized = nav?.toLowerCase() ?? "en";
   if (normalized.startsWith("zh")) return "zh-CN";
+  if (normalized.startsWith("fa")) return "fa";
   return normalized.startsWith("de") ? "de" : "en";
 }
 
@@ -1355,7 +1361,7 @@ export function resolveLang(pref: LangPref): Lang {
 
 export function loadLangPref(): LangPref {
   const raw = localStorage.getItem(LANGUAGE_KEY);
-  return raw === "de" || raw === "en" || raw === "zh-CN" || raw === "auto" ? raw : "auto";
+  return raw === "de" || raw === "en" || raw === "zh-CN" || raw === "fa" || raw === "auto" ? raw : "auto";
 }
 
 export function saveLangPref(pref: LangPref) {
@@ -1386,6 +1392,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = lang;
+    document.documentElement.dir = RTL_LANGS.has(lang) ? "rtl" : "ltr";
   }, [lang]);
 
   const t: TranslateFn = (key, vars) =>

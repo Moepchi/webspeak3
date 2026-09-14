@@ -5119,6 +5119,7 @@ function AnwendungPanel() {
           <option value="de">{t("app.language.de")}</option>
           <option value="en">{t("app.language.en")}</option>
           <option value="zh-CN">{t("app.language.zh-CN")}</option>
+          <option value="fa">{t("app.language.fa")}</option>
         </select>
       </label>
     </>
