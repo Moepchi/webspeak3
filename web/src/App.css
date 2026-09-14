@@ -1383,6 +1383,7 @@
   cursor: pointer;
   font-size: 12px;
   text-align: left;
+  text-decoration: none;
 }
 
 .ts-menu-item:hover:not(:disabled) {

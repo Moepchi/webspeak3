@@ -6142,6 +6142,7 @@ function AppInner() {
   const [awayDialogMessage, setAwayDialogMessage] = useState("");
   const [awayPresets, setAwayPresets] = useState<MessagePreset[]>(() => loadAwayPresets());
   const [extrasMenuOpen, setExtrasMenuOpen] = useState(false);
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [collectedUrls, setCollectedUrls] = useState<CollectedUrl[]>(() => loadCollectedUrls());
   const [collectedUrlsOpen, setCollectedUrlsOpen] = useState(false);
   const [inviteFriendOpen, setInviteFriendOpen] = useState(false);
@@ -6203,6 +6204,7 @@ function AppInner() {
   const favoritesMenuRef = useRef<HTMLDivElement | null>(null);
   const awayMenuRef = useRef<HTMLDivElement | null>(null);
   const extrasMenuRef = useRef<HTMLDivElement | null>(null);
+  const helpMenuRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioPlayerRef = useRef<AudioPlayer | null>(null);
@@ -7632,6 +7634,22 @@ function AppInner() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [extrasMenuOpen]);
+
+  useEffect(() => {
+    if (!helpMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!helpMenuRef.current?.contains(e.target as Node)) setHelpMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHelpMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [helpMenuOpen]);
 
   useEffect(() => {
     if (!selfMenuOpen) return;
@@ -9205,18 +9223,61 @@ function AppInner() {
             💬 {t("menu.extras.feedback")}
           </span>
         )}
-        {IS_OWN_HOSTED_INSTANCE && (
+        <div className="ts-menubar-dropdown" ref={helpMenuRef}>
           <span
-            className="ts-menubar-item"
-            onClick={() => {
-              setTosMandatory(false);
-              setTosOpen(true);
-            }}
+            className="ts-menubar-item ts-menubar-item-active"
+            onClick={() => setHelpMenuOpen((v) => !v)}
           >
-            📜 {t("menu.extras.tos")}
+            {t("menu.help")}
           </span>
-        )}
-        <span className="ts-menubar-item">{t("menu.help")}</span>
+          {helpMenuOpen && (
+            <div className="ts-menu">
+              <a
+                className="ts-menu-item"
+                href="https://webspeak3.de"
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setHelpMenuOpen(false)}
+              >
+                <span className="ts-menu-item-icon">ℹ️</span>
+                <span className="ts-menu-item-label">{t("menu.help.about")}</span>
+              </a>
+              <a
+                className="ts-menu-item"
+                href="https://github.com/Moepchi/webspeak3"
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setHelpMenuOpen(false)}
+              >
+                <span className="ts-menu-item-icon">🐙</span>
+                <span className="ts-menu-item-label">{t("menu.help.github")}</span>
+              </a>
+              <a
+                className="ts-menu-item"
+                href="https://github.com/Moepchi/webspeak3/releases"
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setHelpMenuOpen(false)}
+              >
+                <span className="ts-menu-item-icon">📋</span>
+                <span className="ts-menu-item-label">{t("menu.help.changelog")}</span>
+              </a>
+              {IS_OWN_HOSTED_INSTANCE && (
+                <button
+                  className="ts-menu-item"
+                  onClick={() => {
+                    setTosMandatory(false);
+                    setTosOpen(true);
+                    setHelpMenuOpen(false);
+                  }}
+                >
+                  <span className="ts-menu-item-icon">📜</span>
+                  <span className="ts-menu-item-label">{t("menu.extras.tos")}</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         </div>
         </div>
         {designTheme === "nova" && (
