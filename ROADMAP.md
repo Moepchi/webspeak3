@@ -46,8 +46,25 @@ This roadmap is intentionally outcome-focused. It does not promise fixed dates.
 
 - Expand real-browser audio testing, especially Safari
 - Improve reconnect and recovery behavior under unstable networks
-- Continue accessibility, keyboard-navigation, and mobile usability work
 - Turn recurring deployment and compatibility reports into documentation
+
+### Accessibility
+
+The interface currently assumes a mouse and sighted use; a real pass is
+still needed:
+
+- Replace clickable `<div>`s that aren't real `<button>`s with actual
+  buttons, so they're reachable and operable by keyboard
+- Add keyboard handlers next to the many click-only interactions (channel
+  tree, context menus, client list)
+- Label icon-only toggle controls (mute, away, streaming, recording, ...)
+  with `aria-label`/`aria-pressed` so their state is announced, not just shown
+  as a color/icon change
+- Fix the document's `lang` attribute to follow the active UI language
+  instead of staying fixed
+- Manage focus in modals and dialogs: move it in on open, return it on close
+- Do a full screen-reader pass (NVDA/VoiceOver) through a real connect
+  session to find what else is missing beyond the above
 
 ### Deployment experience
 
