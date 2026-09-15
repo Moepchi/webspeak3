@@ -25,13 +25,15 @@ This roadmap is intentionally outcome-focused. It does not promise fixed dates.
   does not document, so the wire format was derived from observed behavior and
   may break with any TS6 update. Connection setup, picture quality, and viewer
   admission are not yet dependable. The "Server" connection mode (TS6's SFU) is
-  not implemented; only direct P2P works. The UI is currently switched off by a
-  build-time flag, because the hosted client updates on every push while the
-  gateway image is deployed by hand, and a browser that offers streaming to a
-  gateway too old to answer waits forever instead of reporting an error. The
-  fix is a capability handshake so the client can detect what its gateway
-  supports rather than assuming; until then the flag is flipped by hand after
-  the gateway has been updated.
+  not implemented; only direct P2P works. The UI is gated by a build-time flag,
+  because the hosted client updates on every push while the gateway image is
+  deployed by hand, and a browser that offers streaming to a gateway too old to
+  answer waits forever instead of reporting an error — on since 2026-09-11 for
+  client.webspeak3.de now that its gateway answers setupStream/joinStream/
+  sendStreamSignal (v0.11.0-beta.1+). The durable fix is a capability handshake
+  so the client can detect what its gateway supports rather than assuming;
+  until then the flag is flipped by hand whenever the frontend gains a stream
+  feature the deployed gateway doesn't have yet.
 - Safari and Mobile Safari audio/microphone behavior
 - Uncommon TeamSpeak permission combinations and large permission sets
 - Very large servers and long-running browser sessions
