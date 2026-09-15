@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { createServer as createSecureServer } from "node:https";
 import { readFileSync } from "node:fs";
 import { readFile, appendFile, rename, stat } from "node:fs/promises";
+import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -84,6 +85,84 @@ const FEEDBACK_LOG_FILE = process.env.FEEDBACK_LOG_FILE ?? path.resolve(process.
 const FEEDBACK_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const FEEDBACK_CATEGORIES = new Set(["bug", "idea", "report", "other"]);
 const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
+
+// --- Broadcast endpoint ---------------------------------------------------
+//
+// Opt-in only, same convention as LOG_CONNECTIONS/FEEDBACK_ENABLED above: lets
+// the operator push a free-text maintenance notice to every connected browser
+// tab (reuses the same {type:"notice"} message the SIGTERM handler already
+// sends, which the frontend renders even without a messageKey). Unset
+// BROADCAST_TOKEN and the endpoint 404s, same as feedback when disabled.
+const BROADCAST_TOKEN = process.env.BROADCAST_TOKEN;
+const BROADCAST_MESSAGE_MAX_LENGTH = 500;
+
+function isValidBroadcastToken(provided: string): boolean {
+  if (!BROADCAST_TOKEN) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(BROADCAST_TOKEN);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+async function handleBroadcast(req: IncomingMessage, res: ServerResponse) {
+  if (!BROADCAST_TOKEN) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found" }));
+    return;
+  }
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "method_not_allowed" }));
+    return;
+  }
+
+  const authHeader = req.headers.authorization ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
+  if (!isValidBroadcastToken(token)) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "unauthorized" }));
+    return;
+  }
+
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 5_000) {
+      res.writeHead(413, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "payload_too_large" }));
+      return;
+    }
+  }
+
+  let body: { message?: unknown };
+  try {
+    body = JSON.parse(raw || "{}");
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid_json" }));
+    return;
+  }
+
+  const message = typeof body.message === "string" ? body.message.trim().slice(0, BROADCAST_MESSAGE_MAX_LENGTH) : "";
+  if (!message) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "message_required" }));
+    return;
+  }
+
+  const payload = JSON.stringify({ type: "notice", message });
+  let sent = 0;
+  for (const socket of wss.clients) {
+    try {
+      socket.send(payload);
+      sent++;
+    } catch {
+      /* socket already gone */
+    }
+  }
+
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, sent }));
+}
 
 async function rotateFeedbackLogIfNeeded(): Promise<void> {
   try {
@@ -276,6 +355,10 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
       const requestUrl = new URL(req.url ?? "/", "http://localhost");
       if (requestUrl.pathname === "/api/feedback") {
         await handleFeedback(req, res);
+        return;
+      }
+      if (requestUrl.pathname === "/api/broadcast") {
+        await handleBroadcast(req, res);
         return;
       }
 
