@@ -428,6 +428,17 @@ interface HeartbeatState {
 
 const heartbeats = new WeakMap<WebSocket, HeartbeatState>();
 
+// Tracked so SIGTERM (below) can tell every live TS3/TeaSpeak session to
+// disconnect properly before the process exits, instead of leaving the
+// target server to notice on its own timeout.
+const liveConnections = new Set<Ts3Connection>();
+// Set right before that graceful disconnect: suppresses forwarding the
+// connector's own "disconnected" event to the browser during shutdown, so
+// the browser sees a raw socket close (which it auto-reconnects from) rather
+// than an explicit disconnect (which it treats as deliberate and gives up
+// on) — see the SIGTERM handler.
+let shuttingDown = false;
+
 const heartbeatTimer = setInterval(() => {
   for (const socket of wss.clients) {
     const state = heartbeats.get(socket);
@@ -448,16 +459,35 @@ wss.on("close", () => clearInterval(heartbeatTimer));
 // browser tab so an active call/stream doesn't just silently drop, then
 // exit quickly rather than waiting out the grace period doing nothing.
 process.on("SIGTERM", () => {
-  const payload = JSON.stringify({ type: "notice", messageKey: "restartNotice.body" });
-  for (const socket of wss.clients) {
-    try {
-      socket.send(payload);
-    } catch {
-      /* socket already gone */
+  void (async () => {
+    const payload = JSON.stringify({ type: "notice", messageKey: "restartNotice.body" });
+    for (const socket of wss.clients) {
+      try {
+        socket.send(payload);
+      } catch {
+        /* socket already gone */
+      }
     }
-  }
-  console.log(`[gateway] SIGTERM received, notified ${wss.clients.size} client(s), shutting down`);
-  setTimeout(() => process.exit(0), 500);
+    console.log(`[gateway] SIGTERM received, notified ${wss.clients.size} client(s), disconnecting ${liveConnections.size} live session(s)`);
+
+    // Tell every connector to leave its TS3/TeaSpeak server *before* the
+    // process exits. Without this, `docker stop`'s grace period expires and
+    // the container is killed, taking the connector child processes with it
+    // mid-session - the target server only notices via its own timeout
+    // (which can take a while), during which a client's automatic reconnect
+    // (see App.tsx's scheduleReconnect) gets rejected by the server as a
+    // duplicate identity (e.g. "ClientTooManyClonesConnected"). shuttingDown
+    // suppresses forwarding the resulting "disconnected" event to the
+    // browser - the browser must see a raw socket close here, not an
+    // explicit disconnect, or it treats it as deliberate and won't retry.
+    shuttingDown = true;
+    await Promise.race([
+      Promise.all([...liveConnections].map((c) => c.disconnect().catch(() => {}))),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
+    console.log(`[gateway] shutting down`);
+    process.exit(0);
+  })();
 });
 
 server.listen(PORT, () => {
@@ -497,6 +527,7 @@ wss.on("connection", (socket: WebSocket) => {
           } catch {
             /* ignore */
           }
+          liveConnections.delete(connection);
           connection = undefined;
         }
         const options: Ts3ConnectOptions = {
@@ -510,7 +541,9 @@ wss.on("connection", (socket: WebSocket) => {
           privilegeKey: parsePrivilegeKey(msg),
         };
         connection = new Ts3Connection(options);
+        liveConnections.add(connection);
         connection.onEvent((event) => {
+          if (shuttingDown) return;
           if (LOG_CONNECTIONS) {
             if (event.type === "connected") {
               console.log(
@@ -777,6 +810,8 @@ wss.on("connection", (socket: WebSocket) => {
       }
       case "disconnect": {
         await connection?.disconnect(msg.message ?? "");
+        if (connection) liveConnections.delete(connection);
+        connection = undefined;
         break;
       }
       default:
@@ -788,6 +823,7 @@ wss.on("connection", (socket: WebSocket) => {
 
   socket.on("close", () => {
     heartbeats.delete(socket);
+    if (connection) liveConnections.delete(connection);
     connection?.disconnect();
   });
 });
