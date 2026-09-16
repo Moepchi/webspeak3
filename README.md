@@ -180,13 +180,6 @@ docker run -d -p 8080:8080 --name webspeak3 moepchi/webspeak3:latest
 
 The UI shows a small **Ko-fi donation button** in the bottom right corner. Building it yourself and would rather not carry someone else's donation link? `docker compose build --build-arg DONATE_URL=` removes it (any other value points it somewhere else). Outside Docker the same thing is a build-time variable: `VITE_DONATE_URL= npm run build` in `web/`.
 
-Want your instance to auto-connect visitors to a specific TeamSpeak server? Two ways, and either works with no user input at all:
-
-- **Share link**: send anyone `https://your-instance/?connect=your.ts.server&nickname=Guest&channel=Lobby&token=...` - `connect` is the only required part, the rest are optional. Works on any deployment, no rebuild needed.
-- **Baked-in default**: `docker compose build --build-arg DEFAULT_SERVER=your.ts.server --build-arg DEFAULT_CHANNEL=Lobby` (or `VITE_DEFAULT_SERVER=your.ts.server npm run build` in `web/`) makes every visitor auto-connect there by default. A share link still overrides it when present.
-
-Visitors with no nickname of their own get an auto-generated `Guest-XXXX` one.
-
 <details>
 <summary><b>🛠️ Manual installation (without Docker)</b></summary>
 
@@ -265,6 +258,47 @@ In the web UI, enter the address of a TeamSpeak server and a nickname, then clic
 - Connector changes require a rebuild (`cargo build` in `connector/`) and a reconnect from the browser — if the old `ts-connector` binary is still running (an active browser connection), disconnect first or the build will fail to overwrite the binary.
 
 </details>
+
+## 🔗 Auto-Connect Links
+
+Skip the connect dialog entirely and drop visitors straight into a TeamSpeak server. Two ways to do it — use either, or both together.
+
+### 1. Share a link
+
+Add a `connect` parameter to your instance's URL and send that link out — in a Discord post, a landing page button, a QR code, wherever:
+
+```
+https://your-instance/?connect=voice.example.com&nickname=Guest&channel=Lobby&token=abc123
+```
+
+| Parameter  | Required | What it does |
+|------------|----------|--------------|
+| `connect`  | yes      | Server address to join, `host` or `host:port` |
+| `nickname` | no       | Nickname to connect with — omit it and the visitor gets an auto-generated `Guest-XXXX` |
+| `channel`  | no       | Default channel to join |
+| `token`    | no       | Server/channel privilege key, if the target requires one |
+
+This works on **any** deployment — no rebuild, no configuration. WebSpeak3 connects as soon as the page loads and immediately strips these parameters from the address bar, so refreshing the tab (or someone screenshotting/forwarding the URL later) won't silently reconnect off a stale link.
+
+### 2. Bake in a default server
+
+Running a dedicated instance for one community or event? Set a default at build time so **every** visitor auto-connects with zero parameters, no link needed:
+
+```bash
+docker compose build --build-arg DEFAULT_SERVER=voice.example.com --build-arg DEFAULT_CHANNEL=Lobby
+```
+
+Outside Docker, the same thing is a build-time variable:
+
+```bash
+VITE_DEFAULT_SERVER=voice.example.com VITE_DEFAULT_CHANNEL=Lobby npm run build
+```
+
+(in `web/`). Leave `DEFAULT_CHANNEL`/`VITE_DEFAULT_CHANNEL` out to just join the server's default channel.
+
+A share link (above) always takes priority over the baked-in default when both are present — so you can point most visitors at your default server while still sending specific people somewhere else via link.
+
+Either way: on your own hosted instance, the mandatory first-visit Terms of Use is shown and accepted before anything auto-connects; and if the connection fails, the connect dialog opens prefilled so the visitor can fix it and retry by hand.
 
 ## Credits
 
