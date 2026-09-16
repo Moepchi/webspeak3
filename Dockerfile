@@ -29,10 +29,16 @@ COPY web/ ./
 # exists because an unset build arg and an empty one are indistinguishable
 # inside RUN - without it, "not passed" would silently mean "remove".
 ARG DONATE_URL=keep
+# A self-hosted build can bake in a server to auto-connect to with zero user
+# input (see web/src/App.tsx's AUTO_CONNECT_FROM_URL/DEFAULT_SERVER, GitHub
+# issue #10). Unlike DONATE_URL, unset already means "no default" - no "keep"
+# sentinel needed.
+ARG DEFAULT_SERVER=
+ARG DEFAULT_CHANNEL=
 # tsc -b currently fails on pre-existing type errors unrelated to this build;
 # vite build alone is enough to produce the production bundle.
-RUN if [ "$DONATE_URL" = "keep" ]; then npx vite build; \
-    else VITE_DONATE_URL="$DONATE_URL" npx vite build; fi
+RUN if [ "$DONATE_URL" = "keep" ]; then DONATE_URL_ENV=; else DONATE_URL_ENV="VITE_DONATE_URL=$DONATE_URL"; fi; \
+    env $DONATE_URL_ENV VITE_DEFAULT_SERVER="$DEFAULT_SERVER" VITE_DEFAULT_CHANNEL="$DEFAULT_CHANNEL" npx vite build
 
 # --- Gateway ----------------------------------------------------------------
 FROM node:22-bookworm-slim AS gateway-builder

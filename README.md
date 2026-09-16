@@ -180,6 +180,13 @@ docker run -d -p 8080:8080 --name webspeak3 moepchi/webspeak3:latest
 
 The UI shows a small **Ko-fi donation button** in the bottom right corner. Building it yourself and would rather not carry someone else's donation link? `docker compose build --build-arg DONATE_URL=` removes it (any other value points it somewhere else). Outside Docker the same thing is a build-time variable: `VITE_DONATE_URL= npm run build` in `web/`.
 
+Want your instance to auto-connect visitors to a specific TeamSpeak server? Two ways, and either works with no user input at all:
+
+- **Share link**: send anyone `https://your-instance/?connect=your.ts.server&nickname=Guest&channel=Lobby&token=...` - `connect` is the only required part, the rest are optional. Works on any deployment, no rebuild needed.
+- **Baked-in default**: `docker compose build --build-arg DEFAULT_SERVER=your.ts.server --build-arg DEFAULT_CHANNEL=Lobby` (or `VITE_DEFAULT_SERVER=your.ts.server npm run build` in `web/`) makes every visitor auto-connect there by default. A share link still overrides it when present.
+
+Visitors with no nickname of their own get an auto-generated `Guest-XXXX` one.
+
 <details>
 <summary><b>🛠️ Manual installation (without Docker)</b></summary>
 

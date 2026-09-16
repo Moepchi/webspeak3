@@ -115,6 +115,34 @@ const DONATE_URL = import.meta.env.VITE_DONATE_URL ?? "https://ko-fi.com/moepchi
 const OWN_HOSTED_HOSTNAMES = new Set(["client.webspeak3.de"]);
 const IS_OWN_HOSTED_INSTANCE = !DEMO_MODE && OWN_HOSTED_HOSTNAMES.has(window.location.hostname);
 
+// Auto-connect from a share link (?connect=host[:port]&nickname=&channel=&token=,
+// see GitHub issue #10). Parsed once at module load and immediately stripped
+// from the URL via replaceState so a reload/refresh doesn't silently
+// reconnect off a stale link sitting in the address bar or browser history.
+const AUTO_CONNECT_FROM_URL = (() => {
+  const params = new URLSearchParams(window.location.search);
+  const connectHost = params.get("connect");
+  if (!connectHost) return null;
+  const target = {
+    host: connectHost,
+    nickname: params.get("nickname") || undefined,
+    defaultChannel: params.get("channel") || undefined,
+    privilegeKey: params.get("token") || undefined,
+  };
+  for (const key of ["connect", "nickname", "channel", "token"]) params.delete(key);
+  const rest = params.toString();
+  window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+  return target;
+})();
+
+// A self-hosted build can also bake in a default server so the page
+// auto-connects with zero URL params at all - set via `docker compose build
+// --build-arg DEFAULT_SERVER=...` (see Dockerfile/README) or plain
+// VITE_DEFAULT_SERVER= at build time. AUTO_CONNECT_FROM_URL above always wins
+// when a share link is present.
+const DEFAULT_SERVER = import.meta.env.VITE_DEFAULT_SERVER || null;
+const DEFAULT_CHANNEL = import.meta.env.VITE_DEFAULT_CHANNEL || "";
+
 // Terms of use, own-hosted instance only (see TODO.md #2/#7.1). Versioned so
 // a rule change can re-surface the modal: bump TOS_VERSION and everyone who
 // accepted an older version is asked again.
@@ -7190,6 +7218,43 @@ function AppInner() {
 
     wireSocket(sessionId, socket, params);
   };
+
+  // Auto-connect from a ?connect=... share link or a build-time default
+  // server (issue #10). Fires once, after the mandatory first-visit ToS gate
+  // (if any) is out of the way, so it never races the gate or connects
+  // before the user has had a chance to accept it.
+  const autoConnectedRef = useRef(false);
+  const autoConnectPendingRef = useRef(false);
+  useEffect(() => {
+    if (autoConnectedRef.current) return;
+    if (tosMandatory && tosOpen) return;
+    const target = AUTO_CONNECT_FROM_URL ??
+      (DEFAULT_SERVER
+        ? { host: DEFAULT_SERVER, nickname: undefined, defaultChannel: DEFAULT_CHANNEL, privilegeKey: undefined }
+        : null);
+    if (!target) return;
+    autoConnectedRef.current = true;
+    autoConnectPendingRef.current = true;
+    handleConnect({
+      host: target.host,
+      nickname: target.nickname || nickname || `Guest-${Math.floor(1000 + Math.random() * 9000)}`,
+      defaultChannel: target.defaultChannel,
+      privilegeKey: target.privilegeKey,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tosMandatory, tosOpen]);
+
+  // A manual connect attempt leaves its error as a dismissable banner with the
+  // dialog already closed - fine, since the user just closed it themselves.
+  // An auto-connect attempt has no dialog open at all, so on failure reopen it
+  // prefilled with the attempted host, letting the user fix and retry by hand.
+  useEffect(() => {
+    if (!autoConnectPendingRef.current || !connectError) return;
+    autoConnectPendingRef.current = false;
+    setHost(AUTO_CONNECT_FROM_URL?.host ?? DEFAULT_SERVER ?? host);
+    setConnectDialogOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectError]);
 
   // Opens a fresh socket for a session that already exists (active or
   // parked) and re-runs the same connect handshake, reusing the params
