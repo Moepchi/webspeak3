@@ -7913,7 +7913,13 @@ function AppInner() {
     try {
       const audioContext = ensureAudioContext();
       if (audioContext.state === "suspended") await audioContext.resume();
-      const aec3 = await createAec3(SAMPLE_RATE, 2, 1);
+      // The context is *requested* at SAMPLE_RATE, but that constructor hint
+      // isn't guaranteed - some audio backends (notably Linux/PulseAudio) run
+      // it at their own native rate regardless. AEC3 must be told the rate
+      // its ScriptProcessorNode buffers are actually sampled at, or its
+      // internal frame timing drifts - audibly, as a progressively descending
+      // pitch on repeated echo.
+      const aec3 = await createAec3(audioContext.sampleRate, 2, 1);
       aec3Ref.current = aec3;
       audioPlayerRef.current?.attachAecRenderTap(aec3);
       setAec3Enabled(true);
