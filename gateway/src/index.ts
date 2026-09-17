@@ -73,10 +73,9 @@ const FEEDBACK_ALLOWED_ORIGIN = process.env.FEEDBACK_ALLOWED_ORIGIN ?? "*";
 // feedback is still accepted and logged, just never turned into an issue.
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO ?? "Moepchi/webspeak3";
-// Plain JSON-lines file, not a database - this is a low-volume inbox, not
-// analytics. Defaults under the container's WORKDIR (/app in the Docker
-// image); mount a volume over it if you want submissions to survive a
-// container recreate.
+// Plain JSON-lines file. Defaults under the container's WORKDIR (/app in
+// the Docker image); mount a volume over it if you want submissions to
+// survive a container recreate.
 const FEEDBACK_LOG_FILE = process.env.FEEDBACK_LOG_FILE ?? path.resolve(process.cwd(), "feedback.log");
 // Simple size-based rotation: once the log crosses this size, the current
 // file is moved to feedback.log.1 (overwriting any previous one) and a
