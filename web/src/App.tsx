@@ -97,6 +97,17 @@ const FEEDBACK_URL = import.meta.env.DEV
     ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "").replace(/^ws(s?):\/\//, "http$1://")}/api/feedback`
     : `${window.location.protocol}//${window.location.host}/api/feedback`;
 
+// Same derivation again, for the design store (see gateway/src/index.ts's
+// /api/store/themes handler). Unlike FEEDBACK_URL/IS_OWN_HOSTED_INSTANCE this
+// isn't limited to the maintainer's own instance - any self-hosted gateway
+// can turn STORE_ENABLED on, so the button always shows and the store panel
+// itself reports "unavailable" if the gateway 404s.
+const STORE_URL = import.meta.env.DEV
+  ? "http://localhost:8080/api/store/themes"
+  : import.meta.env.VITE_GATEWAY_URL
+    ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "").replace(/^ws(s?):\/\//, "http$1://")}/api/store/themes`
+    : `${window.location.protocol}//${window.location.host}/api/store/themes`;
+
 // Ko-fi page of the project (.github/FUNDING.yml). Unlike the feedback button
 // below this is not limited to the maintainer's own instance: it ships in
 // every build, the Docker image included. Self-hosters who would rather not
@@ -289,6 +300,18 @@ type CustomTheme = {
   name: string;
   baseTheme: DesignTheme;
   css: string;
+};
+
+/** Metadata for one theme listed by GET /api/store/themes - deliberately
+ *  without `css`, so browsing the store doesn't pull every submission's full
+ *  stylesheet up front. The full package (matching CustomTheme's export
+ *  shape) is fetched separately per-id on install, see STORE_URL above. */
+type StoreThemeSummary = {
+  id: string;
+  name: string;
+  baseTheme: DesignTheme;
+  author: string;
+  createdAt: string;
 };
 
 function isDesignTheme(value: string): value is DesignTheme {
@@ -5193,6 +5216,7 @@ function DesignPanel({
 }) {
   const t = useT();
   const [editing, setEditing] = useState<CustomThemeDraft | null>(null);
+  const [storeOpen, setStoreOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const builtins: { id: DesignTheme; name: string; desc: string }[] = [
@@ -5249,6 +5273,20 @@ function DesignPanel({
       window.alert(t("design.custom.importError"));
     }
   };
+
+  if (storeOpen) {
+    return (
+      <DesignStorePanel
+        customThemes={customThemes}
+        onInstall={(theme) => {
+          const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+          onSaveCustomTheme({ id, name: theme.name, baseTheme: theme.baseTheme, css: theme.css });
+          onSelectionChange(`custom:${id}`);
+        }}
+        onClose={() => setStoreOpen(false)}
+      />
+    );
+  }
 
   if (editing) {
     return (
@@ -5363,6 +5401,161 @@ function DesignPanel({
           style={{ display: "none" }}
           onChange={handleImportSelected}
         />
+        <button onClick={() => setStoreOpen(true)}>{t("design.store.open")}</button>
+      </div>
+    </>
+  );
+}
+
+/** Browse community-submitted designs (GET STORE_URL) and publish one of the
+ *  viewer's own custom themes (POST STORE_URL) - see gateway/src/index.ts's
+ *  /api/store/themes handler. Reports "unavailable" rather than erroring when
+ *  the gateway has STORE_ENABLED off (the default), same as a 404. */
+function DesignStorePanel({
+  customThemes,
+  onInstall,
+  onClose,
+}: {
+  customThemes: CustomTheme[];
+  onInstall: (theme: { name: string; baseTheme: DesignTheme; css: string }) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const [themes, setThemes] = useState<StoreThemeSummary[] | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+  const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
+  const [publishTarget, setPublishTarget] = useState("");
+  const [publishAuthor, setPublishAuthor] = useState("");
+  const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<"ok" | "error" | null>(null);
+
+  const refreshThemes = () =>
+    fetch(STORE_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json() as Promise<StoreThemeSummary[]>;
+      })
+      .then(setThemes)
+      .catch(() => setUnavailable(true));
+
+  useEffect(() => {
+    refreshThemes();
+    // Only ever needs to run once per panel open - refreshThemes is re-created
+    // each render but doesn't depend on any prop/state that would need it here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleInstall = async (id: string) => {
+    try {
+      const res = await fetch(`${STORE_URL}/${id}`);
+      if (!res.ok) throw new Error(String(res.status));
+      const parsed = await res.json();
+      if (
+        !parsed ||
+        typeof parsed.name !== "string" ||
+        !isDesignTheme(parsed.baseTheme) ||
+        typeof parsed.css !== "string"
+      ) {
+        throw new Error("invalid");
+      }
+      onInstall({ name: parsed.name, baseTheme: parsed.baseTheme, css: parsed.css });
+      setInstalledIds((prev) => new Set(prev).add(id));
+    } catch {
+      window.alert(t("design.custom.importError"));
+    }
+  };
+
+  const handlePublish = async () => {
+    const theme = customThemes.find((c) => c.id === publishTarget);
+    if (!theme) return;
+    setPublishing(true);
+    setPublishResult(null);
+    try {
+      const res = await fetch(STORE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: theme.name,
+          baseTheme: theme.baseTheme,
+          css: theme.css,
+          author: publishAuthor.trim() || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setPublishResult("ok");
+      setPublishAuthor("");
+      await refreshThemes();
+    } catch {
+      setPublishResult("error");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  return (
+    <>
+      <h3>{t("design.store.title")}</h3>
+      {unavailable ? (
+        <p className="ts-options-subtitle">{t("design.store.unavailable")}</p>
+      ) : themes === null ? (
+        <p className="ts-options-subtitle">{t("design.store.loading")}</p>
+      ) : (
+        <>
+          <div className="ts-design-theme-grid">
+            {themes.length === 0 && <p className="ts-options-subtitle">{t("design.store.empty")}</p>}
+            {themes.map((theme) => (
+              <div key={theme.id} className="ts-design-theme-card ts-design-theme-card-custom">
+                <div className="ts-design-theme-card-select">
+                  <span className="ts-design-theme-swatch ts-design-theme-swatch-custom" />
+                  <span className="ts-design-theme-card-name">{theme.name}</span>
+                  <span className="ts-design-theme-card-desc">{t("design.store.by", { author: theme.author })}</span>
+                </div>
+                <div className="ts-design-theme-card-actions">
+                  <button onClick={() => handleInstall(theme.id)} disabled={installedIds.has(theme.id)}>
+                    {installedIds.has(theme.id) ? t("design.store.installed") : t("design.store.install")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h3>{t("design.store.publishTitle")}</h3>
+          {customThemes.length === 0 ? (
+            <p className="ts-options-subtitle">{t("design.store.publish.none")}</p>
+          ) : (
+            <>
+              <label className="ts-options-field">
+                {t("design.store.publish.select")}
+                <select value={publishTarget} onChange={(e) => setPublishTarget(e.target.value)}>
+                  <option value="" />
+                  {customThemes.map((theme) => (
+                    <option key={theme.id} value={theme.id}>
+                      {theme.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="ts-options-field">
+                {t("design.store.publish.author")}
+                <input
+                  value={publishAuthor}
+                  onChange={(e) => setPublishAuthor(e.target.value)}
+                  placeholder={t("design.store.publish.authorPlaceholder")}
+                />
+              </label>
+              <div className="ts-dialog-buttons-right">
+                <button onClick={handlePublish} disabled={!publishTarget || publishing}>
+                  {t("design.store.publish.submit")}
+                </button>
+              </div>
+              {publishResult === "ok" && <p className="ts-options-subtitle">{t("design.store.publish.success")}</p>}
+              {publishResult === "error" && <p className="ts-options-subtitle">{t("design.store.publish.error")}</p>}
+            </>
+          )}
+        </>
+      )}
+      <div className="ts-dialog-buttons-right">
+        <button onClick={onClose}>{t("design.store.back")}</button>
       </div>
     </>
   );

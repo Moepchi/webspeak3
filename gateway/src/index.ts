@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createSecureServer } from "node:https";
 import { readFileSync } from "node:fs";
-import { readFile, appendFile, rename, stat } from "node:fs/promises";
-import { timingSafeEqual } from "node:crypto";
+import { readFile, writeFile, appendFile, rename, stat } from "node:fs/promises";
+import { timingSafeEqual, randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -320,6 +320,222 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
   res.end(JSON.stringify({ ok: true, githubIssueUrl }));
 }
 
+// --- Design Store endpoint -------------------------------------------------
+//
+// Opt-in only, same convention as LOG_CONNECTIONS/FEEDBACK_ENABLED/BROADCAST_TOKEN
+// above: public CSS uploads need moderation attention a plain self-hosted
+// instance shouldn't inherit just because the code exists. Set STORE_ENABLED=1
+// to turn it on.
+const STORE_ENABLED = process.env.STORE_ENABLED === "1";
+const STORE_ALLOWED_ORIGIN = process.env.STORE_ALLOWED_ORIGIN ?? "*";
+// Plain JSON file (whole-array read-modify-write, not JSON-lines like
+// feedback.log above): the store needs to list and look up by id, and the
+// expected volume (community theme submissions) is small enough that
+// rewriting the whole file each time is simpler than a real DB - see the
+// "never add SQLite to the public gateway" note in mem:reference_webspeak3_private_sqlite_persistence.
+const STORE_DATA_FILE = process.env.STORE_DATA_FILE ?? path.resolve(process.cwd(), "store-themes.json");
+const STORE_NAME_MAX_LENGTH = 60;
+const STORE_AUTHOR_MAX_LENGTH = 40;
+const STORE_CSS_MAX_LENGTH = 50_000;
+// Hard cap so the flat file can't grow unbounded from spam that slips past
+// rate limiting (a fresh IP per submission, say).
+const STORE_MAX_THEMES = 2000;
+const STORE_BASE_THEMES = new Set(["standard", "nova", "greenteaspeak", "pulse"]);
+
+interface StoreTheme {
+  id: string;
+  name: string;
+  baseTheme: string;
+  css: string;
+  author: string;
+  createdAt: string;
+  // ponytail: no moderation queue/admin UI yet - everything publishes as
+  // "approved" immediately. The field exists so a bad submission can be
+  // hidden by hand-editing STORE_DATA_FILE (status: "rejected") without a
+  // schema change, once there's an actual admin surface to do that from.
+  status: "approved" | "rejected";
+}
+
+// Rendered CSS reaches other users' browsers, so block the two ways a
+// stylesheet can reach outside itself. Everything else (colors, selectors,
+// animations, pseudo-elements) is harmless - it only ever applies inside the
+// app's own theme wrapper class.
+const CSS_IMPORT_RE = /@import/i;
+const CSS_REMOTE_URL_RE = /url\s*\(\s*["']?\s*(?:https?:)?\/\//i;
+
+function sanitizeThemeCss(css: string): string | null {
+  return CSS_IMPORT_RE.test(css) || CSS_REMOTE_URL_RE.test(css) ? null : css;
+}
+
+let storeCache: StoreTheme[] | null = null;
+
+async function loadStoreThemes(): Promise<StoreTheme[]> {
+  if (storeCache) return storeCache;
+  try {
+    storeCache = JSON.parse(await readFile(STORE_DATA_FILE, "utf-8")) as StoreTheme[];
+  } catch {
+    storeCache = [];
+  }
+  return storeCache;
+}
+
+async function saveStoreThemes(themes: StoreTheme[]): Promise<void> {
+  storeCache = themes;
+  await writeFile(STORE_DATA_FILE, JSON.stringify(themes), "utf-8");
+}
+
+// Same in-memory-per-IP approach as FEEDBACK_RATE_LIMIT above; kept as a
+// separate map since the two endpoints are independent.
+const STORE_RATE_LIMIT = 5;
+const STORE_RATE_WINDOW_MS = 60 * 60 * 1000;
+const storeSubmissionTimes = new Map<string, number[]>();
+
+function isStoreRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const recent = (storeSubmissionTimes.get(ip) ?? []).filter((t) => now - t < STORE_RATE_WINDOW_MS);
+  recent.push(now);
+  storeSubmissionTimes.set(ip, recent);
+  return recent.length > STORE_RATE_LIMIT;
+}
+
+function setStoreCors(res: ServerResponse) {
+  res.setHeader("Access-Control-Allow-Origin", STORE_ALLOWED_ORIGIN);
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+async function handleStoreList(res: ServerResponse) {
+  const themes = await loadStoreThemes();
+  const listing = themes
+    .filter((t) => t.status === "approved")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(({ id, name, baseTheme, author, createdAt }) => ({ id, name, baseTheme, author, createdAt }));
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(listing));
+}
+
+async function handleStoreDownload(res: ServerResponse, id: string) {
+  const themes = await loadStoreThemes();
+  const theme = themes.find((t) => t.id === id && t.status === "approved");
+  if (!theme) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found" }));
+    return;
+  }
+  // Same shape as the client's own .webspeak3theme.json export/import, so the
+  // browsed result feeds straight into the existing import validator.
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ name: theme.name, baseTheme: theme.baseTheme, css: theme.css }));
+}
+
+async function handleStoreSubmit(req: IncomingMessage, res: ServerResponse) {
+  const ip = (req.socket.remoteAddress ?? "unknown").replace(/^::ffff:/, "");
+  if (isStoreRateLimited(ip)) {
+    res.writeHead(429, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "rate_limited" }));
+    return;
+  }
+
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > STORE_CSS_MAX_LENGTH + 5_000) {
+      res.writeHead(413, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "payload_too_large" }));
+      return;
+    }
+  }
+
+  let body: { name?: unknown; baseTheme?: unknown; css?: unknown; author?: unknown; website?: unknown };
+  try {
+    body = JSON.parse(raw || "{}");
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid_json" }));
+    return;
+  }
+
+  // Honeypot, same as /api/feedback above.
+  if (typeof body.website === "string" && body.website.trim() !== "") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, STORE_NAME_MAX_LENGTH) : "";
+  const baseTheme = typeof body.baseTheme === "string" && STORE_BASE_THEMES.has(body.baseTheme) ? body.baseTheme : "";
+  const rawCss = typeof body.css === "string" ? body.css.slice(0, STORE_CSS_MAX_LENGTH) : "";
+  const author =
+    typeof body.author === "string" ? body.author.trim().slice(0, STORE_AUTHOR_MAX_LENGTH) || "Anonymous" : "Anonymous";
+
+  if (!name || !baseTheme || !rawCss) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid_theme" }));
+    return;
+  }
+
+  const css = sanitizeThemeCss(rawCss);
+  if (css === null) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "css_rejected" }));
+    return;
+  }
+
+  const themes = await loadStoreThemes();
+  if (themes.length >= STORE_MAX_THEMES) {
+    res.writeHead(507, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "store_full" }));
+    return;
+  }
+
+  const theme: StoreTheme = {
+    id: randomUUID(),
+    name,
+    baseTheme,
+    css,
+    author,
+    createdAt: new Date().toISOString(),
+    status: "approved",
+  };
+  themes.push(theme);
+  try {
+    await saveStoreThemes(themes);
+  } catch (err) {
+    console.error("[store] Failed to save theme:", err);
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "save_failed" }));
+    return;
+  }
+
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, id: theme.id }));
+}
+
+async function handleStore(req: IncomingMessage, res: ServerResponse, pathname: string) {
+  setStoreCors(res);
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  if (!STORE_ENABLED) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found" }));
+    return;
+  }
+
+  if (pathname === "/api/store/themes") {
+    if (req.method === "GET") return handleStoreList(res);
+    if (req.method === "POST") return handleStoreSubmit(req, res);
+  } else {
+    const id = pathname.slice("/api/store/themes/".length);
+    if (req.method === "GET" && id) return handleStoreDownload(res, id);
+  }
+
+  res.writeHead(405, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "method_not_allowed" }));
+}
+
 const DEV_HINT = `<!doctype html><html><body style="font:14px system-ui;padding:2rem;max-width:40rem">
 <h1>WebSpeak3 gateway</h1>
 <p>WebSocket: <code>/ws</code></p>
@@ -358,6 +574,10 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
       }
       if (requestUrl.pathname === "/api/broadcast") {
         await handleBroadcast(req, res);
+        return;
+      }
+      if (requestUrl.pathname === "/api/store/themes" || requestUrl.pathname.startsWith("/api/store/themes/")) {
+        await handleStore(req, res, requestUrl.pathname);
         return;
       }
 
