@@ -4,6 +4,8 @@
 // microphone -> server direction (which it Opus-encodes), stereo mixed
 // for the server -> speakers direction (already decoded/mixed for us).
 
+import type { Aec3Instance } from "./aec3";
+
 export const SAMPLE_RATE = 48000;
 export const FRAME_SAMPLES = 960; // 20ms @ 48kHz
 
@@ -41,6 +43,10 @@ export interface MicCaptureOptions {
    *  browser's own AEC runs can bring back audible echo residue in speaker+mic
    *  (no headset) setups - some users get a cleaner result with it off. */
   autoGainControl?: boolean;
+  /** When set, mic audio is run through this AEC3 instance (opts:
+   *  captureNumChannels=1) before VAD/encoding, in place of relying solely on
+   *  the browser's native echoCancellation. */
+  aec3?: Aec3Instance;
 }
 
 /**
@@ -67,6 +73,8 @@ export class MicCapture {
   private echoCancellation: boolean;
   private noiseSuppression: boolean;
   private autoGainControl: boolean;
+  private aec3?: Aec3Instance;
+  private aec3Out: Float32Array[] | null = null;
   private context: AudioContext;
   threshold: number;
   hangoverSeconds: number;
@@ -82,6 +90,7 @@ export class MicCapture {
     this.echoCancellation = options.echoCancellation ?? true;
     this.noiseSuppression = options.noiseSuppression ?? true;
     this.autoGainControl = options.autoGainControl ?? true;
+    this.aec3 = options.aec3;
   }
 
   async start(): Promise<void> {
@@ -110,7 +119,15 @@ export class MicCapture {
     this.source = this.context.createMediaStreamSource(this.stream);
     this.processor = this.context.createScriptProcessor(2048, 1, 1);
     this.processor.onaudioprocess = (event) => {
-      const input = event.inputBuffer.getChannelData(0);
+      const raw = event.inputBuffer.getChannelData(0);
+      let input: Float32Array = raw;
+      if (this.aec3) {
+        const captureIn = [raw];
+        const outSize = this.aec3.processSize(captureIn);
+        if (!this.aec3Out || this.aec3Out[0].length !== outSize) this.aec3Out = [new Float32Array(outSize)];
+        this.aec3.process(this.aec3Out, captureIn);
+        input = this.aec3Out[0];
+      }
 
       let sumSquares = 0;
       for (let i = 0; i < input.length; i++) sumSquares += input[i] * input[i];
@@ -280,6 +297,8 @@ export class AudioPlayer {
   private element: SinkableElement;
   private gain: GainNode;
   private context: AudioContext;
+  private aecTap: ScriptProcessorNode | null = null;
+  private aecSink: GainNode | null = null;
 
   constructor(context: AudioContext) {
     this.context = context;
@@ -352,6 +371,36 @@ export class AudioPlayer {
     };
   }
 
+  /** Feeds everything played back through this player into `aec3.analyze()` as
+   *  the far-end/render reference, so a paired `MicCapture`'s aec3 `process()`
+   *  calls can cancel it back out of the mic signal. Taps post-gain: what's
+   *  actually reaching the speakers is what needs cancelling, not the
+   *  pre-volume mix. */
+  attachAecRenderTap(aec3: Pick<Aec3Instance, "analyze">): void {
+    this.detachAecRenderTap();
+    const tap = this.context.createScriptProcessor(2048, 2, 2);
+    tap.onaudioprocess = (e) => {
+      aec3.analyze([e.inputBuffer.getChannelData(0), e.inputBuffer.getChannelData(1)]);
+    };
+    const sink = this.context.createGain();
+    sink.gain.value = 0;
+    this.gain.connect(tap);
+    tap.connect(sink);
+    sink.connect(this.context.destination);
+    this.aecTap = tap;
+    this.aecSink = sink;
+  }
+
+  detachAecRenderTap(): void {
+    if (this.aecTap) {
+      this.gain.disconnect(this.aecTap);
+      this.aecTap.disconnect();
+      this.aecTap = null;
+    }
+    this.aecSink?.disconnect();
+    this.aecSink = null;
+  }
+
   /** Routes playback to a specific device (empty string = system default). */
   async setOutputDevice(deviceId: string): Promise<void> {
     if (typeof this.element.setSinkId === "function") {
@@ -366,6 +415,7 @@ export class AudioPlayer {
   }
 
   dispose(): void {
+    this.detachAecRenderTap();
     this.element.pause();
     this.element.srcObject = null;
     this.element.remove();

@@ -337,6 +337,7 @@
   "recording.echoCancellation": "Echo cancellation",
   "recording.noiseSuppression": "Remove background noise",
   "recording.autoGainControl": "Automatic gain control",
+  "recording.aec3": "Advanced echo cancellation (Beta, more CPU load)",
   "info.address": "Address:",
   "info.version": "Version:",
   "info.license": "License:",

@@ -4,12 +4,15 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/sync-aec3-assets.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/sync-aec3-assets.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ennuicastr/webrtcaec3.js": "^0.3.0",
     "fflate": "^0.8.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

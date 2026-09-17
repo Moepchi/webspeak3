@@ -13,3 +13,6 @@ CLAUDE.md
 
 # TLS material for local HTTPS - a private key never belongs in the repo.
 gateway/certs/
+
+# Prebuilt WASM assets synced from node_modules by scripts/sync-aec3-assets.mjs
+web/public/vendor/

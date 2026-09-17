@@ -25,6 +25,7 @@ import {
   listAudioOutputDevices,
   pickAudioOutputDevice,
 } from "./voice";
+import { createAec3, type Aec3Instance } from "./aec3";
 import { LanguageProvider, useLanguage, useT, type LangPref } from "./i18n";
 import {
   StreamAccess,
@@ -266,6 +267,7 @@ const PLAYBACK_VOLUME_KEY = "webspeak3:playback-volume";
 const NOISE_SUPPRESSION_KEY = "webspeak3:noise-suppression";
 const ECHO_CANCELLATION_KEY = "webspeak3:echo-cancellation";
 const AUTO_GAIN_CONTROL_KEY = "webspeak3:auto-gain-control";
+const AEC3_ENABLED_KEY = "webspeak3:aec3-enabled";
 const VAD_HANGOVER_KEY = "webspeak3:vad-hangover";
 const DESIGN_THEME_KEY = "webspeak3:design-theme";
 // The user's actual pick - "standard" | "nova" | "greenteaspeak" | "custom:<id>".
@@ -4928,6 +4930,9 @@ interface AudioSettings {
   onToggleEchoCancellation: () => void;
   autoGainControlEnabled: boolean;
   onToggleAutoGainControl: () => void;
+  aec3Enabled: boolean;
+  aec3Loading: boolean;
+  onToggleAec3: () => void;
 }
 
 function MicLevelBar({ levelRef, active }: { levelRef: React.MutableRefObject<number>; active: boolean }) {
@@ -5106,6 +5111,7 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
                 <input
                   type="checkbox"
                   checked={audio.echoCancellationEnabled}
+                  disabled={audio.aec3Enabled}
                   onChange={audio.onToggleEchoCancellation}
                 />
                 {t("recording.echoCancellation")}
@@ -5125,6 +5131,16 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
                   onChange={audio.onToggleAutoGainControl}
                 />
                 {t("recording.autoGainControl")}
+              </label>
+              <label className="ts-options-checkbox">
+                <input
+                  type="checkbox"
+                  checked={audio.aec3Enabled}
+                  disabled={audio.aec3Loading}
+                  onChange={audio.onToggleAec3}
+                />
+                {t("recording.aec3")}
+                {audio.aec3Loading ? "…" : ""}
               </label>
             </div>
           </fieldset>
@@ -6160,6 +6176,11 @@ function AppInner() {
   const [autoGainControlEnabled, setAutoGainControlEnabled] = useState(() =>
     loadBoolPref(AUTO_GAIN_CONTROL_KEY, true)
   );
+  // Off by default: a heavier, opt-in alternative/supplement to native AEC for
+  // speaker+mic (no headset) setups (github.com/Moepchi/webspeak3 issue #2).
+  const [aec3Enabled, setAec3Enabled] = useState(() => loadBoolPref(AEC3_ENABLED_KEY, false));
+  const [aec3Loading, setAec3Loading] = useState(false);
+  const aec3Ref = useRef<Aec3Instance | null>(null);
   const [micTestOn, setMicTestOn] = useState(false);
   const [connectionsMenuOpen, setConnectionsMenuOpen] = useState(false);
   // Nova-theme-only: collapses the classic menu items behind a hamburger button.
@@ -6338,6 +6359,10 @@ function AppInner() {
   useEffect(() => {
     localStorage.setItem(AUTO_GAIN_CONTROL_KEY, autoGainControlEnabled ? "1" : "0");
   }, [autoGainControlEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(AEC3_ENABLED_KEY, aec3Enabled ? "1" : "0");
+  }, [aec3Enabled]);
 
   useEffect(() => {
     if (inputDeviceId) localStorage.setItem(INPUT_DEVICE_KEY, inputDeviceId);
@@ -7801,9 +7826,12 @@ function AppInner() {
         threshold: vadThreshold,
         hangoverSeconds: vadHangover,
         deviceId: overrides?.deviceId ?? (inputDeviceId || undefined),
-        echoCancellation: overrides?.echoCancellation ?? echoCancellationEnabled,
+        // AEC3 replaces (not stacks with) the native canceller - running both
+        // fights over the same signal.
+        echoCancellation: aec3Ref.current ? false : (overrides?.echoCancellation ?? echoCancellationEnabled),
         noiseSuppression: overrides?.noiseSuppression ?? noiseSuppressionEnabled,
         autoGainControl: overrides?.autoGainControl ?? autoGainControlEnabled,
+        aec3: aec3Ref.current ?? undefined,
       });
       await mic.start();
       micCaptureRef.current = mic;
@@ -7866,6 +7894,37 @@ function AppInner() {
     const next = !autoGainControlEnabled;
     setAutoGainControlEnabled(next);
     if (micCaptureRef.current) void restartMic({ autoGainControl: next });
+  };
+
+  const teardownAec3 = () => {
+    audioPlayerRef.current?.detachAecRenderTap();
+    aec3Ref.current?.free();
+    aec3Ref.current = null;
+  };
+
+  const handleToggleAec3 = async () => {
+    if (aec3Enabled) {
+      setAec3Enabled(false);
+      teardownAec3();
+      if (micCaptureRef.current) void restartMic({});
+      return;
+    }
+    setAec3Loading(true);
+    try {
+      const audioContext = ensureAudioContext();
+      if (audioContext.state === "suspended") await audioContext.resume();
+      const aec3 = await createAec3(SAMPLE_RATE, 2, 1);
+      aec3Ref.current = aec3;
+      audioPlayerRef.current?.attachAecRenderTap(aec3);
+      setAec3Enabled(true);
+      if (micCaptureRef.current) await restartMic({});
+    } catch (error) {
+      appendLog({ text: `Advanced echo cancellation failed to load: ${(error as Error).message}`, kind: "error" });
+      teardownAec3();
+      setAec3Enabled(false);
+    } finally {
+      setAec3Loading(false);
+    }
   };
 
   const handleToggleMicTest = () => {
@@ -9940,6 +9999,9 @@ function AppInner() {
             onToggleEchoCancellation: handleToggleEchoCancellation,
             autoGainControlEnabled,
             onToggleAutoGainControl: handleToggleAutoGainControl,
+            aec3Enabled,
+            aec3Loading,
+            onToggleAec3: handleToggleAec3,
           }}
         />
       )}

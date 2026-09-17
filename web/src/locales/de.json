@@ -337,6 +337,7 @@
   "recording.echoCancellation": "Echo Dämpfung",
   "recording.noiseSuppression": "Hintergrundgeräusche entfernen",
   "recording.autoGainControl": "Automatische Verstärkung",
+  "recording.aec3": "Erweiterte Echounterdrückung (Beta, mehr CPU-Last)",
   "info.address": "Adresse:",
   "info.version": "Version:",
   "info.license": "Lizenz:",
