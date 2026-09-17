@@ -1541,6 +1541,7 @@ function ConnectDialog({
               </button>
             )}
             <button
+              className={nova ? "ts-connect-cancel" : undefined}
               onClick={onConnectNewTab}
               disabled={connecting || !host || !nickname || !canOpenNewTab}
               title={canOpenNewTab ? undefined : t("connect.newTab")}
