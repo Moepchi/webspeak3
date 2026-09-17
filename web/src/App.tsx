@@ -8023,7 +8023,7 @@ function AppInner() {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [chatInput]);
+  }, [chatInput, designTheme, connected]);
 
   const handleSendChat = () => {
     const message = chatInput.trim();

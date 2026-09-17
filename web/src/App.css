@@ -744,6 +744,19 @@
   color: var(--bg-toolbar-1);
 }
 
+/* Nova moves the self/voice toolbar below the chat panel instead of above it
+   (see the > .ts-toolbar reorder rule further up), which adds ~6.7rem of
+   vertical footprint the fixed-position feedback/donate FABs don't know
+   about - without this they land on top of the chat composer's send button. */
+.ts-app.ts-design-nova .ts-donate-fab,
+.ts-app.ts-design-nova .ts-feedback-fab-wrap {
+  bottom: 12.25rem;
+}
+
+.ts-app.ts-design-nova .ts-feedback-fab-wrap-stacked {
+  bottom: 15.25rem;
+}
+
 /* Client avatar chips: colored initial squares, Nova-only (Standard theme
    keeps its plain icon + name row). */
 .ts-client-avatar {
