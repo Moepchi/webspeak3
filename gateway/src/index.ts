@@ -383,7 +383,7 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
         return;
       }
       let filePath = path.join(WEB_DIST, decodeURIComponent(requestUrl.pathname));
-      if (!filePath.startsWith(WEB_DIST)) {
+      if (filePath !== WEB_DIST && !filePath.startsWith(WEB_DIST + path.sep)) {
         res.writeHead(403);
         res.end();
         return;
