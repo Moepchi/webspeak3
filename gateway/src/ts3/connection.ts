@@ -248,6 +248,16 @@ export class Ts3Connection {
     for (const listener of this.listeners) listener(event);
   }
 
+  /** Every connector command is exactly one line on this stdin protocol.
+   *  Several call sites forward fields (permission scope/ids, whisper
+   *  targets, ...) without stripping embedded CR/LF first - routing every
+   *  write through here means a stray newline in any of them can never
+   *  smuggle in a second, attacker-chosen command. */
+  private writeLine(line: string): void {
+    if (!this.child || this.child.killed) return;
+    this.child.stdin.write(`${line.replace(/[\r\n]+/g, " ")}\n`);
+  }
+
   async connect(): Promise<void> {
     const args = ["--address", this.options.host, "--nickname", this.options.nickname];
     if (this.options.serverPassword) args.push("--server-password", this.options.serverPassword);
@@ -576,7 +586,7 @@ export class Ts3Connection {
     // The password travels base64-encoded on this line-based stdin protocol
     // so it can safely contain spaces or other characters.
     const passwordArg = channelPassword ? ` ${Buffer.from(channelPassword, "utf8").toString("base64")}` : "";
-    this.child?.stdin.write(`switch ${id}${passwordArg}\n`);
+    this.writeLine(`switch ${id}${passwordArg}`);
   }
 
   async moveClient(clientId: number, channelId: number, channelPassword?: string): Promise<void> {
@@ -584,30 +594,30 @@ export class Ts3Connection {
     const cid = Number(channelId);
     if (!Number.isFinite(clid) || !Number.isFinite(cid)) return;
     const passwordArg = channelPassword ? ` ${Buffer.from(channelPassword, "utf8").toString("base64")}` : "";
-    this.child?.stdin.write(`moveclient ${clid} ${cid}${passwordArg}\n`);
+    this.writeLine(`moveclient ${clid} ${cid}${passwordArg}`);
   }
 
   async getClientConnectionInfo(clientId: number): Promise<void> {
-    this.child?.stdin.write(`clientconninfo ${clientId}\n`);
+    this.writeLine(`clientconninfo ${clientId}`);
   }
 
   async getServerConnectionInfo(): Promise<void> {
-    this.child?.stdin.write(`serverconninfo\n`);
+    this.writeLine(`serverconninfo`);
   }
 
   async kickFromChannel(clientId: number, reason: string): Promise<void> {
     const sanitized = reason.replace(/[\r\n]+/g, " ").trim();
-    this.child?.stdin.write(`kickchannel ${clientId} ${sanitized}\n`);
+    this.writeLine(`kickchannel ${clientId} ${sanitized}`);
   }
 
   async kickFromServer(clientId: number, reason: string): Promise<void> {
     const sanitized = reason.replace(/[\r\n]+/g, " ").trim();
-    this.child?.stdin.write(`kickserver ${clientId} ${sanitized}\n`);
+    this.writeLine(`kickserver ${clientId} ${sanitized}`);
   }
 
   async banClient(clientId: number, seconds: number, reason: string): Promise<void> {
     const sanitized = reason.replace(/[\r\n]+/g, " ").trim();
-    this.child?.stdin.write(`banclient ${clientId} ${Math.max(0, Math.floor(seconds))} ${sanitized}\n`);
+    this.writeLine(`banclient ${clientId} ${Math.max(0, Math.floor(seconds))} ${sanitized}`);
   }
 
   /** Every field is optional - only send what actually changed. JSON.stringify
@@ -631,95 +641,95 @@ export class Ts3Connection {
     phoneticName?: string;
     codecEncryptionMode?: string;
   }): Promise<void> {
-    this.child?.stdin.write(`serveredit ${JSON.stringify(payload)}\n`);
+    this.writeLine(`serveredit ${JSON.stringify(payload)}`);
   }
 
   async getServerLog(): Promise<void> {
-    this.child?.stdin.write(`serverlog\n`);
+    this.writeLine(`serverlog`);
   }
 
   async getBanList(): Promise<void> {
-    this.child?.stdin.write(`banlist\n`);
+    this.writeLine(`banlist`);
   }
 
   async deleteBan(banId: number): Promise<void> {
-    this.child?.stdin.write(`bandel ${banId}\n`);
+    this.writeLine(`bandel ${banId}`);
   }
 
   async deleteAllBans(): Promise<void> {
-    this.child?.stdin.write(`bandelall\n`);
+    this.writeLine(`bandelall`);
   }
 
   async getComplainList(): Promise<void> {
-    this.child?.stdin.write(`complainlist\n`);
+    this.writeLine(`complainlist`);
   }
 
   async deleteComplaint(targetClientDbId: number, fromClientDbId: number): Promise<void> {
-    this.child?.stdin.write(`complaindel ${targetClientDbId} ${fromClientDbId}\n`);
+    this.writeLine(`complaindel ${targetClientDbId} ${fromClientDbId}`);
   }
 
   async deleteAllComplaintsFor(targetClientDbId: number): Promise<void> {
-    this.child?.stdin.write(`complaindelall ${targetClientDbId}\n`);
+    this.writeLine(`complaindelall ${targetClientDbId}`);
   }
 
   async getOfflineMessageList(): Promise<void> {
-    this.child?.stdin.write(`messagelist\n`);
+    this.writeLine(`messagelist`);
   }
 
   async getOfflineMessage(messageId: number): Promise<void> {
-    this.child?.stdin.write(`messageget ${messageId}\n`);
+    this.writeLine(`messageget ${messageId}`);
   }
 
   async sendOfflineMessage(clientUid: string, subject: string, message: string): Promise<void> {
     const sanitize = (s: string) => s.replace(/[\r\n\t]+/g, " ").trim();
-    this.child?.stdin.write(`messageadd ${sanitize(clientUid)}\t${sanitize(subject)}\t${sanitize(message)}\n`);
+    this.writeLine(`messageadd ${sanitize(clientUid)}\t${sanitize(subject)}\t${sanitize(message)}`);
   }
 
   async deleteOfflineMessage(messageId: number): Promise<void> {
-    this.child?.stdin.write(`messagedel ${messageId}\n`);
+    this.writeLine(`messagedel ${messageId}`);
   }
 
   async markOfflineMessageRead(messageId: number): Promise<void> {
-    this.child?.stdin.write(`messageupdateflag ${messageId} 1\n`);
+    this.writeLine(`messageupdateflag ${messageId} 1`);
   }
 
   async getChannelGroupList(): Promise<void> {
-    this.child?.stdin.write(`channelgrouplist\n`);
+    this.writeLine(`channelgrouplist`);
   }
 
   async getServerGroupList(): Promise<void> {
-    this.child?.stdin.write(`servergrouplist\n`);
+    this.writeLine(`servergrouplist`);
   }
 
   async setChannelGroup(channelGroupId: number, channelId: number, clientDbId: number): Promise<void> {
-    this.child?.stdin.write(`setchannelgroup ${channelGroupId} ${channelId} ${clientDbId}\n`);
+    this.writeLine(`setchannelgroup ${channelGroupId} ${channelId} ${clientDbId}`);
   }
 
   async addServerGroup(serverGroupId: number, clientDbId: number): Promise<void> {
-    this.child?.stdin.write(`addservergroup ${serverGroupId} ${clientDbId}\n`);
+    this.writeLine(`addservergroup ${serverGroupId} ${clientDbId}`);
   }
 
   async removeServerGroup(serverGroupId: number, clientDbId: number): Promise<void> {
-    this.child?.stdin.write(`delservergroup ${serverGroupId} ${clientDbId}\n`);
+    this.writeLine(`delservergroup ${serverGroupId} ${clientDbId}`);
   }
 
   async serverQueryLogin(username: string, password: string): Promise<void> {
     const u = Buffer.from(username, "utf8").toString("base64");
     const p = Buffer.from(password, "utf8").toString("base64");
-    this.child?.stdin.write(`serverquerylogin ${u} ${p}\n`);
+    this.writeLine(`serverquerylogin ${u} ${p}`);
   }
 
   async getPermissionOverview(): Promise<void> {
-    this.child?.stdin.write(`permoverview\n`);
+    this.writeLine(`permoverview`);
   }
 
   async getPermissionCatalog(): Promise<void> {
-    this.child?.stdin.write(`permissionlist\n`);
+    this.writeLine(`permissionlist`);
   }
 
   async getPermList(scope: PermScope, id1: number, id2?: number): Promise<void> {
     const args = id2 !== undefined ? `${scope} ${id1} ${id2}` : `${scope} ${id1}`;
-    this.child?.stdin.write(`permlist ${args}\n`);
+    this.writeLine(`permlist ${args}`);
   }
 
   /** `negated`/`skip` only apply to the "server" and "client" scopes - the
@@ -736,73 +746,73 @@ export class Ts3Connection {
     let args = `${scope} ${ids.join(" ")} ${permId} ${value}`;
     if (scope === "server") args += ` ${negated ? 1 : 0} ${skip ? 1 : 0}`;
     else if (scope === "client") args += ` ${skip ? 1 : 0}`;
-    this.child?.stdin.write(`permadd ${args}\n`);
+    this.writeLine(`permadd ${args}`);
   }
 
   async removePermission(scope: PermScope, ids: number[], permId: number): Promise<void> {
-    this.child?.stdin.write(`permdel ${scope} ${ids.join(" ")} ${permId}\n`);
+    this.writeLine(`permdel ${scope} ${ids.join(" ")} ${permId}`);
   }
 
   async getFileList(channelId: number, path: string): Promise<void> {
     const sanitized = (path || "/").replace(/[\r\n]+/g, " ").trim() || "/";
-    this.child?.stdin.write(`ftlist ${channelId} ${sanitized}\n`);
+    this.writeLine(`ftlist ${channelId} ${sanitized}`);
   }
 
   async createDirectory(channelId: number, dirname: string): Promise<void> {
     const sanitized = dirname.replace(/[\r\n]+/g, " ").trim();
-    if (sanitized) this.child?.stdin.write(`ftmkdir ${channelId} ${sanitized}\n`);
+    if (sanitized) this.writeLine(`ftmkdir ${channelId} ${sanitized}`);
   }
 
   async deleteFile(channelId: number, name: string): Promise<void> {
     const sanitized = name.replace(/[\r\n]+/g, " ").trim();
-    if (sanitized) this.child?.stdin.write(`ftdelete ${channelId} ${sanitized}\n`);
+    if (sanitized) this.writeLine(`ftdelete ${channelId} ${sanitized}`);
   }
 
   async renameFile(channelId: number, oldName: string, newName: string): Promise<void> {
     const sanitize = (s: string) => s.replace(/[\r\n\t]+/g, " ").trim();
-    this.child?.stdin.write(`ftrename ${channelId}\t${sanitize(oldName)}\t${sanitize(newName)}\n`);
+    this.writeLine(`ftrename ${channelId}\t${sanitize(oldName)}\t${sanitize(newName)}`);
   }
 
   async downloadFile(channelId: number, path: string): Promise<void> {
     const sanitized = path.replace(/[\r\n]+/g, " ").trim();
-    if (sanitized) this.child?.stdin.write(`ftdownload ${channelId} ${sanitized}\n`);
+    if (sanitized) this.writeLine(`ftdownload ${channelId} ${sanitized}`);
   }
 
   /** `dataBase64` is the raw file content, base64-encoded - the browser reads
    *  the picked File as a data URL/ArrayBuffer and sends it up already encoded. */
   async uploadFile(channelId: number, path: string, dataBase64: string): Promise<void> {
     const sanitizedPath = path.replace(/[\r\n\t]+/g, " ").trim();
-    this.child?.stdin.write(`ftupload ${channelId}\t${sanitizedPath}\t${dataBase64}\n`);
+    this.writeLine(`ftupload ${channelId}\t${sanitizedPath}\t${dataBase64}`);
   }
 
   async sendChatMessage(message: string): Promise<void> {
     const sanitized = message.replace(/[\r\n]+/g, " ").trim();
-    if (sanitized) this.child?.stdin.write(`chat ${sanitized}\n`);
+    if (sanitized) this.writeLine(`chat ${sanitized}`);
   }
 
   async sendServerMessage(message: string): Promise<void> {
     const sanitized = message.replace(/[\r\n]+/g, " ").trim();
-    if (sanitized) this.child?.stdin.write(`serverchat ${sanitized}\n`);
+    if (sanitized) this.writeLine(`serverchat ${sanitized}`);
   }
 
   async sendPrivateMessage(clientId: number, message: string): Promise<void> {
     const sanitized = message.replace(/[\r\n]+/g, " ").trim();
-    if (sanitized) this.child?.stdin.write(`pm ${clientId} ${sanitized}\n`);
+    if (sanitized) this.writeLine(`pm ${clientId} ${sanitized}`);
   }
 
   async sendPoke(clientId: number, message: string): Promise<void> {
     const sanitized = message.replace(/[\r\n]+/g, " ").trim();
-    this.child?.stdin.write(`poke ${clientId} ${sanitized}\n`);
+    this.writeLine(`poke ${clientId} ${sanitized}`);
   }
 
   async sendAudio(pcmBase64: string): Promise<void> {
-    this.child?.stdin.write(`audio ${pcmBase64}\n`);
+    this.writeLine(`audio ${pcmBase64}`);
   }
 
   /** Pulls a streaming client's stream details; answered with a
    *  `notifystreaminfo` streamEvent carrying the stream id. */
   async requestStreamInfo(clientId: number): Promise<void> {
-    this.child?.stdin.write(`streaminfo ${clientId}\n`);
+    this.writeLine(`streaminfo ${clientId}`);
   }
 
   /** Ask the client publishing a TS6 stream to let us watch. The answer comes
@@ -811,12 +821,12 @@ export class Ts3Connection {
   async joinStream(streamId: string, clientId: number, message = ""): Promise<void> {
     const id = streamId.replace(/[\s]+/g, "");
     const sanitized = message.replace(/[\r\n]+/g, " ").trim();
-    if (id) this.child?.stdin.write(`streamjoin ${id} ${clientId} ${sanitized}\n`);
+    if (id) this.writeLine(`streamjoin ${id} ${clientId} ${sanitized}`);
   }
 
   async leaveStream(streamId: string, clientId: number): Promise<void> {
     const id = streamId.replace(/[\s]+/g, "");
-    if (id) this.child?.stdin.write(`streamleave ${id} ${clientId}\n`);
+    if (id) this.writeLine(`streamleave ${id} ${clientId}`);
   }
 
   /** Relays one signaling payload (SDP answer, ICE candidate) to a stream peer.
@@ -826,7 +836,7 @@ export class Ts3Connection {
    *  stdin protocol. */
   async sendStreamSignal(streamId: string, clientId: number, payload: unknown): Promise<void> {
     const id = streamId.replace(/[\s]+/g, "");
-    if (id) this.child?.stdin.write(`streamsignal ${id} ${clientId} ${JSON.stringify(payload)}\n`);
+    if (id) this.writeLine(`streamsignal ${id} ${clientId} ${JSON.stringify(payload)}`);
   }
 
   /** Announces a stream we publish. The server assigns the id and reports it
@@ -841,7 +851,7 @@ export class Ts3Connection {
       viewerLimit: options.viewerLimit,
       audio: options.audio,
     };
-    this.child?.stdin.write(`streamsetup ${JSON.stringify(payload)}\n`);
+    this.writeLine(`streamsetup ${JSON.stringify(payload)}`);
   }
 
   /** Accepts or refuses a viewer that asked to watch our stream. On accept,
@@ -863,44 +873,47 @@ export class Ts3Connection {
       offer,
       decision: accept ? 1 : 0,
     };
-    this.child?.stdin.write(`streamrespond ${JSON.stringify(payload)}\n`);
+    this.writeLine(`streamrespond ${JSON.stringify(payload)}`);
   }
 
   async stopStream(streamId: string, reason = ""): Promise<void> {
     const id = streamId.replace(/[\s]+/g, "");
     const sanitized = reason.replace(/[\r\n]+/g, " ").trim();
-    if (id) this.child?.stdin.write(`streamstop ${id} ${sanitized}\n`);
+    if (id) this.writeLine(`streamstop ${id} ${sanitized}`);
   }
 
   async setAway(away: boolean, message: string): Promise<void> {
     if (away) {
       const sanitized = message.replace(/[\r\n]+/g, " ").trim();
-      this.child?.stdin.write(`away ${sanitized}\n`);
+      this.writeLine(`away ${sanitized}`);
     } else {
-      this.child?.stdin.write("unaway\n");
+      this.writeLine("unaway");
     }
   }
 
   async setInputMuted(muted: boolean): Promise<void> {
-    this.child?.stdin.write(`muteinput ${muted ? "1" : "0"}\n`);
+    this.writeLine(`muteinput ${muted ? "1" : "0"}`);
   }
 
   async setOutputMuted(muted: boolean): Promise<void> {
-    this.child?.stdin.write(`muteoutput ${muted ? "1" : "0"}\n`);
+    this.writeLine(`muteoutput ${muted ? "1" : "0"}`);
   }
 
   async setNickname(nickname: string): Promise<void> {
     const sanitized = nickname.replace(/[\r\n]+/g, " ").trim();
-    if (sanitized) this.child?.stdin.write(`nickname ${sanitized}\n`);
+    if (sanitized) this.writeLine(`nickname ${sanitized}`);
   }
 
   /** Empty channelIds/clientIds clears whisper mode, returning outgoing
    *  voice to the normal current-channel broadcast. */
   async setWhisperTargets(channelIds: number[], clientIds: number[]): Promise<void> {
-    if (channelIds.length === 0 && clientIds.length === 0) {
-      this.child?.stdin.write("unwhisper\n");
+    const chans = channelIds.map(Number);
+    const clients = clientIds.map(Number);
+    if (chans.some((n) => !Number.isFinite(n)) || clients.some((n) => !Number.isFinite(n))) return;
+    if (chans.length === 0 && clients.length === 0) {
+      this.writeLine("unwhisper");
     } else {
-      this.child?.stdin.write(`whisper ${channelIds.join(",")};${clientIds.join(",")}\n`);
+      this.writeLine(`whisper ${chans.join(",")};${clients.join(",")}`);
     }
   }
 

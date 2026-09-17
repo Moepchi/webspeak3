@@ -515,8 +515,31 @@ wss.on("connection", (socket: WebSocket) => {
   });
 
   socket.on("message", async (raw) => {
-    const msg = JSON.parse(raw.toString());
+    // Everything below runs inside this try/catch on purpose: any exception
+    // here - malformed JSON, a handler throwing on unexpected input - would
+    // otherwise become an unhandled rejection (this callback is async) and
+    // take the whole process down with it, dropping every other connected
+    // user's live session. One bad message from one tab must never do that.
+    let msg: any;
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      socket.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
+      return;
+    }
 
+    try {
+      await handleMessage(msg);
+    } catch (err) {
+      console.error("[gateway] Error handling WS message:", err);
+      try {
+        socket.send(JSON.stringify({ type: "error", message: "Internal error handling message" }));
+      } catch {
+        /* socket already gone */
+      }
+    }
+
+    async function handleMessage(msg: any): Promise<void> {
     switch (msg.type) {
       case "connect": {
         // Replacing a connection on the same socket: tear down the previous
@@ -818,6 +841,7 @@ wss.on("connection", (socket: WebSocket) => {
         socket.send(
           JSON.stringify({ type: "error", message: `Unknown message type: ${msg.type}` })
         );
+    }
     }
   });
 
