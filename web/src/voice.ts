@@ -128,6 +128,11 @@ export class MicCapture {
         this.aec3.process(this.aec3Out, captureIn);
         input = this.aec3Out[0];
       }
+      // Mirrors the (possibly AEC3-cancelled) signal to the output buffer, so
+      // setMonitoring() below can tap what's actually being sent rather than
+      // the raw pre-cancellation mic feed - a self-test through the raw feed
+      // always howls, whether or not AEC3 is on.
+      event.outputBuffer.getChannelData(0).set(input);
 
       let sumSquares = 0;
       for (let i = 0; i < input.length; i++) sumSquares += input[i] * input[i];
@@ -170,21 +175,25 @@ export class MicCapture {
     return this.source;
   }
 
-  /** Routes the raw mic signal to `destination` too, so you can hear yourself (a mic test), until disabled again. */
+  /** Routes the (possibly AEC3-cancelled) mic signal to `destination` too, so
+   *  you can hear yourself - a mic test - until disabled again. Taps the
+   *  processor's output rather than the raw source, so the test actually
+   *  reflects AEC3 when it's on, instead of always howling via the
+   *  uncancelled raw feed. */
   setMonitoring(enabled: boolean, destination: AudioNode): void {
-    if (!this.source) return;
+    if (!this.processor) return;
     if (enabled && this.monitorTarget !== destination) {
-      if (this.monitorTarget) this.source.disconnect(this.monitorTarget);
-      this.source.connect(destination);
+      if (this.monitorTarget) this.processor.disconnect(this.monitorTarget);
+      this.processor.connect(destination);
       this.monitorTarget = destination;
     } else if (!enabled && this.monitorTarget) {
-      this.source.disconnect(this.monitorTarget);
+      this.processor.disconnect(this.monitorTarget);
       this.monitorTarget = null;
     }
   }
 
   stop(): void {
-    if (this.source && this.monitorTarget) this.source.disconnect(this.monitorTarget);
+    if (this.processor && this.monitorTarget) this.processor.disconnect(this.monitorTarget);
     this.monitorTarget = null;
     this.processor?.disconnect();
     this.silence?.disconnect();
