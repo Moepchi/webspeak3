@@ -2479,7 +2479,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 15;
+  z-index: 550;
 }
 
 .ts-dialog {
