@@ -180,6 +180,24 @@ docker run -d -p 8080:8080 --name webspeak3 moepchi/webspeak3:latest
 
 The UI shows a small **Ko-fi donation button** in the bottom right corner. Building it yourself and would rather not carry someone else's donation link? `docker compose build --build-arg DONATE_URL=` removes it (any other value points it somewhere else). Outside Docker the same thing is a build-time variable: `VITE_DONATE_URL= npm run build` in `web/`.
 
+#### Environment variables
+
+All optional; add them under `environment:` in your compose override next to `PORT`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8080` | Port the gateway listens on. |
+| `WEB_STATIC` | on | Set to `0` to disable serving the built UI (`web/dist`) entirely — the gateway then only answers `/ws`, `/api/feedback` and `/healthz`. Use this when the UI is hosted elsewhere (e.g. a CDN/static host) and the gateway is purely a backend. |
+| `WEB_DIST` | `web/dist` next to the gateway | Overrides the directory served when `WEB_STATIC` is on. Only needed for non-standard layouts. |
+| `LOG_CONNECTIONS` | off | Set to `1` to log connect/disconnect events (host/server-name/timestamp only, no nickname or IP). |
+| `FEEDBACK_ENABLED` | off | Set to `1` to enable the in-app feedback form's `/api/feedback` endpoint. |
+| `FEEDBACK_ALLOWED_ORIGIN` | `*` | CORS origin allowed to call `/api/feedback`, if you want to restrict it to your own frontend's origin. |
+| `FEEDBACK_LOG_FILE` | `feedback.log` in the container's working dir | Where feedback submissions are appended. Mount a volume over this path if submissions should survive a container recreate. |
+| `GITHUB_TOKEN` | unset | A token with "Issues: write" on `GITHUB_REPO`. Without it, feedback is still logged but never turned into a GitHub issue. |
+| `GITHUB_REPO` | `Moepchi/webspeak3` | Repo feedback issues are filed against, when `GITHUB_TOKEN` is set. |
+| `BROADCAST_TOKEN` | unset | Bearer token required to call `/api/broadcast` (send an in-app notice to all connected clients before a maintenance restart). Endpoint 404s while unset. |
+| `TLS_CERT` / `TLS_KEY` | unset | Paths to serve the gateway over HTTPS/WSS directly instead of behind a reverse proxy/tunnel. Both must be set together. |
+
 <details>
 <summary><b>🛠️ Manual installation (without Docker)</b></summary>
 
