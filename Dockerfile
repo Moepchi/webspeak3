@@ -35,10 +35,14 @@ ARG DONATE_URL=keep
 # sentinel needed.
 ARG DEFAULT_SERVER=
 ARG DEFAULT_CHANNEL=
+# Design Store catalog to use - unset means "use the maintainer's shared
+# one" (App.tsx's own default), same unset-means-no-override convention as
+# DEFAULT_SERVER above.
+ARG STORE_URL=
 # tsc -b currently fails on pre-existing type errors unrelated to this build;
 # vite build alone is enough to produce the production bundle.
 RUN if [ "$DONATE_URL" = "keep" ]; then DONATE_URL_ENV=; else DONATE_URL_ENV="VITE_DONATE_URL=$DONATE_URL"; fi; \
-    env $DONATE_URL_ENV VITE_DEFAULT_SERVER="$DEFAULT_SERVER" VITE_DEFAULT_CHANNEL="$DEFAULT_CHANNEL" npx vite build
+    env $DONATE_URL_ENV VITE_DEFAULT_SERVER="$DEFAULT_SERVER" VITE_DEFAULT_CHANNEL="$DEFAULT_CHANNEL" VITE_STORE_URL="$STORE_URL" npx vite build
 
 # --- Gateway ----------------------------------------------------------------
 FROM node:22-bookworm-slim AS gateway-builder
