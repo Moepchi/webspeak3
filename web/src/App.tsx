@@ -5421,6 +5421,7 @@ function DesignPanel({
                 </ActionIcon>
               </button>
               <button
+                className="ts-design-theme-card-delete"
                 onClick={() => {
                   if (window.confirm(t("design.custom.deleteConfirm"))) onDeleteCustomTheme(theme.id);
                 }}

@@ -3458,6 +3458,20 @@
   padding: 0.5rem 0;
 }
 
+/* Delete is destructive - always red, regardless of the active design's
+   accent color. Selector nests one level deeper than the shared rules
+   above so it reliably wins the cascade instead of relying on source order. */
+.ts-design-theme-card-actions .ts-design-theme-card-delete {
+  background: linear-gradient(to bottom, #d64545, #b23a3a);
+  border-color: #8f2c2c;
+  color: #fff;
+}
+
+.ts-design-theme-card-actions .ts-design-theme-card-delete:hover:not(:disabled) {
+  background: linear-gradient(to bottom, #e85d5d, #c94444);
+  border-color: #e85d5d;
+}
+
 .ts-design-store-card-actions {
   margin-top: 0.5rem;
 }
