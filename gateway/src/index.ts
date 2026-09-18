@@ -342,9 +342,10 @@ const STORE_CSS_MAX_LENGTH = 50_000;
 // flat JSON file as everything else, so this also bounds that file's growth.
 const STORE_SCREENSHOT_MAX_DATA_URL_LENGTH = 400_000;
 const STORE_SCREENSHOT_RE = /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/]+=*$/;
-// Hard cap so the flat file can't grow unbounded from spam that slips past
-// rate limiting (a fresh IP per submission, say).
-const STORE_MAX_THEMES = 2000;
+// Hard cap so the flat file - and the in-memory cache mirroring it - can't
+// grow unbounded from spam that slips past rate limiting (a fresh IP per
+// submission, say). Bounds worst case to ~300 * 450KB =~ 135MB in RAM.
+const STORE_MAX_THEMES = 300;
 const STORE_BASE_THEMES = new Set(["standard", "nova", "greenteaspeak", "pulse"]);
 
 // A handful of names (the operator's own) that only whoever holds
