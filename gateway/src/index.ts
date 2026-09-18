@@ -439,7 +439,9 @@ function setStoreCors(res: ServerResponse) {
 }
 
 function storeRating(theme: StoreTheme): { average: number; count: number } {
-  return { average: theme.ratingCount ? theme.ratingSum / theme.ratingCount : 0, count: theme.ratingCount };
+  // theme.ratingCount is undefined for themes submitted before this field existed.
+  const count = theme.ratingCount ?? 0;
+  return { average: count ? theme.ratingSum / count : 0, count };
 }
 
 async function handleStoreList(res: ServerResponse) {
@@ -452,8 +454,8 @@ async function handleStoreList(res: ServerResponse) {
       name: t.name,
       baseTheme: t.baseTheme,
       author: t.author,
-      description: t.description,
-      hasScreenshot: t.screenshot !== null,
+      description: t.description ?? "",
+      hasScreenshot: Boolean(t.screenshot),
       rating: storeRating(t),
       createdAt: t.createdAt,
     }));
@@ -536,8 +538,8 @@ async function handleStoreRate(req: IncomingMessage, res: ServerResponse, id: st
     return;
   }
 
-  theme.ratingSum += stars;
-  theme.ratingCount += 1;
+  theme.ratingSum = (theme.ratingSum ?? 0) + stars;
+  theme.ratingCount = (theme.ratingCount ?? 0) + 1;
   try {
     await saveStoreThemes(themes);
   } catch (err) {
