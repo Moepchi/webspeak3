@@ -1,13 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createSecureServer } from "node:https";
 import { readFileSync } from "node:fs";
-import { readFile, appendFile, rename, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Ts3Connection, type ServerType, type Ts3ConnectOptions } from "./ts3/connection.js";
 import { handleStore } from "./store.js";
+import { logFeedback, logConnectionEvent } from "./activity-log.js";
 
 const SERVER_TYPES = new Set<ServerType>(["teamspeak", "teaspeak", "auto"]);
 
@@ -25,12 +26,6 @@ function parsePrivilegeKey(msg: { privilegeKey?: unknown; token?: unknown }): st
 }
 
 const PORT = Number(process.env.PORT ?? 8080);
-
-// Opt-in only, off by default: this is an open-source, self-hostable image,
-// and other instances shouldn't get connection logging just because it's in
-// the codebase. Set LOG_CONNECTIONS=1 in the .env of the instance you want it
-// on. Logs only host/server-name/timestamp — no nickname, no IP.
-const LOG_CONNECTIONS = process.env.LOG_CONNECTIONS === "1";
 
 // In production (Docker), the built web app lives alongside the gateway and
 // is served from the same port as the WebSocket endpoint, so a single
@@ -74,15 +69,6 @@ const FEEDBACK_ALLOWED_ORIGIN = process.env.FEEDBACK_ALLOWED_ORIGIN ?? "*";
 // feedback is still accepted and logged, just never turned into an issue.
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO ?? "Moepchi/webspeak3";
-// Plain JSON-lines file. Defaults under the container's WORKDIR (/app in
-// the Docker image); mount a volume over it if you want submissions to
-// survive a container recreate.
-const FEEDBACK_LOG_FILE = process.env.FEEDBACK_LOG_FILE ?? path.resolve(process.cwd(), "feedback.log");
-// Simple size-based rotation: once the log crosses this size, the current
-// file is moved to feedback.log.1 (overwriting any previous one) and a
-// fresh file is started. Keeps disk usage bounded on a plain JSON-lines
-// file with no other retention policy.
-const FEEDBACK_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const FEEDBACK_CATEGORIES = new Set(["bug", "idea", "report", "other"]);
 const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
 
@@ -162,19 +148,6 @@ async function handleBroadcast(req: IncomingMessage, res: ServerResponse) {
 
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ ok: true, sent }));
-}
-
-async function rotateFeedbackLogIfNeeded(): Promise<void> {
-  try {
-    const { size } = await stat(FEEDBACK_LOG_FILE);
-    if (size < FEEDBACK_LOG_MAX_BYTES) return;
-    await rename(FEEDBACK_LOG_FILE, `${FEEDBACK_LOG_FILE}.1`);
-  } catch (err) {
-    // ENOENT just means there's no log yet - nothing to rotate.
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.error("[feedback] Failed to rotate feedback log:", err);
-    }
-  }
 }
 
 // Small in-memory rate limit: a handful of submissions per IP per hour is
@@ -300,13 +273,7 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  try {
-    await rotateFeedbackLogIfNeeded();
-    const entry = { at: new Date().toISOString(), category, message, email };
-    await appendFile(FEEDBACK_LOG_FILE, JSON.stringify(entry) + "\n", "utf-8");
-  } catch (err) {
-    console.error("[feedback] Failed to write feedback log:", err);
-  }
+  await logFeedback({ at: new Date().toISOString(), category, message, email });
 
   let githubIssueUrl: string | undefined;
   if (publishAsIssue) {
@@ -574,14 +541,10 @@ wss.on("connection", (socket: WebSocket) => {
         liveConnections.add(connection);
         connection.onEvent((event) => {
           if (shuttingDown) return;
-          if (LOG_CONNECTIONS) {
-            if (event.type === "connected") {
-              console.log(
-                `[connections] connected host=${options.host} server=${event.serverName} at=${new Date().toISOString()}`
-              );
-            } else if (event.type === "disconnected") {
-              console.log(`[connections] disconnected host=${options.host} at=${new Date().toISOString()}`);
-            }
+          if (event.type === "connected") {
+            logConnectionEvent({ type: "connected", host: options.host, server: event.serverName });
+          } else if (event.type === "disconnected") {
+            logConnectionEvent({ type: "disconnected", host: options.host });
           }
           socket.send(JSON.stringify(event));
         });
