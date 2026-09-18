@@ -3386,13 +3386,13 @@
 
 .ts-design-theme-card-actions button {
   flex: 1;
-  padding: 0.25rem 0;
+  padding: 0.4rem 0;
   border: 1px solid var(--border-soft);
   border-radius: 3px;
   background: var(--input-bg);
-  color: var(--text-muted);
+  color: var(--text);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .ts-design-theme-card-actions button:hover {
