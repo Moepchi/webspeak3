@@ -97,16 +97,20 @@ const FEEDBACK_URL = import.meta.env.DEV
     ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "").replace(/^ws(s?):\/\//, "http$1://")}/api/feedback`
     : `${window.location.protocol}//${window.location.host}/api/feedback`;
 
-// Same derivation again, for the design store (see gateway/src/index.ts's
-// /api/store/themes handler). Unlike FEEDBACK_URL/IS_OWN_HOSTED_INSTANCE this
-// isn't limited to the maintainer's own instance - any self-hosted gateway
-// can turn STORE_ENABLED on, so the button always shows and the store panel
-// itself reports "unavailable" if the gateway 404s.
+// Unlike GATEWAY_URL/FEEDBACK_URL above, the design store is NOT per-instance:
+// it's a single, centrally curated catalog run on the maintainer's own VPS
+// (see gateway/src/store.ts), so every build - official and self-hosted
+// Docker image alike - points at the same one by default, regardless of
+// which TS3/TeaSpeak gateway that build otherwise talks to. A self-hoster who
+// wants to run their own separate community store instead (their own
+// gateway's STORE_ENABLED=1) can override with VITE_STORE_URL at build time.
+// DEMO_MODE keeps the old same-origin derivation instead, which 404s on the
+// static demo host - the public demo has no write access to the real store.
 const STORE_URL = import.meta.env.DEV
   ? "http://localhost:8080/api/store/themes"
-  : import.meta.env.VITE_GATEWAY_URL
-    ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "").replace(/^ws(s?):\/\//, "http$1://")}/api/store/themes`
-    : `${window.location.protocol}//${window.location.host}/api/store/themes`;
+  : DEMO_MODE
+    ? `${window.location.protocol}//${window.location.host}/api/store/themes`
+    : import.meta.env.VITE_STORE_URL || "https://gateway.webspeak3.de/api/store/themes";
 
 // Ko-fi page of the project (.github/FUNDING.yml). Unlike the feedback button
 // below this is not limited to the maintainer's own instance: it ships in
