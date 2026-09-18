@@ -14,6 +14,8 @@ This roadmap is intentionally outcome-focused. It does not promise fixed dates.
 - Server, channel, and private text chat
 - Favorites, identities, contacts, pokes, away state, and reconnect
 - File transfers, local session recording, sound packs, and administration tools
+- Design Store: browse, upload, rate, and download community-made themes
+- Opt-in WASM AEC3 echo cancellation for speaker+mic setups
 - Responsive desktop and mobile interfaces in German and English
 - Docker image and Compose-based self-hosting
 
