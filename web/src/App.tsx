@@ -311,8 +311,21 @@ type StoreThemeSummary = {
   name: string;
   baseTheme: DesignTheme;
   author: string;
+  description: string;
+  hasScreenshot: boolean;
+  rating: { average: number; count: number };
   createdAt: string;
 };
+
+// The operator's own admin token for publishing under a reserved author name
+// (see STORE_RESERVED_AUTHORS in gateway/src/index.ts) - kept in localStorage
+// so it only has to be entered once per browser, same idea as the last-used
+// connection fields above.
+const STORE_ADMIN_TOKEN_KEY = "webspeak3:store-admin-token";
+
+// Mirrors the gateway's STORE_SCREENSHOT_MAX_DATA_URL_LENGTH - checked client-side
+// too so a rejected upload doesn't cost a round trip.
+const STORE_SCREENSHOT_MAX_DATA_URL_LENGTH = 400_000;
 
 function isDesignTheme(value: string): value is DesignTheme {
   return value === "standard" || value === "nova" || value === "greenteaspeak" || value === "pulse";
@@ -5426,8 +5439,14 @@ function DesignStorePanel({
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [publishTarget, setPublishTarget] = useState("");
   const [publishAuthor, setPublishAuthor] = useState("");
+  const [publishDescription, setPublishDescription] = useState("");
+  const [publishScreenshot, setPublishScreenshot] = useState<string | null>(null);
+  const [publishAdminToken, setPublishAdminToken] = useState(
+    () => localStorage.getItem(STORE_ADMIN_TOKEN_KEY) ?? ""
+  );
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<"ok" | "error" | null>(null);
+  const [ratedIds, setRatedIds] = useState<Set<string>>(new Set());
 
   const refreshThemes = () =>
     fetch(STORE_URL)
@@ -5465,30 +5484,76 @@ function DesignStorePanel({
     }
   };
 
+  const handleScreenshotChange = (file: File | undefined) => {
+    if (!file) {
+      setPublishScreenshot(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      if (dataUrl.length > STORE_SCREENSHOT_MAX_DATA_URL_LENGTH) {
+        window.alert(t("design.store.publish.screenshotTooLarge"));
+        return;
+      }
+      setPublishScreenshot(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handlePublish = async () => {
     const theme = customThemes.find((c) => c.id === publishTarget);
     if (!theme) return;
     setPublishing(true);
     setPublishResult(null);
     try {
+      const token = publishAdminToken.trim();
+      if (token) localStorage.setItem(STORE_ADMIN_TOKEN_KEY, token);
       const res = await fetch(STORE_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           name: theme.name,
           baseTheme: theme.baseTheme,
           css: theme.css,
           author: publishAuthor.trim() || undefined,
+          description: publishDescription.trim() || undefined,
+          screenshot: publishScreenshot ?? undefined,
         }),
       });
       if (!res.ok) throw new Error(String(res.status));
       setPublishResult("ok");
       setPublishAuthor("");
+      setPublishDescription("");
+      setPublishScreenshot(null);
       await refreshThemes();
     } catch {
       setPublishResult("error");
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handleRate = async (id: string, stars: number) => {
+    setRatedIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`${STORE_URL}/${id}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stars }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const parsed = await res.json();
+      setThemes(
+        (prev) => prev?.map((th) => (th.id === id ? { ...th, rating: parsed.rating } : th)) ?? prev
+      );
+    } catch {
+      // Vote didn't count (already rated, offline, etc.) - the star stays marked
+      // used locally so the person doesn't just click it again; no error UI needed
+      // for what's a nice-to-have.
     }
   };
 
@@ -5505,10 +5570,39 @@ function DesignStorePanel({
             {themes.length === 0 && <p className="ts-options-subtitle">{t("design.store.empty")}</p>}
             {themes.map((theme) => (
               <div key={theme.id} className="ts-design-theme-card ts-design-theme-card-custom">
+                {theme.hasScreenshot && (
+                  <img
+                    className="ts-design-theme-card-screenshot"
+                    src={`${STORE_URL}/${theme.id}/screenshot`}
+                    alt={t("design.store.screenshotAlt", { name: theme.name })}
+                  />
+                )}
                 <div className="ts-design-theme-card-select">
                   <span className="ts-design-theme-swatch ts-design-theme-swatch-custom" />
                   <span className="ts-design-theme-card-name">{theme.name}</span>
                   <span className="ts-design-theme-card-desc">{t("design.store.by", { author: theme.author })}</span>
+                </div>
+                {theme.description && <p className="ts-design-theme-card-desc">{theme.description}</p>}
+                <div className="ts-design-theme-card-rating">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      className="ts-design-theme-card-star"
+                      disabled={ratedIds.has(theme.id)}
+                      onClick={() => handleRate(theme.id, star)}
+                      title={t("design.store.rating.rate", { stars: String(star) })}
+                    >
+                      {star <= Math.round(theme.rating.average) ? "★" : "☆"}
+                    </button>
+                  ))}
+                  <span className="ts-design-theme-card-rating-count">
+                    {theme.rating.count > 0
+                      ? t("design.store.rating.summary", {
+                          average: theme.rating.average.toFixed(1),
+                          count: String(theme.rating.count),
+                        })
+                      : t("design.store.rating.none")}
+                  </span>
                 </div>
                 <div className="ts-design-theme-card-actions">
                   <button onClick={() => handleInstall(theme.id)} disabled={installedIds.has(theme.id)}>
@@ -5541,6 +5635,33 @@ function DesignStorePanel({
                   value={publishAuthor}
                   onChange={(e) => setPublishAuthor(e.target.value)}
                   placeholder={t("design.store.publish.authorPlaceholder")}
+                />
+              </label>
+              <label className="ts-options-field">
+                {t("design.store.publish.description")}
+                <textarea
+                  value={publishDescription}
+                  onChange={(e) => setPublishDescription(e.target.value)}
+                  placeholder={t("design.store.publish.descriptionPlaceholder")}
+                  maxLength={300}
+                  rows={3}
+                />
+              </label>
+              <label className="ts-options-field">
+                {t("design.store.publish.screenshot")}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => handleScreenshotChange(e.target.files?.[0])}
+                />
+              </label>
+              <label className="ts-options-field">
+                {t("design.store.publish.adminToken")}
+                <input
+                  type="password"
+                  value={publishAdminToken}
+                  onChange={(e) => setPublishAdminToken(e.target.value)}
+                  placeholder={t("design.store.publish.adminTokenPlaceholder")}
                 />
               </label>
               <div className="ts-dialog-buttons-right">

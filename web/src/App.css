@@ -3378,6 +3378,41 @@
   background: conic-gradient(from 180deg, #7fb0e8, #ff8fab, #ffd166, #7fb0e8);
 }
 
+.ts-design-theme-card-screenshot {
+  width: 100%;
+  border-radius: 4px;
+  border: 1px solid var(--border-soft);
+  object-fit: cover;
+  max-height: 120px;
+}
+
+.ts-design-theme-card-rating {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  margin-top: 0.3rem;
+}
+
+.ts-design-theme-card-star {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ts-design-theme-card-star:disabled {
+  cursor: default;
+}
+
+.ts-design-theme-card-rating-count {
+  margin-left: 0.3rem;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .ts-design-theme-card-actions {
   display: flex;
   gap: 0.3rem;
