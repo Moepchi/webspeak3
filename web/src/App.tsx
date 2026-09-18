@@ -5559,7 +5559,12 @@ function DesignStorePanel({
 
   return (
     <>
-      <h3>{t("design.store.title")}</h3>
+      <div className="ts-design-store-header">
+        <button className="ts-design-store-back" onClick={onClose}>
+          ← {t("design.store.back")}
+        </button>
+        <h3>{t("design.store.title")}</h3>
+      </div>
       {unavailable ? (
         <p className="ts-options-subtitle">{t("design.store.unavailable")}</p>
       ) : themes === null ? (
@@ -5604,7 +5609,7 @@ function DesignStorePanel({
                       : t("design.store.rating.none")}
                   </span>
                 </div>
-                <div className="ts-design-theme-card-actions">
+                <div className="ts-design-store-card-actions">
                   <button onClick={() => handleInstall(theme.id)} disabled={installedIds.has(theme.id)}>
                     {installedIds.has(theme.id) ? t("design.store.installed") : t("design.store.install")}
                   </button>
@@ -5664,20 +5669,15 @@ function DesignStorePanel({
                   placeholder={t("design.store.publish.adminTokenPlaceholder")}
                 />
               </label>
-              <div className="ts-dialog-buttons-right">
-                <button onClick={handlePublish} disabled={!publishTarget || publishing}>
-                  {t("design.store.publish.submit")}
-                </button>
-              </div>
+              <button className="ts-design-store-publish-submit" onClick={handlePublish} disabled={!publishTarget || publishing}>
+                {t("design.store.publish.submit")}
+              </button>
               {publishResult === "ok" && <p className="ts-options-subtitle">{t("design.store.publish.success")}</p>}
               {publishResult === "error" && <p className="ts-options-subtitle">{t("design.store.publish.error")}</p>}
             </>
           )}
         </>
       )}
-      <div className="ts-dialog-buttons-right">
-        <button onClick={onClose}>{t("design.store.back")}</button>
-      </div>
     </>
   );
 }

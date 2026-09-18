@@ -3419,22 +3419,83 @@
   margin-top: 0.5rem;
 }
 
-.ts-design-theme-card-actions button {
-  flex: 1;
-  min-height: 2.4rem;
-  padding: 0.5rem 0;
-  border: 1px solid var(--border-soft);
+.ts-design-theme-card-actions button,
+.ts-design-store-card-actions button,
+.ts-design-store-publish-submit,
+.ts-design-custom-actions button {
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--input-bg);
+  background: linear-gradient(to bottom, var(--button-bg-1), var(--button-bg-2));
   color: var(--text);
   cursor: pointer;
+}
+
+.ts-design-theme-card-actions button:hover:not(:disabled),
+.ts-design-store-card-actions button:hover:not(:disabled),
+.ts-design-store-publish-submit:hover:not(:disabled),
+.ts-design-custom-actions button:hover:not(:disabled) {
+  background: linear-gradient(to bottom, var(--button-bg-hover-1), var(--button-bg-hover-2));
+  border-color: var(--accent);
+}
+
+.ts-design-theme-card-actions button:disabled,
+.ts-design-store-card-actions button:disabled,
+.ts-design-store-publish-submit:disabled,
+.ts-design-custom-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Icon row (edit/duplicate/export/delete) - big, evenly-spaced tap targets,
+   there's plenty of room in a custom-theme card for them. */
+.ts-design-theme-card-actions button {
+  flex: 1;
+  min-height: 2.6rem;
+  padding: 0.6rem 0;
   font-size: 20px;
   line-height: 1;
 }
 
-.ts-design-theme-card-actions button:hover {
-  color: var(--text);
-  border-color: var(--accent);
+.ts-design-store-card-actions {
+  margin-top: 0.5rem;
+}
+
+.ts-design-store-card-actions button {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 13px;
+}
+
+.ts-design-store-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.ts-design-store-header h3 {
+  margin: 0;
+}
+
+.ts-design-store-back {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0.2rem 0;
+  font-size: 13px;
+}
+
+.ts-design-store-publish-submit {
+  display: block;
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 13px;
+}
+
+.ts-design-custom-actions button {
+  padding: 0.5rem 1rem;
+  font-size: 13px;
 }
 
 .ts-design-custom-actions {
