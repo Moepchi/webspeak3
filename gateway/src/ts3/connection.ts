@@ -268,6 +268,15 @@ export class Ts3Connection {
     if (this.options.privilegeKey) args.push("--privilege-key", this.options.privilegeKey);
     this.child = spawn(CONNECTOR_BIN, args);
 
+    // The connector can exit on its own (e.g. the TS3 server drops it) and close
+    // its stdin pipe before writeLine()'s `this.child.killed` guard has any way
+    // to know - killed only reflects Node-side .kill() calls. A write to that
+    // closed pipe emits an unhandled 'error' (EPIPE) on the stream, which Node
+    // treats as fatal and crashes the whole gateway process, killing every
+    // other client's session too. Listening here turns it into a normal,
+    // isolated write failure instead of a process-wide crash.
+    this.child.stdin.on("error", () => {});
+
     createInterface({ input: this.child.stdout }).on("line", (line) => {
       try {
         interface RawClientInfo {
