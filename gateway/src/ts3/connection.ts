@@ -237,6 +237,11 @@ const CONNECTOR_BIN =
 export class Ts3Connection {
   private listeners = new Set<(event: Ts3ConnectionEvent) => void>();
   private child?: ChildProcessWithoutNullStreams;
+  // Set once the child is confirmed gone - either it exited, or it never
+  // managed to spawn at all. disconnect() uses this to skip waiting on an
+  // "exit" event that already fired (and so will never fire again) before
+  // disconnect() got a chance to listen for it.
+  private childGone = false;
 
   constructor(private options: Ts3ConnectOptions) {}
 
@@ -276,6 +281,18 @@ export class Ts3Connection {
     // other client's session too. Listening here turns it into a normal,
     // isolated write failure instead of a process-wide crash.
     this.child.stdin.on("error", () => {});
+
+    // spawn() itself can fail asynchronously - wrong CONNECTOR_BIN path, no
+    // exec permission, or (under load, with many connections already open)
+    // EMFILE/ENFILE from running out of file descriptors. That failure surfaces
+    // as an unhandled 'error' event on the child process object, which is just
+    // as fatal to the whole gateway process as the stdin case above - and far
+    // more likely to hit at the worst possible time, since a file-descriptor
+    // limit is reached exactly when the most other connections are active.
+    this.child.on("error", (err) => {
+      this.childGone = true;
+      this.emit({ type: "error", message: `Connector failed to start: ${err.message}` });
+    });
 
     createInterface({ input: this.child.stdout }).on("line", (line) => {
       try {
@@ -583,6 +600,7 @@ export class Ts3Connection {
     });
 
     this.child.on("exit", (code) => {
+      this.childGone = true;
       if (code !== 0) {
         this.emit({ type: "error", message: `Connector exited with code ${code}` });
       }
@@ -927,7 +945,11 @@ export class Ts3Connection {
   }
 
   async disconnect(message = ""): Promise<void> {
-    if (this.child && !this.child.killed) {
+    // childGone means the "exit" event already fired - which happens exactly
+    // once, so a .once("exit", ...) listener attached only now (below) would
+    // never see it, and this would always fall through to the 3s hard-kill
+    // timeout for a process that's already gone. Skip straight past it.
+    if (this.child && !this.child.killed && !this.childGone) {
       const child = this.child;
       const sanitized = message.replace(/[\r\n]+/g, " ").trim();
       child.stdin.write(`disconnect ${sanitized}\n`);
