@@ -117,7 +117,11 @@ async function loadStoreThemes(): Promise<StoreTheme[]> {
   if (storeCache) return storeCache;
   try {
     storeCache = JSON.parse(await readFile(STORE_DATA_FILE, "utf-8")) as StoreTheme[];
-  } catch {
+  } catch (err) {
+    // Only a missing file means "no themes yet". Anything else (unreadable,
+    // corrupt) must fail loudly - treating it as empty would let the next
+    // submission overwrite every stored theme.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     storeCache = [];
   }
   return storeCache;

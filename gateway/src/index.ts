@@ -431,7 +431,13 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
         requestUrl.pathname === "/api/store/themes" ||
         requestUrl.pathname.startsWith("/api/store/themes/")
       ) {
-        await handleStore(req, res, requestUrl.pathname);
+        await handleStore(req, res, requestUrl.pathname).catch((err) => {
+          console.error("[store] Request failed:", err);
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "internal" }));
+          }
+        });
         return;
       }
 
