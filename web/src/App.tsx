@@ -5487,7 +5487,7 @@ function DesignStorePanel({
     () => localStorage.getItem(STORE_ADMIN_TOKEN_KEY) ?? ""
   );
   const [publishing, setPublishing] = useState(false);
-  const [publishResult, setPublishResult] = useState<"ok" | "error" | null>(null);
+  const [publishResult, setPublishResult] = useState<"ok" | "pending" | "error" | null>(null);
   const [ratedIds, setRatedIds] = useState<Set<string>>(new Set());
 
   const refreshThemes = () =>
@@ -5567,7 +5567,8 @@ function DesignStorePanel({
         }),
       });
       if (!res.ok) throw new Error(String(res.status));
-      setPublishResult("ok");
+      const body = (await res.json().catch(() => ({}))) as { status?: string };
+      setPublishResult(body.status === "pending" ? "pending" : "ok");
       setPublishAuthor("");
       setPublishDescription("");
       setPublishScreenshot(null);
@@ -5715,6 +5716,7 @@ function DesignStorePanel({
                 {t("design.store.publish.submit")}
               </button>
               {publishResult === "ok" && <p className="ts-options-subtitle">{t("design.store.publish.success")}</p>}
+              {publishResult === "pending" && <p className="ts-options-subtitle">{t("design.store.publish.pending")}</p>}
               {publishResult === "error" && <p className="ts-options-subtitle">{t("design.store.publish.error")}</p>}
             </>
           )}

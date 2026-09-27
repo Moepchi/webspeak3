@@ -11,7 +11,7 @@
 // touched. It has zero private modifications, so the overlay just copies it
 // verbatim; only index.ts's small SQLite-persistence sections need patching.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { timingSafeEqual, randomUUID } from "node:crypto";
 import path from "node:path";
 import { clientIp, createRateLimiter } from "./net.js";
@@ -68,22 +68,47 @@ interface StoreTheme {
   ratingSum: number;
   ratingCount: number;
   createdAt: string;
-  // ponytail: no moderation queue/admin UI yet - everything publishes as
-  // "approved" immediately. The field exists so a bad submission can be
-  // hidden by hand-editing STORE_DATA_FILE (status: "rejected") without a
-  // schema change, once there's an actual admin surface to do that from.
-  status: "approved" | "rejected";
+  // New submissions start "pending" and only become public once someone
+  // holding STORE_ADMIN_TOKEN approves them (GET /api/store/admin); rejected
+  // ones are deleted outright. "rejected" only survives in old data files.
+  status: "approved" | "pending" | "rejected";
 }
 
-// Rendered CSS reaches other users' browsers, so block the two ways a
-// stylesheet can reach outside itself. Everything else (colors, selectors,
-// animations, pseudo-elements) is harmless - it only ever applies inside the
-// app's own theme wrapper class.
-const CSS_IMPORT_RE = /@import/i;
-const CSS_REMOTE_URL_RE = /url\s*\(\s*["']?\s*(?:https?:)?\/\//i;
+// Undo what a plain pattern check would miss: comments splitting a keyword
+// (u/**/rl), CSS escapes (\75 rl( is url(), and case.
+function normalizeCss(css: string): string {
+  return css
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\\([0-9a-f]{1,6})\s?/gi, (_, hex: string) => {
+      const cp = parseInt(hex, 16);
+      return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : "\ufffd";
+    })
+    .replace(/\\(.)/gs, "$1")
+    .toLowerCase();
+}
 
-function sanitizeThemeCss(css: string): string | null {
-  return CSS_IMPORT_RE.test(css) || CSS_REMOTE_URL_RE.test(css) ? null : css;
+// Theme CSS runs in every installer's browser, so it may style the app but
+// never load anything: no imports/fonts, no functions that fetch a resource,
+// and url() only for inline data: images. Everything else (colors,
+// selectors, animations) can at worst look bad - which moderation catches.
+const FORBIDDEN_CSS = [
+  /@import/,
+  /@font-face/,
+  /@namespace/,
+  /(?:^|[^a-z-])(?:image-set|image|cross-fade|element|src|expression)\s*\(/,
+  /-moz-binding/,
+  /behavior\s*:/,
+  /javascript:/,
+  /<\/?style/,
+];
+
+export function isSafeThemeCss(css: string): boolean {
+  const normalized = normalizeCss(css);
+  if (FORBIDDEN_CSS.some((re) => re.test(normalized))) return false;
+  for (const match of normalized.matchAll(/url\s*\(\s*(["']?)\s*([^"')\s]*)/g)) {
+    if (!/^data:image\/(?:png|jpeg|gif|webp|svg\+xml)[;,]/.test(match[2])) return false;
+  }
+  return true;
 }
 
 let storeCache: StoreTheme[] | null = null;
@@ -100,7 +125,22 @@ async function loadStoreThemes(): Promise<StoreTheme[]> {
 
 async function saveStoreThemes(themes: StoreTheme[]): Promise<void> {
   storeCache = themes;
-  await writeFile(STORE_DATA_FILE, JSON.stringify(themes), "utf-8");
+  // Write-then-rename: a crash mid-write must not leave a truncated file,
+  // which loadStoreThemes() would read as "no themes" and then overwrite.
+  const tmp = `${STORE_DATA_FILE}.tmp`;
+  await writeFile(tmp, JSON.stringify(themes), "utf-8");
+  await rename(tmp, STORE_DATA_FILE);
+}
+
+function isAdminRequest(req: IncomingMessage): boolean {
+  const authHeader = req.headers.authorization ?? "";
+  return authHeader.startsWith("Bearer ") && isValidStoreAdminToken(authHeader.slice("Bearer ".length));
+}
+
+// Approved, and still passing today's CSS check - themes published before
+// that check got stricter are hidden instead of served.
+function isPublic(theme: StoreTheme): boolean {
+  return theme.status === "approved" && isSafeThemeCss(theme.css);
 }
 
 // Same in-memory-per-IP approach as FEEDBACK_RATE_LIMIT in index.ts; kept as a
@@ -130,7 +170,7 @@ function storeRating(theme: StoreTheme): { average: number; count: number } {
 async function handleStoreList(res: ServerResponse) {
   const themes = await loadStoreThemes();
   const listing = themes
-    .filter((t) => t.status === "approved")
+    .filter(isPublic)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .map((t) => ({
       id: t.id,
@@ -146,9 +186,9 @@ async function handleStoreList(res: ServerResponse) {
   res.end(JSON.stringify(listing));
 }
 
-async function handleStoreDownload(res: ServerResponse, id: string) {
+async function handleStoreDownload(req: IncomingMessage, res: ServerResponse, id: string) {
   const themes = await loadStoreThemes();
-  const theme = themes.find((t) => t.id === id && t.status === "approved");
+  const theme = themes.find((t) => t.id === id && (isPublic(t) || isAdminRequest(req)));
   if (!theme) {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -160,9 +200,9 @@ async function handleStoreDownload(res: ServerResponse, id: string) {
   res.end(JSON.stringify({ name: theme.name, baseTheme: theme.baseTheme, css: theme.css }));
 }
 
-async function handleStoreScreenshot(res: ServerResponse, id: string) {
+async function handleStoreScreenshot(req: IncomingMessage, res: ServerResponse, id: string) {
   const themes = await loadStoreThemes();
-  const theme = themes.find((t) => t.id === id && t.status === "approved");
+  const theme = themes.find((t) => t.id === id && (isPublic(t) || isAdminRequest(req)));
   if (!theme?.screenshot) {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -214,7 +254,7 @@ async function handleStoreRate(req: IncomingMessage, res: ServerResponse, id: st
   }
 
   const themes = await loadStoreThemes();
-  const theme = themes.find((t) => t.id === id && t.status === "approved");
+  const theme = themes.find((t) => t.id === id && isPublic(t));
   if (!theme) {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not_found" }));
@@ -296,18 +336,17 @@ async function handleStoreSubmit(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
+  const isAdmin = isAdminRequest(req);
   if (STORE_RESERVED_AUTHORS.has(author.toLowerCase())) {
-    const authHeader = req.headers.authorization ?? "";
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
-    if (!isValidStoreAdminToken(token)) {
+    if (!isAdmin) {
       res.writeHead(403, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "author_reserved" }));
       return;
     }
   }
 
-  const css = sanitizeThemeCss(rawCss);
-  if (css === null) {
+  const css = rawCss;
+  if (!isSafeThemeCss(css)) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "css_rejected" }));
     return;
@@ -341,7 +380,8 @@ async function handleStoreSubmit(req: IncomingMessage, res: ServerResponse) {
     ratingSum: 0,
     ratingCount: 0,
     createdAt: new Date().toISOString(),
-    status: "approved",
+    // The admin's own submissions skip the queue - they'd approve them anyway.
+    status: isAdmin ? "approved" : "pending",
   };
   themes.push(theme);
   try {
@@ -354,8 +394,94 @@ async function handleStoreSubmit(req: IncomingMessage, res: ServerResponse) {
   }
 
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ ok: true, id: theme.id }));
+  res.end(JSON.stringify({ ok: true, id: theme.id, status: theme.status }));
+  if (theme.status === "pending") console.log(`[store] New theme awaiting review: "${theme.name}" (${theme.id})`);
 }
+
+async function handleStorePending(req: IncomingMessage, res: ServerResponse) {
+  if (!isAdminRequest(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "unauthorized" }));
+    return;
+  }
+  const themes = await loadStoreThemes();
+  const pending = themes
+    .filter((t) => t.status === "pending")
+    .map(({ screenshot, ratingSum: _s, ratingCount: _c, ...t }) => ({ ...t, hasScreenshot: Boolean(screenshot) }));
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(pending));
+}
+
+async function handleStoreModerate(req: IncomingMessage, res: ServerResponse, id: string, action: string) {
+  if (!isAdminRequest(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "unauthorized" }));
+    return;
+  }
+  const themes = await loadStoreThemes();
+  const index = themes.findIndex((t) => t.id === id);
+  if (index === -1) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found" }));
+    return;
+  }
+  // Reject and delete are the same thing: drop it, freeing its slot.
+  if (action === "approve") themes[index].status = "approved";
+  else themes.splice(index, 1);
+  try {
+    await saveStoreThemes(themes);
+  } catch (err) {
+    console.error("[store] Failed to save moderation result:", err);
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "save_failed" }));
+    return;
+  }
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true }));
+}
+
+// Minimal moderation page. The theme CSS is shown as text only (textContent),
+// never applied, so reviewing a hostile submission is harmless.
+const ADMIN_PAGE = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Store moderation</title><style>
+body{font:14px system-ui;margin:0 auto;padding:1rem;max-width:60rem;background:#111;color:#eee}
+input,button{font:inherit;padding:.4rem .7rem}article{border:1px solid #444;border-radius:8px;padding:1rem;margin:1rem 0}
+pre{max-height:20rem;overflow:auto;background:#000;padding:.5rem;white-space:pre-wrap}img{max-width:100%}
+.ok{background:#2a6}.no{background:#a33}button{color:#fff;border:0;border-radius:4px;cursor:pointer}
+</style></head><body><h1>Design Store – pending themes</h1>
+<p><input id="token" type="password" placeholder="STORE_ADMIN_TOKEN" size="40"> <button class="ok" id="load">Load</button></p>
+<div id="list"></div><script>
+const base = location.pathname.replace(/\/admin$/, "/themes");
+const auth = () => ({ Authorization: "Bearer " + document.getElementById("token").value });
+async function load() {
+  const list = document.getElementById("list");
+  list.textContent = "Loading…";
+  const res = await fetch(base + "/pending", { headers: auth() });
+  if (!res.ok) { list.textContent = "Error " + res.status; return; }
+  const themes = await res.json();
+  list.textContent = themes.length ? "" : "Nothing to review.";
+  for (const t of themes) {
+    const el = document.createElement("article");
+    const h = document.createElement("h2"); h.textContent = t.name + " – " + t.author + " (" + t.baseTheme + ")"; el.append(h);
+    const d = document.createElement("p"); d.textContent = t.description + " · " + t.createdAt; el.append(d);
+    if (t.hasScreenshot) {
+      const img = document.createElement("img"); el.append(img);
+      fetch(base + "/" + t.id + "/screenshot", { headers: auth() }).then(r => r.blob()).then(b => img.src = URL.createObjectURL(b));
+    }
+    const pre = document.createElement("pre"); pre.textContent = t.css; el.append(pre);
+    for (const [action, label, cls] of [["approve", "Approve", "ok"], ["reject", "Reject (delete)", "no"]]) {
+      const b = document.createElement("button"); b.textContent = label; b.className = cls; b.style.marginRight = ".5rem";
+      b.onclick = async () => {
+        const r = await fetch(base + "/" + t.id + "/" + action, { method: "POST", headers: auth() });
+        if (r.ok) el.remove(); else alert("Error " + r.status);
+      };
+      el.append(b);
+    }
+    list.append(el);
+  }
+}
+document.getElementById("load").onclick = load;
+</script></body></html>`;
 
 export async function handleStore(req: IncomingMessage, res: ServerResponse, pathname: string) {
   setStoreCors(res);
@@ -370,13 +496,22 @@ export async function handleStore(req: IncomingMessage, res: ServerResponse, pat
     return;
   }
 
+  if (pathname === "/api/store/admin") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(ADMIN_PAGE);
+    return;
+  }
   if (pathname === "/api/store/themes") {
     if (req.method === "GET") return handleStoreList(res);
     if (req.method === "POST") return handleStoreSubmit(req, res);
   } else {
     const [id, sub] = pathname.slice("/api/store/themes/".length).split("/");
-    if (id && !sub && req.method === "GET") return handleStoreDownload(res, id);
-    if (id && sub === "screenshot" && req.method === "GET") return handleStoreScreenshot(res, id);
+    if (id === "pending" && !sub && req.method === "GET") return handleStorePending(req, res);
+    if (id && !sub && req.method === "GET") return handleStoreDownload(req, res, id);
+    if (id && sub === "screenshot" && req.method === "GET") return handleStoreScreenshot(req, res, id);
+    if (id && (sub === "approve" || sub === "reject") && req.method === "POST") {
+      return handleStoreModerate(req, res, id, sub);
+    }
     if (id && sub === "rate" && req.method === "POST") return handleStoreRate(req, res, id);
   }
 

@@ -315,6 +315,7 @@
   "design.store.publish.adminTokenPlaceholder": "اگر نمی‌دانی این چیست، خالی بگذار",
   "design.store.publish.submit": "انتشار در فروشگاه",
   "design.store.publish.success": "طراحی منتشر شد!",
+  "design.store.publish.pending": "ممنون! طراحی تو ارسال شد و پس از بررسی در فروشگاه نمایش داده می‌شود.",
   "design.store.publish.error": "انتشار ناموفق بود.",
   "options.section.erweiterungen": "افزونه‌ها",
   "options.section.hotkeys": "کلیدهای میانبر",

@@ -598,6 +598,7 @@
   "design.store.publish.adminTokenPlaceholder": "不确定的话请留空",
   "design.store.publish.submit": "发布到商店",
   "design.store.publish.success": "设计已发布！",
+  "design.store.publish.pending": "谢谢！你的设计已提交，审核通过后将显示在商店中。",
   "design.store.publish.error": "发布失败。",
   "recording.autoGainControl": "自动增益控制",
   "tree.streaming": "正在直播",

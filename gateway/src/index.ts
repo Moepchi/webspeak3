@@ -426,7 +426,11 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
         await handleBroadcast(req, res);
         return;
       }
-      if (requestUrl.pathname === "/api/store/themes" || requestUrl.pathname.startsWith("/api/store/themes/")) {
+      if (
+        requestUrl.pathname === "/api/store/admin" ||
+        requestUrl.pathname === "/api/store/themes" ||
+        requestUrl.pathname.startsWith("/api/store/themes/")
+      ) {
         await handleStore(req, res, requestUrl.pathname);
         return;
       }

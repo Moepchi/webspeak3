@@ -315,6 +315,7 @@
   "design.store.publish.adminTokenPlaceholder": "Leave empty unless you know what this is",
   "design.store.publish.submit": "Publish to the store",
   "design.store.publish.success": "Design published!",
+  "design.store.publish.pending": "Thanks! Your design was submitted and will appear in the store once it has been reviewed.",
   "design.store.publish.error": "Publishing failed.",
   "options.section.erweiterungen": "Addons",
   "options.section.hotkeys": "Hotkeys",

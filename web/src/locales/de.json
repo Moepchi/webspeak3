@@ -315,6 +315,7 @@
   "design.store.publish.adminTokenPlaceholder": "Leer lassen, außer du weißt, was das ist",
   "design.store.publish.submit": "Im Store veröffentlichen",
   "design.store.publish.success": "Design wurde veröffentlicht!",
+  "design.store.publish.pending": "Danke! Dein Design wurde eingereicht und erscheint im Store, sobald es geprüft wurde.",
   "design.store.publish.error": "Veröffentlichen fehlgeschlagen.",
   "options.section.erweiterungen": "Erweiterungen",
   "options.section.hotkeys": "Hotkeys",
