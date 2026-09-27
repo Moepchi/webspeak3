@@ -6,6 +6,10 @@ services:
     restart: unless-stopped
     environment:
       - PORT=8080
+    # Nothing in here needs Linux capabilities (unprivileged port, plain
+    # TCP/UDP sockets), so drop them all.
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     # Port publishing is deployment-specific and left out of this file on
     # purpose - Compose concatenates `ports:` lists across an override file
     # instead of replacing them, so adding one here would double-publish

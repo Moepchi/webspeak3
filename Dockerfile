@@ -81,6 +81,12 @@ ENV WEB_DIST=/app/web/dist
 ENV CONNECTOR_BIN=/app/connector-bin/ts-connector
 EXPOSE 8080
 
+# Run unprivileged. /app itself is the default spot for feedback.log and
+# store-themes.json, so it has to be writable by that user; a volume mounted
+# there from an older (root) image may need a one-off `chown 1000:1000`.
+RUN chown node:node /app
+USER node
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
 
