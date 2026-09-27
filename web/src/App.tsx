@@ -7055,6 +7055,12 @@ function AppInner() {
     });
     stopMic();
     stopRecording();
+    // Stream state is global, not per tab: left running, its signaling would
+    // go out on the next tab's socket and its clids would name other people.
+    handleStopWatchingStream();
+    handleStopPublishing();
+    setStreamInfos({});
+    requestedStreamInfoRef.current.clear();
   };
 
   const switchToSession = (id: string) => {
