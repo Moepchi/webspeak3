@@ -3744,7 +3744,7 @@ function PermissionsEditorDialog({
   serverGroups,
   channels,
   clients,
-  entries,
+  entries: loadedEntries,
   catalog,
   onSelectTarget,
   onLoadCatalog,
@@ -3812,6 +3812,17 @@ function PermissionsEditorDialog({
     }
   })();
 
+  // Entries only count while they belong to the target on screen - after a
+  // tab switch they'd otherwise show (and let you delete/add against) the
+  // previous tab's target, e.g. server group 6 edited as channel group 6.
+  const targetKey = target ? `${scope}:${target.id1}:${target.id2 ?? ""}` : null;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const entries = loadedKey !== null && loadedKey === targetKey ? loadedEntries : null;
+  const select = (s: PermScope, id1: number, id2?: number) => {
+    setLoadedKey(`${s}:${id1}:${id2 ?? ""}`);
+    onSelectTarget(s, id1, id2);
+  };
+
   const load = (next: { scope: PermScope; groupId?: number | null; channelId?: number | null; clientDbId?: number }) => {
     // The catalog doubles as the name->id lookup the delete button needs, so
     // fetch it alongside the first load rather than only when "+ Hinzufügen"
@@ -3822,13 +3833,13 @@ function PermissionsEditorDialog({
     const cid = next.channelId !== undefined ? next.channelId : channelId;
     const cldbid = next.clientDbId !== undefined ? next.clientDbId : parseInt(clientDbIdInput, 10);
     if ((s === "server" || s === "channelgroup") && gid !== null && gid !== undefined) {
-      onSelectTarget(s, gid);
+      select(s, gid);
     } else if (s === "channel" && cid !== null && cid !== undefined) {
-      onSelectTarget(s, cid);
+      select(s, cid);
     } else if (s === "client" && !Number.isNaN(cldbid)) {
-      onSelectTarget(s, cldbid);
+      select(s, cldbid);
     } else if (s === "channelclient" && cid !== null && cid !== undefined && !Number.isNaN(cldbid)) {
-      onSelectTarget(s, cid, cldbid);
+      select(s, cid, cldbid);
     }
   };
 
@@ -3855,8 +3866,13 @@ function PermissionsEditorDialog({
               key={tab.scope}
               className={`ts-perms-editor-tab${scope === tab.scope ? " ts-perms-editor-tab-active" : ""}`}
               onClick={() => {
+                // Server and channel group ids overlap, so a picked group
+                // never carries over between those two tabs.
+                const switchesGroupKind = isGroupScope && tab.scope !== scope;
+                if (switchesGroupKind) setGroupId(null);
                 setScope(tab.scope);
                 setShowAddForm(false);
+                load({ scope: tab.scope, groupId: switchesGroupKind ? null : undefined });
               }}
             >
               {t(tab.labelKey)}
