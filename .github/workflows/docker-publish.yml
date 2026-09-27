@@ -20,30 +20,35 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: recursive
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Determine image tags
         id: tags
+        # Passed via env, never spliced into the script: a tag name is
+        # user-controlled text and would otherwise run as shell code.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           TAGS="moepchi/webspeak3:latest"
-          if [ "${{ github.event_name }}" = "release" ]; then
-            TAGS="$TAGS,moepchi/webspeak3:${{ github.event.release.tag_name }}"
+          if [ "$EVENT_NAME" = "release" ]; then
+            TAGS="$TAGS,moepchi/webspeak3:$RELEASE_TAG"
           fi
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           push: true
