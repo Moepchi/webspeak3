@@ -7122,7 +7122,10 @@ function AppInner() {
   // session — active or parked in the background — getting a fresh socket
   // after an unexpected drop), so a reconnect behaves identically to the
   // original connect from the gateway/UI's point of view.
-  const wireSocket = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams) => {
+  // Rebuilt every render and only ever called through socketHandlersRef, so
+  // a long-lived socket always sees current state (clients, contacts, t,
+  // mic settings, ...) instead of whatever existed when it connected.
+  const socketHandlers = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams) => {
     const connectHost = params.host;
     const connectNickname = params.nickname;
     const connectServerPassword = params.serverPassword;
@@ -7134,7 +7137,7 @@ function AppInner() {
     const connectFavoriteId = params.favoriteId;
     const connectIdentityBlob = identities.find((i) => i.id === connectIdentityId)?.blob ?? undefined;
 
-    socket.onopen = () => {
+    const onopen = () => {
       logClient("info", "Connection", `Connecting to ${connectHost}…`);
       socket.send(
         JSON.stringify({
@@ -7151,7 +7154,7 @@ function AppInner() {
       );
     };
 
-    socket.onmessage = (event) => {
+    const onmessage = (event: MessageEvent) => {
       const data = JSON.parse(event.data);
 
       // Broadcast, not tied to any one session - show it regardless of which
@@ -7412,8 +7415,6 @@ function AppInner() {
           channelPasswordCacheRef.current.delete(data.channelId);
           setChannelPasswordPrompt((prev) => ({
             channelId: data.channelId,
-            // `channels` here can be stale (this handler's closure is fixed at
-            // connect time) - the dialog falls back to showing just the id.
             channelName: channels.find((c) => c.id === data.channelId)?.name ?? "",
             wrongPassword: prev?.channelId === data.channelId,
           }));
@@ -7527,7 +7528,7 @@ function AppInner() {
       }
     };
 
-    socket.onerror = () => {
+    const onerror = () => {
       logClient("error", "WebSocket", "WebSocket error (is the gateway running?)");
       if (sessionId !== activeSessionIdRef.current) {
         const rec = sessionsRef.current.get(sessionId);
@@ -7549,7 +7550,7 @@ function AppInner() {
         appendLog({ text: "WebSocket error (is the gateway running?)", kind: "error" });
       }
     };
-    socket.onclose = () => {
+    const onclose = () => {
       if (sessionId !== activeSessionIdRef.current) {
         const rec = sessionsRef.current.get(sessionId);
         // Missing already means a deliberate disconnect (the "disconnected"
@@ -7608,6 +7609,17 @@ function AppInner() {
         removeSession(sessionId, { skipSocketClose: true });
       }
     };
+    return { onopen, onmessage, onerror, onclose };
+  };
+  const socketHandlersRef = useRef(socketHandlers);
+  socketHandlersRef.current = socketHandlers;
+
+  const wireSocket = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams) => {
+    const current = () => socketHandlersRef.current(sessionId, socket, params);
+    socket.onopen = () => current().onopen();
+    socket.onmessage = (event) => current().onmessage(event);
+    socket.onerror = () => current().onerror();
+    socket.onclose = () => current().onclose();
   };
 
   const handleConnect = (overrides?: {
