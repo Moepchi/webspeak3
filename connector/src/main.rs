@@ -35,6 +35,9 @@ use tsproto_packets::packets::{AudioData, CodecType, Direction, Flags, OutAudio,
 
 /// 20ms frames at 48kHz, which is what TeamSpeak's Opus voice codec expects.
 const FRAME_SAMPLES: usize = 960;
+/// Upper bound for a file download relayed to the browser (see its use).
+const MAX_DOWNLOAD_BYTES: u64 = 25 << 20;
+const MAX_ICON_BYTES: u64 = 512 << 10;
 const OUT_CHANNELS: usize = 2;
 
 #[derive(Parser, Debug)]
@@ -46,11 +49,13 @@ struct Args {
 	/// Nickname to use on the server
 	#[arg(short, long, default_value = "Browser User")]
 	nickname: String,
-	/// Server password, if the server requires one
-	#[arg(long)]
+	/// Server password, if the server requires one. The secrets below are
+	/// normally passed via their env vars (as the gateway does) rather than
+	/// as flags, since argv is visible to every process on the host.
+	#[arg(long, env = "TS_SERVER_PASSWORD", hide_env_values = true)]
 	server_password: Option<String>,
 	/// Password for the default channel to join, if it's password-protected
-	#[arg(long)]
+	#[arg(long, env = "TS_CHANNEL_PASSWORD", hide_env_values = true)]
 	channel_password: Option<String>,
 	/// Channel (name or path, e.g. "Default Channel/Nested") to join on connect,
 	/// instead of the server's actual default channel
@@ -60,14 +65,14 @@ struct Args {
 	/// `identity` field) to reconnect with, so the server sees the same
 	/// client UID across sessions. A fresh identity is generated - and
 	/// reported back the same way - when omitted or unparseable.
-	#[arg(long)]
+	#[arg(long, env = "TS_IDENTITY", hide_env_values = true)]
 	identity: Option<String>,
 	/// Server flavour: `teamspeak` (skip TeaSpeak handshake), `teaspeak`
 	/// (always handshake), or `auto` (handshake when server sends `teaspeak=1`).
 	#[arg(long, default_value = "auto", value_parser = ["auto", "teamspeak", "teaspeak"])]
 	server_type: String,
 	/// Privilege key / token (`client_default_token` in clientinit).
-	#[arg(long, alias = "token")]
+	#[arg(long, alias = "token", env = "TS_PRIVILEGE_KEY", hide_env_values = true)]
 	privilege_key: Option<String>,
 }
 
@@ -833,6 +838,12 @@ fn friendly_connect_error(address: &str, e: tsclientlib::Error) -> anyhow::Error
 			"Could not connect to \"{address}\": this server rejects this client type (error 533). \
 GreenTeaSpeak public servers often only allow the official GreenTeaSpeak desktop client. \
 Try a self-hosted TeaSpeak with TeamSpeak-compat enabled, or use GreenTeaSpeak 2 for ts.greenteaspeak.de."
+		);
+	}
+	if raw.contains("BlockedTarget") {
+		return anyhow::anyhow!(
+			"Could not connect to \"{address}\": it points to a private/internal network address, \
+which this gateway does not connect to. (Self-hosting admin? Set ALLOW_PRIVATE_TARGETS=1 for LAN servers.)"
 		);
 	}
 	match &e {
@@ -2905,10 +2916,26 @@ async fn run(args: Args) -> Result<()> {
 						// file does not stall channel switches, chat, etc. while in flight;
 						// emit() is just a println! under the hood, so it is safe to call
 						// from a spawned task even while the main loop is emitting too.
-						let mut stream = result.stream;
+						// Everything is buffered and then sent as one base64 JSON line,
+						// so cap it - a server could otherwise announce (or just send)
+						// gigabytes and take the whole gateway host's memory with it.
+						let stream = result.stream;
+						let announced_size = result.size;
+						// Group/server icons are fetched automatically, without the user
+						// asking, so they get a far smaller budget than explicit downloads.
+						let limit = if cid == 0 && path.starts_with("/icon_") { MAX_ICON_BYTES } else { MAX_DOWNLOAD_BYTES };
 						tokio::spawn(async move {
+							if announced_size > limit {
+								emit(&Event::Error {
+									message: format!("Download refused: {path} is larger than {} KiB", limit >> 10),
+								});
+								return;
+							}
 							let mut buf = Vec::new();
-							match stream.read_to_end(&mut buf).await {
+							match stream.take(limit + 1).read_to_end(&mut buf).await {
+								Ok(_) if buf.len() as u64 > limit => emit(&Event::Error {
+									message: format!("Download aborted: {path} is larger than {} KiB", limit >> 10),
+								}),
 								Ok(_) => {
 									let data = base64::engine::general_purpose::STANDARD.encode(&buf);
 									emit(&Event::FileDownloadData { cid, path, data });

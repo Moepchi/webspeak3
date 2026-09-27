@@ -14,6 +14,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile, writeFile } from "node:fs/promises";
 import { timingSafeEqual, randomUUID } from "node:crypto";
 import path from "node:path";
+import { clientIp, createRateLimiter } from "./net.js";
 
 const STORE_ENABLED = process.env.STORE_ENABLED === "1";
 const STORE_ALLOWED_ORIGIN = process.env.STORE_ALLOWED_ORIGIN ?? "*";
@@ -106,15 +107,7 @@ async function saveStoreThemes(themes: StoreTheme[]): Promise<void> {
 // separate map since the two endpoints are independent.
 const STORE_RATE_LIMIT = 5;
 const STORE_RATE_WINDOW_MS = 60 * 60 * 1000;
-const storeSubmissionTimes = new Map<string, number[]>();
-
-function isStoreRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const recent = (storeSubmissionTimes.get(ip) ?? []).filter((t) => now - t < STORE_RATE_WINDOW_MS);
-  recent.push(now);
-  storeSubmissionTimes.set(ip, recent);
-  return recent.length > STORE_RATE_LIMIT;
-}
+const isStoreRateLimited = createRateLimiter(STORE_RATE_LIMIT, STORE_RATE_WINDOW_MS);
 
 // One rating per IP per theme - not robust against a determined multi-IP
 // spammer, but it stops the trivial "click again" case with no accounts to
@@ -186,7 +179,7 @@ async function handleStoreScreenshot(res: ServerResponse, id: string) {
 }
 
 async function handleStoreRate(req: IncomingMessage, res: ServerResponse, id: string) {
-  const ip = (req.socket.remoteAddress ?? "unknown").replace(/^::ffff:/, "");
+  const ip = clientIp(req);
   const seenKey = `${ip}:${id}`;
   if (storeRatingsSeen.has(seenKey)) {
     res.writeHead(409, { "Content-Type": "application/json" });
@@ -238,6 +231,9 @@ async function handleStoreRate(req: IncomingMessage, res: ServerResponse, id: st
     res.end(JSON.stringify({ error: "save_failed" }));
     return;
   }
+  // ponytail: wholesale reset instead of per-entry expiry; only bounds memory,
+  // at worst it lets old voters vote once more, same as a redeploy does.
+  if (storeRatingsSeen.size > 100_000) storeRatingsSeen.clear();
   storeRatingsSeen.add(seenKey);
 
   res.writeHead(200, { "Content-Type": "application/json" });
@@ -245,7 +241,7 @@ async function handleStoreRate(req: IncomingMessage, res: ServerResponse, id: st
 }
 
 async function handleStoreSubmit(req: IncomingMessage, res: ServerResponse) {
-  const ip = (req.socket.remoteAddress ?? "unknown").replace(/^::ffff:/, "");
+  const ip = clientIp(req);
   if (isStoreRateLimited(ip)) {
     res.writeHead(429, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "rate_limited" }));

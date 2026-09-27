@@ -3573,6 +3573,8 @@ function iconDataUrl(base64: string): string {
 // colored-letter badge instead; only real custom uploads (id >= threshold)
 // are fetched as actual images.
 const CUSTOM_ICON_ID_THRESHOLD = 1000;
+// Keep in sync with WS_MAX_PAYLOAD in gateway/src/index.ts (base64 adds ~4/3).
+const MAX_UPLOAD_BYTES = 24 * 1024 * 1024;
 
 /** Deterministic color for a group's letter badge - same icon id always
  *  produces the same hue, so a group looks consistent across the tree
@@ -7988,6 +7990,11 @@ function AppInner() {
   // cid 0 always lands in serverIconImages, regardless of who asked) - fetch
   // any group icon referenced by a currently visible client that isn't
   // cached yet.
+  const requestedIconPathsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!connected) requestedIconPathsRef.current.clear();
+  }, [connected]);
+
   useEffect(() => {
     if (!serverGroups) return;
     const iconById = new Map(serverGroups.map((g) => [g.id, g.iconId]));
@@ -7998,7 +8005,10 @@ function AppInner() {
     );
     for (const iconId of wantedIconIds) {
       const path = `/icon_${iconId}`;
-      if (!(path in serverIconImages)) {
+      // Once per path and connection: without this, every client-list update
+      // re-requested icons still in flight (or ones that failed for good).
+      if (!(path in serverIconImages) && !requestedIconPathsRef.current.has(path)) {
+        requestedIconPathsRef.current.add(path);
         socketRef.current?.send(JSON.stringify({ type: "downloadFile", channelId: 0, path }));
       }
     }
@@ -9103,8 +9113,17 @@ function AppInner() {
     );
   };
 
+  // Uploads travel base64-encoded in a single WebSocket message; anything
+  // above the gateway's maxPayload would make it drop the whole connection.
+  const rejectOversizedUpload = (file: File): boolean => {
+    if (file.size <= MAX_UPLOAD_BYTES) return false;
+    appendLog({ text: t("fileBrowser.tooLarge", { mb: String(MAX_UPLOAD_BYTES >> 20) }), kind: "error" });
+    return true;
+  };
+
   const handleFileBrowserUpload = (file: File) => {
     if (!fileBrowserTarget) return;
+    if (rejectOversizedUpload(file)) return;
     const channelId = fileBrowserTarget.channelId;
     const targetPath = ftJoinPath(fileBrowserPath, file.name);
     const reader = new FileReader();
@@ -9131,6 +9150,7 @@ function AppInner() {
   };
 
   const handleServerIconUpload = (iconId: number, file: File) => {
+    if (rejectOversizedUpload(file)) return;
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;

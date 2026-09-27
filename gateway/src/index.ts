@@ -9,6 +9,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { Ts3Connection, type ServerType, type Ts3ConnectOptions } from "./ts3/connection.js";
 import { handleStore } from "./store.js";
 import { logFeedback, logConnectionEvent } from "./activity-log.js";
+import { clientIp, createRateLimiter } from "./net.js";
 
 const SERVER_TYPES = new Set<ServerType>(["teamspeak", "teaspeak", "auto"]);
 
@@ -57,6 +58,46 @@ function isServerAllowed(host: unknown): boolean {
     return target === entry;
   });
 }
+
+// Everything a "connect" message hands to the connector as a CLI argument.
+// The connector's own resolver does the real parsing; this only rejects input
+// no legitimate address or nickname has (control chars, absurd lengths), and
+// anything starting with "-" so it can never be read as a flag.
+const HOST_PATTERN = /^[\p{L}\p{N}._\-:[\]]{1,253}$/u;
+
+function isValidHost(host: unknown): host is string {
+  return typeof host === "string" && HOST_PATTERN.test(host) && !host.startsWith("-");
+}
+
+function isValidNickname(nickname: unknown): nickname is string {
+  return (
+    typeof nickname === "string" &&
+    nickname.trim().length > 0 &&
+    nickname.length <= 100 &&
+    !/[\p{Cc}]/u.test(nickname)
+  );
+}
+
+// Which web pages may open /ws. Without this any website can embed a hidden
+// WebSocket to this gateway and use it as a free relay into TeamSpeak land.
+// Unset keeps the old "any origin" behavior for self-hosters; entries are
+// full origins ("https://client.example.com"). Non-browser clients send no
+// Origin header at all - they could fake one anyway, so they aren't blocked.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim().replace(/\/+$/, "").toLowerCase())
+  .filter(Boolean);
+
+// Each /ws socket can spawn a connector process holding a live TeamSpeak
+// session, so both need a ceiling. 0 disables the respective limit.
+const MAX_CONNECTIONS_PER_IP = Number(process.env.MAX_CONNECTIONS_PER_IP ?? 10);
+const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS ?? 300);
+const connectionsPerIp = new Map<string, number>();
+
+// Largest single WS message: file uploads travel base64-encoded inside one,
+// so this is ~4/3 of the biggest uploadable file (see MAX_UPLOAD_BYTES in
+// web/src/App.tsx). ws's own default is 100 MiB.
+const WS_MAX_PAYLOAD = 34 * 1024 * 1024;
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -189,33 +230,34 @@ async function handleBroadcast(req: IncomingMessage, res: ServerResponse) {
 // fine here - it only needs to survive as long as the process does.
 const FEEDBACK_RATE_LIMIT = 5;
 const FEEDBACK_RATE_WINDOW_MS = 60 * 60 * 1000;
-const feedbackSubmissionTimes = new Map<string, number[]>();
+const isFeedbackRateLimited = createRateLimiter(FEEDBACK_RATE_LIMIT, FEEDBACK_RATE_WINDOW_MS);
 
-function isFeedbackRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const recent = (feedbackSubmissionTimes.get(ip) ?? []).filter((t) => now - t < FEEDBACK_RATE_WINDOW_MS);
-  recent.push(now);
-  feedbackSubmissionTimes.set(ip, recent);
-  return recent.length > FEEDBACK_RATE_LIMIT;
+// The issue is public, and its text is whatever an anonymous visitor typed:
+// a zero-width space after "@" stops @mentions from pinging real users, and
+// the body goes into a fenced code block (longer than any backtick run in the
+// message) so links, images and markup render as inert text.
+function neutralizeMentions(text: string): string {
+  return text.replace(/@/g, "@\u200b");
 }
 
-async function createGithubIssue(payload: {
-  category: string;
-  message: string;
-  email?: string;
-}): Promise<string | undefined> {
+// The contact e-mail is deliberately *not* part of this: it's only kept in
+// the private feedback log (logFeedback), never in the public issue.
+async function createGithubIssue(payload: { category: string; message: string }): Promise<string | undefined> {
   if (!GITHUB_TOKEN) return undefined;
-  const title = `[Feedback/${payload.category}] ${payload.message.replace(/\s+/g, " ").trim().slice(0, 72)}`;
+  const title = neutralizeMentions(
+    `[Feedback/${payload.category}] ${payload.message.replace(/\s+/g, " ").trim().slice(0, 72)}`,
+  );
+  const longestTicks = Math.max(0, ...(payload.message.match(/`+/g) ?? []).map((m) => m.length));
+  const fence = "`".repeat(Math.max(3, longestTicks + 1));
   const body = [
-    payload.message,
+    `${fence}text`,
+    neutralizeMentions(payload.message),
+    fence,
     "",
     "---",
     `Category: ${payload.category}`,
-    payload.email ? `Contact: ${payload.email}` : undefined,
     "_Submitted via the in-client feedback form._",
-  ]
-    .filter((line): line is string => Boolean(line))
-    .join("\n");
+  ].join("\n");
 
   const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/issues`, {
     method: "POST",
@@ -258,8 +300,7 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  const ip = (req.socket.remoteAddress ?? "unknown").replace(/^::ffff:/, "");
-  if (isFeedbackRateLimited(ip)) {
+  if (isFeedbackRateLimited(clientIp(req))) {
     res.writeHead(429, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "rate_limited" }));
     return;
@@ -311,7 +352,7 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
   let githubIssueUrl: string | undefined;
   if (publishAsIssue) {
     try {
-      githubIssueUrl = await createGithubIssue({ category, message, email });
+      githubIssueUrl = await createGithubIssue({ category, message });
     } catch (err) {
       console.error("[feedback] Failed to create GitHub issue:", err);
     }
@@ -352,7 +393,28 @@ const tlsOptions =
     ? { cert: readFileSync(TLS_CERT), key: readFileSync(TLS_KEY) }
     : null;
 
+// Only for the UI this process serves itself; a separately hosted frontend
+// (GitHub/Cloudflare Pages) needs its own. Theme CSS from the Design Store is
+// the main thing this contains: it can't load scripts, frame the app, or
+// pull in fonts/styles from arbitrary hosts.
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' data: blob:",
+  "connect-src 'self' https: wss: ws:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'self'",
+].join("; ");
+
 const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
   void (async () => {
     try {
       const requestUrl = new URL(req.url ?? "/", "http://localhost");
@@ -403,7 +465,11 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
         filePath = path.join(WEB_DIST, "index.html");
         body = await readFile(filePath);
       }
-      res.writeHead(200, { "Content-Type": MIME_TYPES[path.extname(filePath)] ?? "application/octet-stream" });
+      const ext = path.extname(filePath);
+      res.writeHead(200, {
+        "Content-Type": MIME_TYPES[ext] ?? "application/octet-stream",
+        ...(ext === ".html" ? { "Content-Security-Policy": CONTENT_SECURITY_POLICY } : {}),
+      });
       res.end(body);
     } catch {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -418,7 +484,24 @@ const server = tlsOptions
   ? createSecureServer(tlsOptions, requestHandler)
   : createServer(requestHandler);
 
-const wss = new WebSocketServer({ server, path: "/ws" });
+const wss = new WebSocketServer({
+  server,
+  path: "/ws",
+  maxPayload: WS_MAX_PAYLOAD,
+  verifyClient: ({ origin, req }, done) => {
+    if (ALLOWED_ORIGINS.length > 0 && origin && !ALLOWED_ORIGINS.includes(origin.toLowerCase())) {
+      return done(false, 403, "Origin not allowed");
+    }
+    if (MAX_CONNECTIONS > 0 && wss.clients.size >= MAX_CONNECTIONS) {
+      return done(false, 503, "Gateway is full");
+    }
+    const ip = clientIp(req);
+    if (MAX_CONNECTIONS_PER_IP > 0 && (connectionsPerIp.get(ip) ?? 0) >= MAX_CONNECTIONS_PER_IP) {
+      return done(false, 429, "Too many connections");
+    }
+    done(true);
+  },
+});
 
 // Heartbeat: a browser tab that loses its network mid-session (mobile
 // handover, Wi-Fi drop, backgrounded/frozen tab) often never sends a proper
@@ -510,10 +593,13 @@ server.listen(PORT, () => {
   }
 });
 
-wss.on("connection", (socket: WebSocket) => {
+wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
   // One browser WebSocket ↔ one Rust connector. Multi-join in the UI opens
   // multiple /ws connections in parallel (one per server tab).
   let connection: Ts3Connection | undefined;
+
+  const ip = clientIp(req);
+  connectionsPerIp.set(ip, (connectionsPerIp.get(ip) ?? 0) + 1);
 
   heartbeats.set(socket, { isAlive: true });
   socket.on("pong", () => {
@@ -549,6 +635,10 @@ wss.on("connection", (socket: WebSocket) => {
     async function handleMessage(msg: any): Promise<void> {
     switch (msg.type) {
       case "connect": {
+        if (!isValidHost(msg.host) || !isValidNickname(msg.nickname)) {
+          socket.send(JSON.stringify({ type: "error", message: "Invalid server address or nickname." }));
+          break;
+        }
         if (!isServerAllowed(msg.host)) {
           socket.send(
             JSON.stringify({ type: "error", message: "This server is not allowed by this gateway's admin." }),
@@ -855,6 +945,9 @@ wss.on("connection", (socket: WebSocket) => {
   });
 
   socket.on("close", () => {
+    const remaining = (connectionsPerIp.get(ip) ?? 1) - 1;
+    if (remaining > 0) connectionsPerIp.set(ip, remaining);
+    else connectionsPerIp.delete(ip);
     heartbeats.delete(socket);
     if (connection) liveConnections.delete(connection);
     connection?.disconnect();

@@ -264,14 +264,18 @@ export class Ts3Connection {
   }
 
   async connect(): Promise<void> {
-    const args = ["--address", this.options.host, "--nickname", this.options.nickname];
-    if (this.options.serverPassword) args.push("--server-password", this.options.serverPassword);
-    if (this.options.channelPassword) args.push("--channel-password", this.options.channelPassword);
-    if (this.options.defaultChannel) args.push("--default-channel", this.options.defaultChannel);
-    if (this.options.identity) args.push("--identity", this.options.identity);
-    if (this.options.serverType) args.push("--server-type", this.options.serverType);
-    if (this.options.privilegeKey) args.push("--privilege-key", this.options.privilegeKey);
-    this.child = spawn(CONNECTOR_BIN, args);
+    // "--flag=value" so a value starting with "-" can never be parsed as a
+    // flag of its own. Secrets go through the environment instead of argv,
+    // which any process on the host can read via `ps`.
+    const args = [`--address=${this.options.host}`, `--nickname=${this.options.nickname}`];
+    if (this.options.defaultChannel) args.push(`--default-channel=${this.options.defaultChannel}`);
+    if (this.options.serverType) args.push(`--server-type=${this.options.serverType}`);
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (this.options.serverPassword) env.TS_SERVER_PASSWORD = this.options.serverPassword;
+    if (this.options.channelPassword) env.TS_CHANNEL_PASSWORD = this.options.channelPassword;
+    if (this.options.identity) env.TS_IDENTITY = this.options.identity;
+    if (this.options.privilegeKey) env.TS_PRIVILEGE_KEY = this.options.privilegeKey;
+    this.child = spawn(CONNECTOR_BIN, args, { env });
 
     // The connector can exit on its own (e.g. the TS3 server drops it) and close
     // its stdin pipe before writeLine()'s `this.child.killed` guard has any way
