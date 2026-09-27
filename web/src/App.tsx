@@ -6537,6 +6537,9 @@ function AppInner() {
   const [aec3Enabled, setAec3Enabled] = useState(() => loadBoolPref(AEC3_ENABLED_KEY, false));
   const [aec3Loading, setAec3Loading] = useState(false);
   const aec3Ref = useRef<Aec3Instance | null>(null);
+  // Mirrors aec3Enabled but updates immediately, for startMic() calls made in
+  // the same tick as a toggle (restartMic right after setAec3Enabled).
+  const aec3EnabledRef = useRef(aec3Enabled);
   const [micTestOn, setMicTestOn] = useState(false);
   const [connectionsMenuOpen, setConnectionsMenuOpen] = useState(false);
   // Nova-theme-only: collapses the classic menu items behind a hamburger button.
@@ -6626,6 +6629,10 @@ function AppInner() {
   const recordChunksRef = useRef<{ left: Float32Array[]; right: Float32Array[] }>({ left: [], right: [] });
   const activeTabRef = useRef<ActiveTab>("channel");
   const hasConnectedRef = useRef(false);
+  // Sessions that reached "connected" at least once. hasConnectedRef (and
+  // parked.hasConnected) reset for every reconnect attempt; this doesn't, so
+  // a failed reconnect keeps retrying instead of closing the tab outright.
+  const everConnectedRef = useRef(new Set<string>());
   // Set when a "disconnected" event is received, so the socket's onclose
   // handler (which fires shortly after, on its own close handshake) can tell
   // a clean disconnect apart from the socket dying before ever connecting.
@@ -6684,11 +6691,18 @@ function AppInner() {
     });
   };
 
+  // Same lookup as `ownClient` below: by server-reported id first, since a
+  // nickname match breaks as soon as we're renamed (by us or the server).
+  const ownNameRef = useRef<string | null>(null);
   useEffect(() => {
-    const own = clients.find((c) => c.name === nickname) ?? null;
+    const own =
+      (ownClientId != null ? clients.find((c) => c.id === ownClientId) : null) ??
+      clients.find((c) => c.name === nickname) ??
+      null;
     inputMutedRef.current = own?.inputMuted ?? false;
     outputMutedRef.current = own?.outputMuted ?? false;
-  }, [clients, nickname]);
+    ownNameRef.current = own?.name ?? null;
+  }, [clients, nickname, ownClientId]);
 
   useEffect(() => {
     if (micCaptureRef.current) micCaptureRef.current.threshold = vadThreshold;
@@ -6811,7 +6825,13 @@ function AppInner() {
     window.addEventListener("mouseup", onUp);
   };
 
+  // Bumped by every start/stop: a startMic() still awaiting getUserMedia
+  // compares against it afterwards and discards its mic if it was superseded,
+  // instead of installing it after a stopMic() that already "ran".
+  const micGenerationRef = useRef(0);
+
   const stopMic = () => {
+    micGenerationRef.current++;
     micCaptureRef.current?.stop();
     micCaptureRef.current = null;
     setMicOn(false);
@@ -6825,10 +6845,37 @@ function AppInner() {
     if (!audioContextRef.current) {
       const audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
       audioContextRef.current = audioContext;
-      audioPlayerRef.current = new AudioPlayer(audioContext);
+      const player = new AudioPlayer(audioContext);
+      audioPlayerRef.current = player;
+      // The volume effect and the device picker only ever touch the player
+      // that existed at the time - a fresh one (first use, or after
+      // disposeAudioIfIdle) has to be brought up to the current settings.
+      player.setVolume(playbackVolume);
+      if (outputDeviceId) {
+        player.setOutputDevice(outputDeviceId).catch((error: Error) =>
+          appendLog({ text: `Output device error: ${error.message}`, kind: "error" }),
+        );
+      }
     }
     return audioContextRef.current;
   };
+
+  // Browsers keep an AudioContext created without a user gesture (auto-mic
+  // on page load, a reconnect) "suspended" - silent - until one happens. The
+  // mic permission prompt used to be the only thing resuming it, so with the
+  // mic denied or absent you'd never hear anyone. Any click/keypress does it.
+  useEffect(() => {
+    const resume = () => {
+      const ctx = audioContextRef.current;
+      if (ctx?.state === "suspended") ctx.resume().catch(() => {});
+    };
+    window.addEventListener("pointerdown", resume, true);
+    window.addEventListener("keydown", resume, true);
+    return () => {
+      window.removeEventListener("pointerdown", resume, true);
+      window.removeEventListener("keydown", resume, true);
+    };
+  }, []);
 
   const snapshotActiveToParked = (): ParkedSessionState =>
     emptyParkedState({
@@ -6968,6 +7015,9 @@ function AppInner() {
     if (sessionsRef.current.size > 0) return;
     stopMic();
     stopRecording();
+    // AEC3 is bound to this context's render tap - keep the preference, but
+    // drop the instance so startMic() builds a fresh one on the next context.
+    teardownAec3();
     audioPlayerRef.current?.dispose();
     audioPlayerRef.current = null;
     void audioContextRef.current?.close();
@@ -7013,6 +7063,7 @@ function AppInner() {
   };
 
   const removeSession = (id: string, opts?: { skipSocketClose?: boolean }) => {
+    everConnectedRef.current.delete(id);
     const rec = sessionsRef.current.get(id);
     if (rec && !opts?.skipSocketClose) {
       try {
@@ -7153,6 +7204,7 @@ function AppInner() {
           logClient("info", "Connection", `Connected to ${data.serverName}`);
           reconnectAttemptsRef.current.delete(sessionId);
           hasConnectedRef.current = true;
+          everConnectedRef.current.add(sessionId);
           setConnecting(false);
           setConnectError(null);
           setConnected(true);
@@ -7226,13 +7278,13 @@ function AppInner() {
           if (isSenderIgnored(data.from)) break;
           setChat((prev) => [...prev, { from: data.from, message: data.message }]);
           recordUrlsFromMessage(data.message, data.from);
-          if (data.from !== connectNickname) void playSound("message");
+          if (data.from !== connectNickname && data.from !== ownNameRef.current) void playSound("message");
           break;
         case "serverMessage":
           if (isSenderIgnored(data.from)) break;
           setServerChat((prev) => [...prev, { from: data.from, message: data.message }]);
           recordUrlsFromMessage(data.message, data.from);
-          if (data.from !== connectNickname) void playSound("message");
+          if (data.from !== connectNickname && data.from !== ownNameRef.current) void playSound("message");
           break;
         case "privateMessage":
           if (!data.fromSelf && isSenderIgnored(data.partnerName)) break;
@@ -7501,7 +7553,7 @@ function AppInner() {
         // Missing already means a deliberate disconnect (the "disconnected"
         // message handler above already removed it) — nothing to do.
         if (!rec) return;
-        if (rec.parked?.hasConnected) {
+        if (rec.parked?.hasConnected || everConnectedRef.current.has(sessionId)) {
           // Unexpected drop of a background tab (network blip, or the OS
           // suspended the backgrounded/screen-off page) — keep the tab
           // instead of dropping it, same as a real TS3 client keeps other
@@ -7509,7 +7561,7 @@ function AppInner() {
           // one. It comes back on its own (immediately if we're still in
           // the foreground, otherwise the visibilitychange handler retries
           // it once the page is visible again), mic still off throughout.
-          rec.parked = { ...rec.parked, connecting: false, connected: false };
+          if (rec.parked) rec.parked = { ...rec.parked, connecting: false, connected: false };
           updateTabMeta(sessionId, { connecting: false, connected: false });
           if (document.visibilityState === "visible") scheduleReconnectRef.current(sessionId);
           return;
@@ -7517,6 +7569,15 @@ function AppInner() {
         sessionsRef.current.delete(sessionId);
         sessionParamsRef.current.delete(sessionId);
         setSessionTabs((prev) => prev.filter((t) => t.id !== sessionId));
+        return;
+      }
+      if (!hasConnectedRef.current && !cleanDisconnectRef.current && everConnectedRef.current.has(sessionId)) {
+        // A reconnect attempt of a session that was connected before failed
+        // - same as a drop: keep the tab and let the backoff try again.
+        setConnecting(false);
+        setConnected(false);
+        updateTabMeta(sessionId, { connecting: false, connected: false });
+        if (document.visibilityState === "visible") scheduleReconnectRef.current(sessionId);
         return;
       }
       if (!hasConnectedRef.current && !cleanDisconnectRef.current) {
@@ -8178,8 +8239,29 @@ function AppInner() {
     autoGainControl?: boolean;
   }) => {
     const audioContext = ensureAudioContext();
+    const generation = ++micGenerationRef.current;
+    // AEC3 enabled (persisted pref, or left over from a disposed context) but
+    // not instantiated for this context yet: build it now, before the mic
+    // below decides whether to turn the native canceller off.
+    if (aec3EnabledRef.current && !aec3Ref.current) {
+      try {
+        const aec3 = await createAec3(audioContext.sampleRate, 2, 1);
+        if (aec3Ref.current || audioContextRef.current !== audioContext) {
+          aec3.free();
+        } else {
+          aec3Ref.current = aec3;
+          audioPlayerRef.current?.attachAecRenderTap(aec3);
+        }
+      } catch (error) {
+        appendLog({ text: `Advanced echo cancellation failed to load: ${(error as Error).message}`, kind: "error" });
+        aec3EnabledRef.current = false;
+        setAec3Enabled(false);
+      }
+      if (generation !== micGenerationRef.current) return;
+    }
+    let mic: MicCapture | null = null;
     try {
-      const mic = new MicCapture(audioContext, {
+      mic = new MicCapture(audioContext, {
         onFrame: (pcm) => {
           if (!inputMutedRef.current) socketRef.current?.send(JSON.stringify({ type: "sendAudio", pcm }));
         },
@@ -8198,12 +8280,19 @@ function AppInner() {
         aec3: aec3Ref.current ?? undefined,
       });
       await mic.start();
+      if (generation !== micGenerationRef.current) {
+        mic.stop();
+        return;
+      }
+      micCaptureRef.current?.stop();
       micCaptureRef.current = mic;
       setMicOn(true);
       refreshOutputDevices();
       refreshInputDevices();
       connectMicToRecorder();
     } catch (error) {
+      mic?.stop();
+      if (generation !== micGenerationRef.current) return;
       appendLog({ text: `Microphone error: ${(error as Error).message}`, kind: "error" });
     }
   };
@@ -8268,6 +8357,7 @@ function AppInner() {
 
   const handleToggleAec3 = async () => {
     if (aec3Enabled) {
+      aec3EnabledRef.current = false;
       setAec3Enabled(false);
       teardownAec3();
       if (micCaptureRef.current) void restartMic({});
@@ -8286,11 +8376,13 @@ function AppInner() {
       const aec3 = await createAec3(audioContext.sampleRate, 2, 1);
       aec3Ref.current = aec3;
       audioPlayerRef.current?.attachAecRenderTap(aec3);
+      aec3EnabledRef.current = true;
       setAec3Enabled(true);
       if (micCaptureRef.current) await restartMic({});
     } catch (error) {
       appendLog({ text: `Advanced echo cancellation failed to load: ${(error as Error).message}`, kind: "error" });
       teardownAec3();
+      aec3EnabledRef.current = false;
       setAec3Enabled(false);
     } finally {
       setAec3Loading(false);
