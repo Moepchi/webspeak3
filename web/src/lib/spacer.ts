@@ -15,7 +15,7 @@ export type ParsedChannelName = {
 };
 
 /** Pure line fillers that look better as a CSS rule than raw `---` / `***`. */
-const LINE_FILLER_RE = /^[\-\u2013\u2014\u2500\u2501\u2550=\*\.·_\s]+$/;
+const LINE_FILLER_RE = /^[-\u2013\u2014\u2500\u2501\u2550=*.·_\s]+$/;
 
 /** Corners / verticals of box-frame spacers (not pure horizontal fills). */
 const BOX_FRAME_RE = /[╔╗╚╝╒╓╕╖╘╙╛╜┌┐└┘├┤┬┴┼║│╟╢╤╧╪╫╬╒╓╕╖╘╙╛╜]/;

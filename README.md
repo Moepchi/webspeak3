@@ -293,7 +293,7 @@ Skip the connect dialog entirely and drop visitors straight into a TeamSpeak ser
 Add a `connect` parameter to your instance's URL and send that link out — in a Discord post, a landing page button, a QR code, wherever:
 
 ```
-https://your-instance/?connect=voice.example.com&nickname=Guest&channel=Lobby&token=abc123
+https://your-instance/?connect=voice.example.com&nickname=Guest&channel=Lobby#token=abc123
 ```
 
 | Parameter  | Required | What it does |
@@ -301,7 +301,7 @@ https://your-instance/?connect=voice.example.com&nickname=Guest&channel=Lobby&to
 | `connect`  | yes      | Server address to join, `host` or `host:port` |
 | `nickname` | no       | Nickname to connect with — omit it and the visitor gets an auto-generated `Guest-XXXX` |
 | `channel`  | no       | Default channel to join |
-| `token`    | no       | Server/channel privilege key, if the target requires one |
+| `token`    | no       | Server/channel privilege key, if the target requires one. Put it after `#` (as above) so it never reaches server logs or `Referer` headers; `?token=` still works too |
 
 This works on **any** deployment — no rebuild, no configuration. WebSpeak3 connects as soon as the page loads and immediately strips these parameters from the address bar, so refreshing the tab (or someone screenshotting/forwarding the URL later) won't silently reconnect off a stale link.
 

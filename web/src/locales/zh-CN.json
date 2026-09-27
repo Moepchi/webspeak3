@@ -647,5 +647,15 @@
   "stream.state.disconnected": "连接中断",
   "stream.state.failed": "连接失败",
   "stream.state.closed": "已结束",
-  "clientContext.watchStream": "观看直播"
+  "clientContext.watchStream": "观看直播",
+  "tree.expand": "展开",
+  "tree.collapse": "折叠",
+  "tabs.disconnect": "断开连接",
+  "tabs.closeTab": "关闭标签页：{label}",
+  "identity.importInvalid": "“{file}”不是有效的身份文件。",
+  "log.fileTransferFailed": "文件传输失败：",
+  "log.fileTransferInvalidAddress": "文件传输失败（地址无效）",
+  "sounds.importFailed": "无法读取此音效包——它是有效的 .ts3soundpack/ZIP 文件吗？",
+  "tabs.connections": "服务器连接",
+  "shortcut.ctrl": "Ctrl"
 }

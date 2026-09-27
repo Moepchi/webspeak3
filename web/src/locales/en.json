@@ -648,5 +648,15 @@
   "nachrichten.templateName": "Template name",
   "nachrichten.message": "Message",
   "nachrichten.add": "Add",
-  "nachrichten.delete": "Delete"
+  "nachrichten.delete": "Delete",
+  "tree.expand": "Expand",
+  "tree.collapse": "Collapse",
+  "tabs.disconnect": "Disconnect",
+  "tabs.closeTab": "Close tab: {label}",
+  "identity.importInvalid": "\"{file}\" is not a valid identity file.",
+  "log.fileTransferFailed": "File transfer failed:",
+  "log.fileTransferInvalidAddress": "File transfer failed (invalid address)",
+  "sounds.importFailed": "Could not read this soundpack - is it a valid .ts3soundpack/ZIP file?",
+  "tabs.connections": "Server connections",
+  "shortcut.ctrl": "Ctrl"
 }

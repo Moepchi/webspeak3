@@ -1,3 +1,4 @@
+/* eslint-disable react/only-export-components -- provider and its hooks belong together; only costs fast refresh */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import de from "./locales/de.json";
 import en from "./locales/en.json";

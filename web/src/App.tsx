@@ -137,17 +137,25 @@ const IS_OWN_HOSTED_INSTANCE = !DEMO_MODE && OWN_HOSTED_HOSTNAMES.has(window.loc
 // reconnect off a stale link sitting in the address bar or browser history.
 const AUTO_CONNECT_FROM_URL = (() => {
   const params = new URLSearchParams(window.location.search);
+  // The token may also sit in the fragment (#token=...), which - unlike the
+  // query - never reaches server logs or Referer headers.
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
   const connectHost = params.get("connect");
   if (!connectHost) return null;
   const target = {
     host: connectHost,
     nickname: params.get("nickname") || undefined,
     defaultChannel: params.get("channel") || undefined,
-    privilegeKey: params.get("token") || undefined,
+    privilegeKey: hashParams.get("token") || params.get("token") || undefined,
   };
   for (const key of ["connect", "nickname", "channel", "token"]) params.delete(key);
+  let hash = window.location.hash;
+  if (hashParams.has("token")) {
+    hashParams.delete("token");
+    hash = hashParams.size ? `#${hashParams}` : "";
+  }
   const rest = params.toString();
-  window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+  window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : "") + hash);
   return target;
 })();
 
@@ -184,7 +192,9 @@ function hasAcceptedToS(): boolean {
 
 const LAST_HOST_KEY = "webspeak3:last-host";
 const LAST_NICKNAME_KEY = "webspeak3:last-nickname";
-const LAST_PRIVILEGE_KEY = "webspeak3:last-privilege-key";
+// Privilege keys are one-shot grants, so they're no longer remembered across
+// reloads; drop what older versions stored in plain text.
+localStorage.removeItem("webspeak3:last-privilege-key");
 const LAST_SERVER_TYPE_KEY = "webspeak3:last-server-type";
 
 type ServerType = "teamspeak" | "teaspeak" | "auto";
@@ -715,15 +725,19 @@ function triggerBrowserDownload(filename: string, base64Data: string): void {
   const binary = atob(base64Data);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  const blob = new Blob([bytes]);
+  downloadBlob(new Blob([bytes]), filename);
+}
+
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Revoking right after click() can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function formatDurationSecs(totalSeconds: number): string {
@@ -874,7 +888,6 @@ function ChannelTree({
   onSelectItem,
   onSwitchChannel,
   onOpenPrivateChat,
-  onPokeClient,
   onMoveClient,
   onClientContextMenu,
   onChannelContextMenu,
@@ -893,7 +906,6 @@ function ChannelTree({
   onSelectItem: (item: SelectedItem) => void;
   onSwitchChannel: (channelId: number) => void;
   onOpenPrivateChat: (clientId: number, clientName: string) => void;
-  onPokeClient: (clientId: number, clientName: string) => void;
   onMoveClient: (clientId: number, channelId: number) => void;
   onClientContextMenu: (e: React.MouseEvent, clientId: number, clientName: string, isSelf: boolean) => void;
   onChannelContextMenu: (e: React.MouseEvent, channelId: number, channelName: string) => void;
@@ -989,7 +1001,7 @@ function ChannelTree({
                 className={`ts-tree-expander${hasChildren ? "" : " ts-tree-expander-empty"}${
                   isCollapsed ? " ts-tree-expander-collapsed" : ""
                 }`}
-                aria-label={isCollapsed ? "aufklappen" : "zuklappen"}
+                aria-label={isCollapsed ? t("tree.expand") : t("tree.collapse")}
                 tabIndex={-1}
                 onMouseDown={(e) => {
                   // Keep focus on the row so a nearby double-click still joins.
@@ -1131,7 +1143,6 @@ function ChannelTree({
               onSelectItem={onSelectItem}
               onSwitchChannel={onSwitchChannel}
               onOpenPrivateChat={onOpenPrivateChat}
-              onPokeClient={onPokeClient}
               onMoveClient={onMoveClient}
               onClientContextMenu={onClientContextMenu}
               onChannelContextMenu={onChannelContextMenu}
@@ -1498,7 +1509,7 @@ function ConnectDialog({
             <div className="ts-dialog-grid">
               <label className="ts-dialog-field">
                 {t("connect.phoneticNickname")}
-                <input disabled title="Not supported yet" />
+                <input disabled title={t("clientContext.notSupported")} />
               </label>
               <label className="ts-dialog-field">
                 {t("connect.identity")}
@@ -2557,7 +2568,7 @@ function FavoritesDialog({
             </label>
             <label className="ts-dialog-field">
               {t("connect.phoneticNickname")}
-              <input disabled title="Not supported yet" />
+              <input disabled title={t("clientContext.notSupported")} />
             </label>
             <label className="ts-dialog-field">
               {t("connect.serverAddress")}
@@ -2636,7 +2647,7 @@ function FavoritesDialog({
               {t("favorites.showServerQueryClients")}
             </label>
             <label className="ts-dialog-checkbox">
-              <input type="checkbox" disabled title="Not supported yet" />
+              <input type="checkbox" disabled title={t("clientContext.notSupported")} />
               {t("favorites.connectOnStartup")}
             </label>
           </div>
@@ -2748,6 +2759,7 @@ function InviteFriendDialog({
   const t = useT();
   const [includeChannel, setIncludeChannel] = useState(false);
   const [copied, setCopied] = useState(false);
+  const linkInputRef = useRef<HTMLInputElement>(null);
   const backdrop = useBackdropDismiss(onClose);
 
   const link = `ts3server://${host}${includeChannel && channelId !== null ? `?channel=${channelId}` : ""}`;
@@ -2781,7 +2793,7 @@ function InviteFriendDialog({
           </div>
           <label className="ts-dialog-field">
             {t("inviteFriend.link")}
-            <input readOnly value={link} onFocus={(e) => e.target.select()} />
+            <input ref={linkInputRef} readOnly value={link} onFocus={(e) => e.target.select()} />
           </label>
         </div>
         <div className="ts-dialog-buttons">
@@ -2791,9 +2803,15 @@ function InviteFriendDialog({
           <div className="ts-dialog-buttons-right">
             <button
               onClick={() => {
-                void navigator.clipboard.writeText(link);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
+                // No clipboard API on plain-http origins - select the link
+                // instead so it can be copied by hand.
+                (navigator.clipboard?.writeText(link) ?? Promise.reject()).then(
+                  () => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  },
+                  () => linkInputRef.current?.select()
+                );
               }}
             >
               {copied ? t("inviteFriend.copied") : t("inviteFriend.copyToClipboard")}
@@ -5299,12 +5317,7 @@ function DesignPanel({
       [JSON.stringify({ name: theme.name, baseTheme: theme.baseTheme, css: theme.css }, null, 2)],
       { type: "application/json" }
     );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${theme.name.replace(/[^a-z0-9-_]+/gi, "_") || "theme"}.webspeak3theme.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${theme.name.replace(/[^a-z0-9-_]+/gi, "_") || "theme"}.webspeak3theme.json`);
   };
 
   const handleImportSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -5757,6 +5770,7 @@ function SoundsPanel() {
     matchedCount: number;
     unmatchedFiles: string[];
   } | null>(null);
+  const [soundpackFailed, setSoundpackFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -5821,7 +5835,15 @@ function SoundsPanel() {
     e.target.value = "";
     if (!file) return;
     setSoundpackResult(null);
-    const { matched, unmatchedFiles } = await parseSoundpack(file);
+    setSoundpackFailed(false);
+    let parsed: Awaited<ReturnType<typeof parseSoundpack>>;
+    try {
+      parsed = await parseSoundpack(file);
+    } catch {
+      setSoundpackFailed(true);
+      return;
+    }
+    const { matched, unmatchedFiles } = parsed;
     for (const [event, sound] of Object.entries(matched) as [SoundEventId, { name: string; blob: Blob }][]) {
       await saveCustomSound(event, new File([sound.blob], sound.name, { type: sound.blob.type }));
     }
@@ -5858,6 +5880,7 @@ function SoundsPanel() {
       <div className="ts-options-field-row">
         <button onClick={handleImportSoundpackClick}>{t("sounds.importSoundpack")}</button>
       </div>
+      {soundpackFailed && <p className="ts-options-subtitle">{t("sounds.importFailed")}</p>}
       {soundpackResult && (
         <p className="ts-options-subtitle">
           {t("sounds.importResult", {
@@ -6337,9 +6360,7 @@ function AppInner() {
   const [serverPassword, setServerPassword] = useState("");
   const [channelPassword, setChannelPassword] = useState("");
   const [defaultChannel, setDefaultChannel] = useState("");
-  const [privilegeKey, setPrivilegeKey] = useState(
-    () => localStorage.getItem(LAST_PRIVILEGE_KEY) ?? ""
-  );
+  const [privilegeKey, setPrivilegeKey] = useState("");
   const [serverType, setServerType] = useState<ServerType>(loadServerType);
   // Prompt shown when switching into a password-protected channel mid-session
   // (the initial-connect "default channel" password above is a separate field).
@@ -6499,8 +6520,12 @@ function AppInner() {
   const handleDesignSelectionChange = (next: string) => {
     setDesignSelection(next);
     localStorage.setItem(DESIGN_SELECTION_KEY, next);
-    localStorage.setItem(DESIGN_THEME_KEY, resolveDesignThemeBase(next, customThemes));
   };
+  // Persisted from the resolved value, not in the handler: a theme selected
+  // right after being created/installed isn't in the handler's customThemes yet.
+  useEffect(() => {
+    localStorage.setItem(DESIGN_THEME_KEY, designTheme);
+  }, [designTheme]);
   const handleSaveCustomTheme = (nextTheme: CustomTheme) => {
     setCustomThemes((prev) => {
       const idx = prev.findIndex((th) => th.id === nextTheme.id);
@@ -6799,15 +6824,16 @@ function AppInner() {
   }, [activeSessionId]);
 
   useEffect(() => {
+    const sessions = sessionsRef.current;
     return () => {
-      for (const rec of sessionsRef.current.values()) {
+      for (const rec of sessions.values()) {
         try {
           rec.socket?.close();
         } catch {
           /* ignore */
         }
       }
-      sessionsRef.current.clear();
+      sessions.clear();
     };
   }, []);
 
@@ -7103,7 +7129,7 @@ function AppInner() {
     }
     if (rec) {
       try {
-        rec.socket && ((rec.socket as WebSocket).onmessage = null);
+        if (rec.socket) (rec.socket as WebSocket).onmessage = null;
       } catch {
         /* ignore */
       }
@@ -7242,7 +7268,6 @@ function AppInner() {
           });
           localStorage.setItem(LAST_HOST_KEY, connectHost);
           localStorage.setItem(LAST_NICKNAME_KEY, connectNickname);
-          localStorage.setItem(LAST_PRIVILEGE_KEY, connectPrivilegeKey);
           localStorage.setItem(LAST_SERVER_TYPE_KEY, connectServerType);
           if (connectIdentityId) {
             setIdentities((prev) =>
@@ -8159,6 +8184,9 @@ function AppInner() {
       ...prevLog,
       { id: ++whisperLogIdRef.current, timestamp: Date.now(), description },
     ]);
+    // Only a change of whisper targets should log; channels/clients/t are
+    // read for the description but must not re-trigger it (renames, joins).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [whisperChannelIds, whisperClientIds, connected]);
 
   useEffect(() => {
@@ -8241,23 +8269,30 @@ function AppInner() {
     };
   }, [rightsMenuOpen]);
 
+  // Rebuilt each render and read through the ref, so the listener below is
+  // registered once yet always sees current state.
+  const shortcutHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  shortcutHandlerRef.current = (e: KeyboardEvent) => {
+    if (!e.ctrlKey) return;
+    // Typing in a field (chat, dialogs) must never trigger e.g. Ctrl+D.
+    const el = e.target as HTMLElement | null;
+    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+    if (e.key.toLowerCase() === "s" && !connecting) {
+      e.preventDefault();
+      setConnectDialogOpen(true);
+    } else if (e.key.toLowerCase() === "d" && (connected || sessionTabs.length > 0)) {
+      e.preventDefault();
+      handleDisconnect();
+    } else if (e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      openAddFavorite();
+    }
+  };
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey) return;
-      if (e.key.toLowerCase() === "s" && !connecting) {
-        e.preventDefault();
-        setConnectDialogOpen(true);
-      } else if (e.key.toLowerCase() === "d" && (connected || sessionTabs.length > 0)) {
-        e.preventDefault();
-        handleDisconnect();
-      } else if (e.key.toLowerCase() === "b") {
-        e.preventDefault();
-        openAddFavorite();
-      }
-    };
+    const onKeyDown = (e: KeyboardEvent) => shortcutHandlerRef.current(e);
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [connected, connecting, sessionTabs.length, host, nickname, serverPassword, defaultChannel, channelPassword]);
+  }, []);
 
   // Nova-theme-only: the connect dialog IS the app until a connection exists -
   // it's forced open on load and after every disconnect, and closes itself the
@@ -8299,7 +8334,10 @@ function AppInner() {
     try {
       mic = new MicCapture(audioContext, {
         onFrame: (pcm) => {
-          if (!inputMutedRef.current) socketRef.current?.send(JSON.stringify({ type: "sendAudio", pcm }));
+          // A reconnecting socket is still CONNECTING, where send() throws.
+          if (!inputMutedRef.current && socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({ type: "sendAudio", pcm }));
+          }
         },
         onActivity: (active) => setSelfActive(active),
         onLevel: (rms) => {
@@ -8499,14 +8537,7 @@ function AppInner() {
     const blob = encodeWavStereo(mergedLeft, mergedRight, audioContextRef.current?.sampleRate ?? SAMPLE_RATE);
     const safeServerName = (serverName || "session").replace(/[\\/:*?"<>|]+/g, "_").trim() || "session";
     const filename = `webspeak3-${safeServerName}-${new Date().toISOString().replace(/[:.]/g, "-")}.wav`;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, filename);
     logClient("info", "Recording", `Saved recording as ${filename}`);
   };
 
@@ -8702,14 +8733,7 @@ function AppInner() {
     const identity = identities.find((i) => i.id === id);
     if (!identity?.blob) return;
     const blob = new Blob([identity.blob], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${identity.name.replace(/[^a-z0-9_-]+/gi, "_") || "identity"}.ts3identity.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${identity.name.replace(/[^a-z0-9_-]+/gi, "_") || "identity"}.ts3identity.json`);
   };
 
   /** Parses the native client's identity .ini format:
@@ -8799,7 +8823,7 @@ function AppInner() {
       try {
         JSON.parse(text);
       } catch {
-        logClient("error", "Identitäten", `"${file.name}" ist keine gültige Identitätsdatei.`);
+        logClient("error", "Identities", t("identity.importInvalid", { file: file.name }));
         return;
       }
       const name = file.name.replace(/\.(ts3identity\.)?json$/i, "") || t("identities.newName");
@@ -9431,7 +9455,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🟢</span>
                 <span className="ts-menu-item-label">{t("menu.connections.connect")}</span>
-                <span className="ts-menu-item-shortcut">Strg+S</span>
+                <span className="ts-menu-item-shortcut">{t("shortcut.ctrl")}+S</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9443,7 +9467,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🔴</span>
                 <span className="ts-menu-item-label">{t("menu.connections.disconnectCurrent")}</span>
-                <span className="ts-menu-item-shortcut">Strg+D</span>
+                <span className="ts-menu-item-shortcut">{t("shortcut.ctrl")}+D</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9471,7 +9495,7 @@ function AppInner() {
               <button className="ts-menu-item" onClick={openAddFavorite}>
                 <span className="ts-menu-item-icon">⭐</span>
                 <span className="ts-menu-item-label">{t("menu.favorites.add")}</span>
-                <span className="ts-menu-item-shortcut">Strg+B</span>
+                <span className="ts-menu-item-shortcut">{t("shortcut.ctrl")}+B</span>
               </button>
               <button className="ts-menu-item" onClick={openManageFavorites}>
                 <span className="ts-menu-item-icon">🗂️</span>
@@ -9685,7 +9709,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🪪</span>
                 <span className="ts-menu-item-label">{t("menu.extras.identities")}</span>
-                <span className="ts-menu-item-shortcut">Strg+I</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9696,7 +9719,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">📇</span>
                 <span className="ts-menu-item-label">{t("menu.extras.contacts")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+O</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9707,7 +9729,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🔗</span>
                 <span className="ts-menu-item-label">{t("menu.extras.collectedUrls")}</span>
-                <span className="ts-menu-item-shortcut">Strg+U</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9730,7 +9751,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🗒️</span>
                 <span className="ts-menu-item-label">{t("menu.extras.whisperLists")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+W</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9741,7 +9761,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🕓</span>
                 <span className="ts-menu-item-label">{t("menu.extras.whisperHistory")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+H</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9752,7 +9771,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">📜</span>
                 <span className="ts-menu-item-label">{t("menu.extras.clientLog")}</span>
-                <span className="ts-menu-item-shortcut">Strg+L</span>
               </button>
               <div className="ts-menu-separator" />
               <button
@@ -9764,7 +9782,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🚫</span>
                 <span className="ts-menu-item-label">{t("menu.extras.banList")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+B</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9775,7 +9792,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">⚠️</span>
                 <span className="ts-menu-item-label">{t("menu.extras.complaintList")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+C</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9808,7 +9824,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">📄</span>
                 <span className="ts-menu-item-label">{t("menu.extras.serverLog")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+L</span>
               </button>
               <div className="ts-menu-separator" />
               <button
@@ -9821,7 +9836,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🔴</span>
                 <span className="ts-menu-item-label">{t("menu.extras.startRecording")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+R</span>
               </button>
               <button className="ts-menu-item" disabled>
                 <span className="ts-menu-item-icon">🔴</span>
@@ -9837,7 +9851,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">⏹️</span>
                 <span className="ts-menu-item-label">{t("menu.extras.stopRecording")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+T</span>
               </button>
               <div className="ts-menu-separator" />
               <button
@@ -9849,7 +9862,6 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">⚙️</span>
                 <span className="ts-menu-item-label">{t("menu.extras.options")}</span>
-                <span className="ts-menu-item-shortcut">Alt+P</span>
               </button>
             </div>
           )}
@@ -10193,8 +10205,8 @@ function AppInner() {
           onServerTypeChange={setServerType}
           onActiveIdentityChange={handleActiveIdentityChange}
           onToggleExpanded={() => setConnectDialogExpanded((v) => !v)}
-          onConnect={handleConnect}
-          onConnectNewTab={handleConnect}
+          onConnect={() => handleConnect()}
+          onConnectNewTab={() => handleConnect()}
           canOpenNewTab={sessionTabs.length > 0 || connected}
           onCancel={novaSplash ? () => {} : () => setConnectDialogOpen(false)}
           nova={designTheme === "nova"}
@@ -11078,7 +11090,6 @@ function AppInner() {
                   onSelectItem={handleSelectItem}
                   onSwitchChannel={handleSwitchChannel}
                   onOpenPrivateChat={handleOpenPrivateChat}
-                  onPokeClient={handlePokeClient}
                   onMoveClient={handleMoveClient}
                   onClientContextMenu={handleClientContextMenu}
                   onChannelContextMenu={handleChannelContextMenu}
@@ -11231,9 +11242,9 @@ function AppInner() {
         {log.slice(-50).map((entry, i) => {
           let text = entry.text;
           if (/os[- ]?error\s*10049/i.test(text) || /angeforderte Adresse ist in diesem Kontext ungültig/i.test(text)) {
-            text = "File-Transfer fehlgeschlagen (ungültige Adresse)";
+            text = t("log.fileTransferInvalidAddress");
           } else {
-            text = text.replace(/^(file transfer failed:\s*)+/i, "File-Transfer fehlgeschlagen: ");
+            text = text.replace(/^(file transfer failed:\s*)+/i, `${t("log.fileTransferFailed")} `);
           }
           return (
             <div key={i} className={entry.kind === "error" ? "ts-log-error" : "ts-log-info"}>

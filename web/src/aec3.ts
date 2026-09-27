@@ -37,10 +37,17 @@ function loadScript(src: string): Promise<void> {
 
 function loadModule(): Promise<Aec3Module> {
   if (!modulePromise) {
-    modulePromise = loadScript("/vendor/webrtcaec3.js").then(() => {
-      if (!window.WebRtcAec3) throw new Error("AEC3 script loaded but did not register window.WebRtcAec3");
-      return window.WebRtcAec3();
-    });
+    // BASE_URL keeps sub-path deployments (VITE_BASE_PATH) working; a failed
+    // load is forgotten so the next attempt retries instead of reusing it.
+    modulePromise = loadScript(`${import.meta.env.BASE_URL}vendor/webrtcaec3.js`)
+      .then(() => {
+        if (!window.WebRtcAec3) throw new Error("AEC3 script loaded but did not register window.WebRtcAec3");
+        return window.WebRtcAec3();
+      })
+      .catch((err) => {
+        modulePromise = null;
+        throw err;
+      });
   }
   return modulePromise;
 }

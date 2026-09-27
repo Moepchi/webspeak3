@@ -648,5 +648,15 @@
   "nachrichten.templateName": "Vorlagenname",
   "nachrichten.message": "Nachricht",
   "nachrichten.add": "Hinzufügen",
-  "nachrichten.delete": "Löschen"
+  "nachrichten.delete": "Löschen",
+  "tree.expand": "Aufklappen",
+  "tree.collapse": "Zuklappen",
+  "tabs.disconnect": "Verbindung trennen",
+  "tabs.closeTab": "Tab schließen: {label}",
+  "identity.importInvalid": "„{file}“ ist keine gültige Identitätsdatei.",
+  "log.fileTransferFailed": "Dateiübertragung fehlgeschlagen:",
+  "log.fileTransferInvalidAddress": "Dateiübertragung fehlgeschlagen (ungültige Adresse)",
+  "sounds.importFailed": "Das Soundpack konnte nicht gelesen werden – ist es eine gültige .ts3soundpack-/ZIP-Datei?",
+  "tabs.connections": "Server-Verbindungen",
+  "shortcut.ctrl": "Strg"
 }

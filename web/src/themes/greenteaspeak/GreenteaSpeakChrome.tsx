@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useT } from "../../i18n";
 
 export type ConnectionTabItem = {
   id: string;
@@ -39,11 +40,12 @@ export function GreenteaSpeakChrome({
       : []);
 
   const hasTabs = resolvedTabs.length > 0;
+  const t = useT();
 
   return (
     <>
       {hasTabs ? (
-        <div className="gts-connection-tabs" role="tablist" aria-label="Server-Verbindungen">
+        <div className="gts-connection-tabs" role="tablist" aria-label={t("tabs.connections")}>
           {resolvedTabs.map((tab) => {
             const isActive = tab.id === (activeTabId ?? resolvedTabs[0]?.id);
             return (
@@ -62,8 +64,8 @@ export function GreenteaSpeakChrome({
                   <button
                     type="button"
                     className="gts-connection-tab-close"
-                    title="Verbindung trennen"
-                    aria-label={`Tab schließen: ${tab.label}`}
+                    title={t("tabs.disconnect")}
+                    aria-label={t("tabs.closeTab", { label: tab.label })}
                     onClick={(e) => {
                       e.stopPropagation();
                       onCloseTab(tab.id);

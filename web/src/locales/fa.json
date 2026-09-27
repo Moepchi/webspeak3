@@ -647,5 +647,15 @@
   "nachrichten.templateName": "نام الگو",
   "nachrichten.message": "پیام",
   "nachrichten.add": "افزودن",
-  "nachrichten.delete": "حذف"
+  "nachrichten.delete": "حذف",
+  "tree.expand": "باز کردن",
+  "tree.collapse": "بستن",
+  "tabs.disconnect": "قطع اتصال",
+  "tabs.closeTab": "بستن زبانه: {label}",
+  "identity.importInvalid": "«{file}» یک فایل هویت معتبر نیست.",
+  "log.fileTransferFailed": "انتقال فایل ناموفق بود:",
+  "log.fileTransferInvalidAddress": "انتقال فایل ناموفق بود (نشانی نامعتبر)",
+  "sounds.importFailed": "این بسته صدا خوانده نشد - آیا یک فایل ‎.ts3soundpack/ZIP معتبر است؟",
+  "tabs.connections": "اتصال‌های سرور",
+  "shortcut.ctrl": "Ctrl"
 }
