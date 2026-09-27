@@ -25,6 +25,39 @@ function parsePrivilegeKey(msg: { privilegeKey?: unknown; token?: unknown }): st
   return trimmed || undefined;
 }
 
+// Self-hosting admins may want to lock their instance to specific server(s)
+// instead of leaving it as a general-purpose "connect anywhere" client.
+// Unset (the default) means unrestricted, unchanged from before this existed.
+const ALLOWED_SERVERS = (process.env.ALLOWED_SERVERS ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+// Strips a trailing ":port" so "ts.example.com:9987" and "ts.example.com"
+// both match a plain "ts.example.com" allowlist entry. IPv6 literals come
+// wrapped in brackets ("[::1]:9987"); nicknames have neither and pass through
+// as-is. Deliberately not full URL parsing - `host` here is never a URL.
+function stripPort(host: string): string {
+  if (host.startsWith("[")) {
+    const end = host.indexOf("]");
+    return end === -1 ? host : host.slice(1, end);
+  }
+  const i = host.lastIndexOf(":");
+  return i !== -1 && /^\d+$/.test(host.slice(i + 1)) ? host.slice(0, i) : host;
+}
+
+function isServerAllowed(host: unknown): boolean {
+  if (ALLOWED_SERVERS.length === 0) return true;
+  if (typeof host !== "string") return false;
+  const target = stripPort(host).trim().toLowerCase();
+  return ALLOWED_SERVERS.some((entry) => {
+    // "*.example.com" matches any subdomain (TLS-wildcard-style: not the
+    // bare apex itself - list that separately if it should be allowed too).
+    if (entry.startsWith("*.")) return target.endsWith(entry.slice(1));
+    return target === entry;
+  });
+}
+
 const PORT = Number(process.env.PORT ?? 8080);
 
 // In production (Docker), the built web app lives alongside the gateway and
@@ -516,6 +549,12 @@ wss.on("connection", (socket: WebSocket) => {
     async function handleMessage(msg: any): Promise<void> {
     switch (msg.type) {
       case "connect": {
+        if (!isServerAllowed(msg.host)) {
+          socket.send(
+            JSON.stringify({ type: "error", message: "This server is not allowed by this gateway's admin." }),
+          );
+          break;
+        }
         // Replacing a connection on the same socket: tear down the previous
         // connector so we don't leak processes.
         if (connection) {

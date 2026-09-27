@@ -57,6 +57,11 @@ FROM node:22-bookworm-slim AS runtime
 LABEL org.opencontainers.image.title="WebSpeak3"
 LABEL org.opencontainers.image.description="Self-hosted web client for TeamSpeak 3 servers"
 WORKDIR /app
+# ts-connector (Rust, native-tls) needs the OS CA bundle for its HTTPS calls
+# (e.g. TeamSpeak nickname lookup) - Node bundles its own certs and works
+# without this, but native-tls doesn't, so it's not optional here.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY gateway/package*.json ./
 # npm/npx are only needed to install the gateway's runtime deps; the
 # container never runs either afterwards, so strip them (plus npm's own

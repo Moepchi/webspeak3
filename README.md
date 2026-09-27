@@ -197,6 +197,7 @@ All optional; add them under `environment:` in your compose override next to `PO
 | `STORE_DATA_FILE` | `store-themes.json` in the container's working dir | Where submitted themes (including screenshots) are stored. Mount a volume over this path if they should survive a container recreate. |
 | `STORE_ALLOWED_ORIGIN` | `*` | CORS origin allowed to call the store endpoint, if you want to restrict it to your own frontend's origin. |
 | `STORE_ADMIN_TOKEN` | unset | Bearer token that lets its holder publish under the reserved author name(s) and moderate (delete) any theme. Without it, nobody can. |
+| `ALLOWED_SERVERS` | unset (any server) | Comma-separated list of server addresses this gateway is allowed to connect to (e.g. `ts.example.com,*.example.net`). A port is matched separately from the host, so listing `ts.example.com` allows any port on it. An entry starting with `*.` matches any subdomain (`*.example.com` allows `ts.example.com`, not `example.com` itself - list that separately too if it should also be reachable). Locks a self-hosted instance down to specific server(s) instead of acting as a general "connect anywhere" client; a rejected `connect` gets an error back before any connector process is even spawned. |
 
 <details>
 <summary><b>🛠️ Manual installation (without Docker)</b></summary>
