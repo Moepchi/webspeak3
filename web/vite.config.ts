@@ -95,6 +95,11 @@ export default defineConfig({
         // ignores non-GET and non-http(s) requests (ws:// isn't touched), so
         // no extra runtimeCaching exclusions are needed here.
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // The SPA fallback answers every navigation with index.html — except
+        // the gateway's own pages under /api/ (e.g. /api/store/admin), which
+        // would otherwise open the client instead when UI and gateway share
+        // an origin.
+        navigateFallbackDenylist: [/^\/api\//],
       },
     }),
   ],
