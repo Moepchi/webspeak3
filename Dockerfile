@@ -1,26 +1,37 @@
 # --- Rust connector -----------------------------------------------------
-FROM rust:1-bookworm AS connector-builder
-RUN apt-get update && apt-get install -y --no-install-recommends cmake && rm -rf /var/lib/apt/lists/*
+FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
+FROM --platform=$BUILDPLATFORM rust:1-bookworm AS connector-builder
+COPY --from=xx / /
+ARG TARGETPLATFORM
+RUN apt-get update && apt-get install -y --no-install-recommends cmake clang && rm -rf /var/lib/apt/lists/*
+RUN xx-apt-get update && xx-apt-get install -y libc6-dev gcc g++ && rm -rf /var/lib/apt/lists/*
+RUN rustup target add $(xx-cargo --print-target-triple)
 WORKDIR /src
 COPY tsclientlib/ tsclientlib/
 COPY connector/ connector/
 WORKDIR /src/connector
 ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
-RUN cargo build --release
+RUN xx-cargo build --release
 
 # --- Web frontend ---------------------------------------------------------
 FROM node:22-bookworm-slim AS web-builder
+ARG TARGETARCH
 WORKDIR /src/web
 COPY web/package*.json ./
 RUN npm ci
 # Vite 8 pulls in Rolldown, which ships its bundler as a platform-specific
-# optional dependency (@rolldown/binding-linux-x64-gnu here). `npm ci`
+# optional dependency (@rolldown/binding-linux-*-gnu here). `npm ci`
 # intermittently fails to install it due to a long-standing npm bug
 # (https://github.com/npm/cli/issues/4828) without raising a non-zero exit
 # code, so `vite build` only fails later with a confusing MODULE_NOT_FOUND.
 # Verify the binding actually loaded and self-heal via the workaround from
 # npm's own error message before wasting a full build on a broken install.
-RUN node -e "require('@rolldown/binding-linux-x64-gnu')" \
+RUN case "$TARGETARCH" in \
+      amd64) ROLLDOWN_ARCH=x64 ;; \
+      arm64) ROLLDOWN_ARCH=arm64 ;; \
+      *) echo "Unsupported TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
+    esac && \
+    node -e "require('@rolldown/binding-linux-${ROLLDOWN_ARCH}-gnu')" \
     || (rm -rf node_modules package-lock.json && npm install)
 COPY web/ ./
 # The UI carries a small Ko-fi donation button (see web/src/App.tsx).
@@ -73,7 +84,7 @@ RUN npm ci --omit=dev \
     && rm -rf /root/.npm /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=gateway-builder /src/gateway/dist ./dist
-COPY --from=connector-builder /src/connector/target/release/ts-connector /app/connector-bin/ts-connector
+COPY --from=connector-builder /src/connector/target/*/release/ts-connector /app/connector-bin/ts-connector
 COPY --from=web-builder /src/web/dist /app/web/dist
 
 ENV PORT=8080
