@@ -111,6 +111,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = process.env.WEB_DIST ?? path.resolve(__dirname, "../../web/dist");
 const SERVE_STATIC = process.env.WEB_STATIC !== "0";
 
+// Runtime counterpart of the web build's VITE_DEFAULT_SERVER/_CHANNEL (GitHub
+// issue #12): set on the container, these end up in the served index.html as
+// <meta> tags the client reads at startup, so changing them needs no rebuild.
+// Meta tags rather than an inline script, which CONTENT_SECURITY_POLICY forbids.
+const RUNTIME_CONFIG_META = Object.entries({
+  "webspeak3-default-server": process.env.DEFAULT_SERVER,
+  "webspeak3-default-channel": process.env.DEFAULT_CHANNEL,
+})
+  .flatMap(([name, value]) =>
+    value ? [`<meta name="${name}" content="${value.replace(/[&"<>]/g, (c) => `&#${c.charCodeAt(0)};`)}">`] : [],
+  )
+  .join("");
+
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
   ".js": "text/javascript",
@@ -474,6 +487,10 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
         // SPA fallback: unknown paths (client-side routes, or "/") serve index.html.
         filePath = path.join(WEB_DIST, "index.html");
         body = await readFile(filePath);
+      }
+      if (RUNTIME_CONFIG_META && filePath === path.join(WEB_DIST, "index.html")) {
+        // Function replacer: a string one would expand "$&" etc. in the values.
+        body = Buffer.from(body.toString("utf8").replace("</head>", () => `${RUNTIME_CONFIG_META}</head>`));
       }
       const ext = path.extname(filePath);
       res.writeHead(200, {

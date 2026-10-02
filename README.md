@@ -191,6 +191,7 @@ All optional; add them under `environment:` in your compose override next to `PO
 | `PORT` | `8080` | Port the gateway listens on. |
 | `WEB_STATIC` | on | Set to `0` to disable serving the built UI (`web/dist`) entirely — the gateway then only answers `/ws`, `/api/feedback` and `/healthz`. Use this when the UI is hosted elsewhere (e.g. a CDN/static host) and the gateway is purely a backend. |
 | `WEB_DIST` | `web/dist` next to the gateway | Overrides the directory served when `WEB_STATIC` is on. Only needed for non-standard layouts. |
+| `DEFAULT_SERVER` / `DEFAULT_CHANNEL` | unset | Server (and optionally channel) every visitor auto-connects to — see [Bake in a default server](#2-bake-in-a-default-server). |
 | `BROADCAST_TOKEN` | unset | Bearer token required to call `/api/broadcast` (send an in-app notice to all connected clients before a maintenance restart). Endpoint 404s while unset. |
 | `TLS_CERT` / `TLS_KEY` | unset | Paths to serve the gateway over HTTPS/WSS directly instead of behind a reverse proxy/tunnel. Both must be set together. |
 | `STORE_ENABLED` | off | Set to `1` to turn this gateway's own `/api/store/themes` endpoint on. Only needed if you want to run your own Design Store instead of using the maintainer's shared one (see `STORE_URL` build arg above) — the endpoint 404s while unset. |
@@ -307,13 +308,17 @@ This works on **any** deployment — no rebuild, no configuration. WebSpeak3 con
 
 ### 2. Bake in a default server
 
-Running a dedicated instance for one community or event? Set a default at build time so **every** visitor auto-connects with zero parameters, no link needed:
+Running a dedicated instance for one community or event? Set a default server so **every** visitor auto-connects with zero parameters, no link needed. With the Docker image that's just two environment variables, no rebuild:
 
-```bash
-docker compose build --build-arg DEFAULT_SERVER=voice.example.com --build-arg DEFAULT_CHANNEL=Lobby
+```yaml
+    environment:
+      - DEFAULT_SERVER=voice.example.com
+      - DEFAULT_CHANNEL=Lobby
 ```
 
-Outside Docker, the same thing is a build-time variable:
+The gateway hands them to the UI it serves itself, so this needs `WEB_STATIC` left on. Returning visitors' browsers keep the cached app (including its default) until the next image update, so a later change of these values reaches them only then — new visitors get it right away.
+
+Building it yourself, you can bake the default in instead: `docker compose build --build-arg DEFAULT_SERVER=voice.example.com --build-arg DEFAULT_CHANNEL=Lobby` (the environment variables above win over these if both are set). Outside Docker, the same thing is a build-time variable:
 
 ```bash
 VITE_DEFAULT_SERVER=voice.example.com VITE_DEFAULT_CHANNEL=Lobby npm run build

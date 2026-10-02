@@ -162,10 +162,14 @@ const AUTO_CONNECT_FROM_URL = (() => {
 // A self-hosted build can also bake in a default server so the page
 // auto-connects with zero URL params at all - set via `docker compose build
 // --build-arg DEFAULT_SERVER=...` (see Dockerfile/README) or plain
-// VITE_DEFAULT_SERVER= at build time. AUTO_CONNECT_FROM_URL above always wins
-// when a share link is present.
-const DEFAULT_SERVER = import.meta.env.VITE_DEFAULT_SERVER || null;
-const DEFAULT_CHANNEL = import.meta.env.VITE_DEFAULT_CHANNEL || "";
+// VITE_DEFAULT_SERVER= at build time. The Docker image can set the same thing
+// at runtime instead (DEFAULT_SERVER/DEFAULT_CHANNEL env vars, issue #12): the
+// gateway passes them in as <meta> tags, which take precedence over the build
+// values. AUTO_CONNECT_FROM_URL above always wins when a share link is present.
+const runtimeConfig = (name: string) =>
+  document.querySelector<HTMLMetaElement>(`meta[name="webspeak3-${name}"]`)?.content;
+const DEFAULT_SERVER = runtimeConfig("default-server") || import.meta.env.VITE_DEFAULT_SERVER || null;
+const DEFAULT_CHANNEL = runtimeConfig("default-channel") || import.meta.env.VITE_DEFAULT_CHANNEL || "";
 
 // Terms of use, own-hosted instance only (see TODO.md #2/#7.1). Versioned so
 // a rule change can re-surface the modal: bump TOS_VERSION and everyone who
