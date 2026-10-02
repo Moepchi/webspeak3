@@ -1,5 +1,8 @@
 # --- Rust connector -----------------------------------------------------
-FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
+# Cross-compiled on the build machine for the target platform via xx, so an
+# arm64 image doesn't have to run rustc under QEMU. xx is copied into the
+# builder's root, hence pinned by digest rather than a movable tag.
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.9.0@sha256:c64defb9ed5a91eacb37f96ccc3d4cd72521c4bd18d5442905b95e2226b0e707 AS xx
 FROM --platform=$BUILDPLATFORM rust:1-bookworm AS connector-builder
 COPY --from=xx / /
 ARG TARGETPLATFORM
@@ -14,24 +17,21 @@ ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
 RUN xx-cargo build --release
 
 # --- Web frontend ---------------------------------------------------------
-FROM node:22-bookworm-slim AS web-builder
-ARG TARGETARCH
+# The bundle is plain JS/CSS, identical for every target platform - build it
+# natively on the build machine instead of under emulation.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS web-builder
 WORKDIR /src/web
 COPY web/package*.json ./
 RUN npm ci
 # Vite 8 pulls in Rolldown, which ships its bundler as a platform-specific
-# optional dependency (@rolldown/binding-linux-*-gnu here). `npm ci`
-# intermittently fails to install it due to a long-standing npm bug
+# optional dependency (@rolldown/binding-linux-<arch>-gnu, <arch> being
+# Node's process.arch). `npm ci` intermittently fails to install it due to a
+# long-standing npm bug
 # (https://github.com/npm/cli/issues/4828) without raising a non-zero exit
 # code, so `vite build` only fails later with a confusing MODULE_NOT_FOUND.
 # Verify the binding actually loaded and self-heal via the workaround from
 # npm's own error message before wasting a full build on a broken install.
-RUN case "$TARGETARCH" in \
-      amd64) ROLLDOWN_ARCH=x64 ;; \
-      arm64) ROLLDOWN_ARCH=arm64 ;; \
-      *) echo "Unsupported TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
-    esac && \
-    node -e "require('@rolldown/binding-linux-${ROLLDOWN_ARCH}-gnu')" \
+RUN node -e "require('@rolldown/binding-linux-' + process.arch + '-gnu')" \
     || (rm -rf node_modules package-lock.json && npm install)
 COPY web/ ./
 # The UI carries a small Ko-fi donation button (see web/src/App.tsx).
@@ -56,7 +56,9 @@ RUN if [ "$DONATE_URL" = "keep" ]; then DONATE_URL_ENV=; else DONATE_URL_ENV="VI
     env $DONATE_URL_ENV VITE_DEFAULT_SERVER="$DEFAULT_SERVER" VITE_DEFAULT_CHANNEL="$DEFAULT_CHANNEL" VITE_STORE_URL="$STORE_URL" npx vite build
 
 # --- Gateway ----------------------------------------------------------------
-FROM node:22-bookworm-slim AS gateway-builder
+# tsc output is platform-independent too; only the runtime stage below
+# installs the (pure-JS) production deps for the target platform.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS gateway-builder
 WORKDIR /src/gateway
 COPY gateway/package*.json ./
 RUN npm ci
