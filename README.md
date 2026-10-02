@@ -172,7 +172,7 @@ services:
 
 Then `docker compose up -d` and open `http://localhost:8080` (or whatever host port you chose).
 
-Prefer to skip the build entirely? A prebuilt image is published on [Docker Hub](https://hub.docker.com/r/moepchi/webspeak3):
+Prefer to skip the build entirely? A prebuilt image for `linux/amd64` and `linux/arm64` (e.g. a Raspberry Pi 4/5 on a 64-bit OS) is published on [Docker Hub](https://hub.docker.com/r/moepchi/webspeak3):
 
 ```bash
 docker run -d -p 8080:8080 --name webspeak3 moepchi/webspeak3:latest

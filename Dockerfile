@@ -1,26 +1,37 @@
 # --- Rust connector -----------------------------------------------------
-FROM rust:1-bookworm AS connector-builder
-RUN apt-get update && apt-get install -y --no-install-recommends cmake && rm -rf /var/lib/apt/lists/*
+# Cross-compiled on the build machine for the target platform via xx, so an
+# arm64 image doesn't have to run rustc under QEMU. xx is copied into the
+# builder's root, hence pinned by digest rather than a movable tag.
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.9.0@sha256:c64defb9ed5a91eacb37f96ccc3d4cd72521c4bd18d5442905b95e2226b0e707 AS xx
+FROM --platform=$BUILDPLATFORM rust:1-bookworm AS connector-builder
+COPY --from=xx / /
+ARG TARGETPLATFORM
+RUN apt-get update && apt-get install -y --no-install-recommends cmake clang && rm -rf /var/lib/apt/lists/*
+RUN xx-apt-get update && xx-apt-get install -y libc6-dev gcc g++ && rm -rf /var/lib/apt/lists/*
+RUN rustup target add $(xx-cargo --print-target-triple)
 WORKDIR /src
 COPY tsclientlib/ tsclientlib/
 COPY connector/ connector/
 WORKDIR /src/connector
 ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
-RUN cargo build --release
+RUN xx-cargo build --release
 
 # --- Web frontend ---------------------------------------------------------
-FROM node:22-bookworm-slim AS web-builder
+# The bundle is plain JS/CSS, identical for every target platform - build it
+# natively on the build machine instead of under emulation.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS web-builder
 WORKDIR /src/web
 COPY web/package*.json ./
 RUN npm ci
 # Vite 8 pulls in Rolldown, which ships its bundler as a platform-specific
-# optional dependency (@rolldown/binding-linux-x64-gnu here). `npm ci`
-# intermittently fails to install it due to a long-standing npm bug
+# optional dependency (@rolldown/binding-linux-<arch>-gnu, <arch> being
+# Node's process.arch). `npm ci` intermittently fails to install it due to a
+# long-standing npm bug
 # (https://github.com/npm/cli/issues/4828) without raising a non-zero exit
 # code, so `vite build` only fails later with a confusing MODULE_NOT_FOUND.
 # Verify the binding actually loaded and self-heal via the workaround from
 # npm's own error message before wasting a full build on a broken install.
-RUN node -e "require('@rolldown/binding-linux-x64-gnu')" \
+RUN node -e "require('@rolldown/binding-linux-' + process.arch + '-gnu')" \
     || (rm -rf node_modules package-lock.json && npm install)
 COPY web/ ./
 # The UI carries a small Ko-fi donation button (see web/src/App.tsx).
@@ -45,7 +56,9 @@ RUN if [ "$DONATE_URL" = "keep" ]; then DONATE_URL_ENV=; else DONATE_URL_ENV="VI
     env $DONATE_URL_ENV VITE_DEFAULT_SERVER="$DEFAULT_SERVER" VITE_DEFAULT_CHANNEL="$DEFAULT_CHANNEL" VITE_STORE_URL="$STORE_URL" npx vite build
 
 # --- Gateway ----------------------------------------------------------------
-FROM node:22-bookworm-slim AS gateway-builder
+# tsc output is platform-independent too; only the runtime stage below
+# installs the (pure-JS) production deps for the target platform.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS gateway-builder
 WORKDIR /src/gateway
 COPY gateway/package*.json ./
 RUN npm ci
@@ -73,7 +86,7 @@ RUN npm ci --omit=dev \
     && rm -rf /root/.npm /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=gateway-builder /src/gateway/dist ./dist
-COPY --from=connector-builder /src/connector/target/release/ts-connector /app/connector-bin/ts-connector
+COPY --from=connector-builder /src/connector/target/*/release/ts-connector /app/connector-bin/ts-connector
 COPY --from=web-builder /src/web/dist /app/web/dist
 
 ENV PORT=8080
