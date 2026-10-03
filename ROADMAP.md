@@ -10,13 +10,14 @@ This roadmap is intentionally outcome-focused. It does not promise fixed dates.
 
 - Connect to any reachable TS3 or TS6 server through the WebSpeak3 gateway
 - Low-latency Opus voice, voice activation, whisper, and audio-device selection
-- Live channel/client tree with status updates and context actions
+- Live channel/client tree with status updates, search, avatars, and context actions
+- Per-person volume, remembered per user across sessions
 - Server, channel, and private text chat
 - Favorites, identities, contacts, pokes, away state, and reconnect
 - File transfers, local session recording, sound packs, and administration tools
 - Design Store: browse, upload, rate, and download community-made themes
 - Opt-in WASM AEC3 echo cancellation for speaker+mic setups
-- Responsive desktop and mobile interfaces in German and English
+- Responsive desktop and mobile interfaces in German, English, Simplified Chinese, and Persian (Beta)
 - Docker image and Compose-based self-hosting
 
 ## Experimental or still being validated

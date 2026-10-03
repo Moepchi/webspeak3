@@ -69,14 +69,16 @@ not need to be installed on the same machine, modified, or operated by you.
 | 🔊 **Custom audio output picker** | Route playback to any output device — works even in browsers without `AudioContext.setSinkId` |
 | 💬 **Full text chat** | Channel, server-wide, and private (1:1) chat, each in its own tab — Shift+Enter for a newline |
 | 🌳 **Live channel/client tree** | Correct ordering, status icons (channel commander, away, muted, deafened), country flags, click to switch channels |
-| 🖱️ **Right-click context menu** | Private chat, poke, copy name, and whisper-target toggle straight from a client's row |
+| 🖱️ **Right-click context menu** | Private chat, poke, copy name, whisper-target toggle, and a per-person volume slider straight from a client's row |
+| 🔎 **Tree search** | Filter channels and users by name; matches stay in place with their parent channels |
+| 🖼️ **Avatars** | Shows the TeamSpeak avatars people have set, in the tree, the speaking bar, and the info panel |
 | 📜 **Server log** | Join/leave/switch, channel-group, and channel/server-change events shown inline, like the native client |
 | 🔔 **Custom sound notifications** | Per-event sounds (connect, poke, messages, ...) with volume control and `.ts3soundpack` import |
 | 🪪 **Persistent identity** | Keeps the same client UID across sessions instead of generating a new one every connect |
 | 👉 **Poke & away status** | Poke clients with an optional message; set yourself away with presets or a custom status |
 | ⭐ **Favorites & reconnect** | Remembers your last server/nickname; switch servers without leaving your tab |
 | 📱 **Mobile-friendly layout** | Responsive single-column layout for narrow screens, not just a shrunk desktop UI |
-| 🌍 **Localized UI** | Interface available in German, English, and Simplified Chinese, detected automatically or switchable in Options |
+| 🌍 **Localized UI** | Interface available in German, English, Simplified Chinese, and Persian (Beta), detected automatically or switchable in Options |
 | 🌗 **Dark / light theme** | Clean, modern UI that adapts to your preference |
 | 🔁 **Multi-join (server tabs)** | Several connections in parallel — one tab per server, like GreenTeaSpeak 2. Audio stays on the active tab |
 | 🔁 **Seamless reconnect** | Switch or add connections mid-session without tearing down unrelated tabs |
