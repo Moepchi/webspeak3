@@ -46,7 +46,7 @@
   "tabAudio.start": "将标签页或窗口的声音共享到语音频道（戴耳机可避免回声）",
   "tabAudio.stop": "停止共享声音",
   "tabAudio.noAudio": "没有共享声音。请在选择窗口中选择标签页或窗口，并开启其声音。",
-  "tabAudio.silent": "共享的声音已静音 5 秒。使用“系统音频”时，浏览器只录制 Windows 默认播放设备；在其他设备上播放的音乐不会被传送。",
+  "tabAudio.silent": "共享的声音已 5 秒没有任何内容。系统音频并非在每台 Windows 电脑上都有声音；请改为共享浏览器标签页（例如网页版 Spotify 或 YouTube），并开启“共享标签页音频”。",
   "toolbar.muteSound": "关闭声音（拒听）",
   "toolbar.unmuteSound": "开启声音（取消拒听）",
   "toolbar.chooseOutputDevice": "选择输出设备",

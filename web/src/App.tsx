@@ -8743,26 +8743,11 @@ function AppInner() {
     tabAudioRef.current = stream;
     micCaptureRef.current?.setExtraAudio(stream);
     setTabAudioOn(true);
-    // Windows system audio only covers the default output device; music on
-    // another device arrives as pure silence, with nothing else to tell why.
-    setTimeout(async () => {
+    // Windows system audio can arrive as pure silence (seen in Edge, with or
+    // without the mic open), with nothing else to tell why.
+    setTimeout(() => {
       if (tabAudioRef.current !== stream || !micCaptureRef.current || micCaptureRef.current.extraPeak >= 1e-4) return;
       appendLog({ text: t("tabAudio.silent"), kind: "error" });
-      // ponytail: temporary diagnostics - tells "browser delivers silence"
-      // apart from "the mixer loses it"; drop once the Edge report is solved.
-      const probe = new AudioContext();
-      void probe.resume();
-      const analyser = probe.createAnalyser();
-      probe.createMediaStreamSource(new MediaStream([track])).connect(analyser);
-      await new Promise((r) => setTimeout(r, 1500));
-      const data = new Float32Array(analyser.fftSize);
-      analyser.getFloatTimeDomainData(data);
-      const direct = data.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
-      appendLog({
-        text: `Diag: direct=${direct.toFixed(5)} mixer=${micCaptureRef.current?.extraPeak.toFixed(5)} muted=${track.muted} state=${track.readyState} enabled=${track.enabled} probe=${probe.state} settings=${JSON.stringify(track.getSettings())}`,
-        kind: "error",
-      });
-      void probe.close();
     }, 5000);
   };
 

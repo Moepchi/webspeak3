@@ -93,7 +93,7 @@
   "tabAudio.start": "Share tab or window audio into the voice channel (headphones avoid an echo)",
   "tabAudio.stop": "Stop sharing audio",
   "tabAudio.noAudio": "No audio was shared. In the picker, choose a tab or window and turn on its audio.",
-  "tabAudio.silent": "The shared audio has been silent for 5 seconds. With \"system audio\" the browser only captures the Windows default playback device; music playing on another device doesn't come through.",
+  "tabAudio.silent": "Nothing has come through from the shared audio for 5 seconds. System audio doesn't deliver sound on every Windows machine; share a browser tab instead (e.g. Spotify on the web or YouTube) with \"Share tab audio\" turned on.",
   "toolbar.muteSound": "Mute sound (deafen)",
   "toolbar.unmuteSound": "Unmute sound (undeafen)",
   "toolbar.chooseOutputDevice": "Choose output device",

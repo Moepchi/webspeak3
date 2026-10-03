@@ -93,7 +93,7 @@
   "tabAudio.start": "Ton eines Tabs oder Fensters in den Sprachkanal geben (mit Kopfhörer kein Echo)",
   "tabAudio.stop": "Ton-Freigabe beenden",
   "tabAudio.noAudio": "Es wurde kein Ton freigegeben. Im Auswahldialog einen Tab oder ein Fenster wählen und den Ton einschalten.",
-  "tabAudio.silent": "Der geteilte Ton ist seit 5 Sekunden still. Bei „Systemaudio“ nimmt der Browser nur das Windows-Standard-Wiedergabegerät auf. Läuft die Musik auf einem anderen Gerät, kommt nichts an.",
+  "tabAudio.silent": "Vom geteilten Ton kommt seit 5 Sekunden nichts an. Systemaudio liefert nicht auf jedem Windows-Rechner Ton. Teile stattdessen einen Browser-Tab, zum Beispiel Spotify im Web oder YouTube, mit eingeschaltetem „Tab-Audio teilen“.",
   "toolbar.muteSound": "Ton stummschalten (Ausgabe stumm)",
   "toolbar.unmuteSound": "Ton aktivieren (Ausgabe an)",
   "toolbar.chooseOutputDevice": "Wiedergabegerät wählen",

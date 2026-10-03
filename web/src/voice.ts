@@ -169,12 +169,18 @@ export class MicCapture {
           this.extraPeak = Math.max(this.extraPeak, Math.abs(extra[i]));
         }
       }
+      // AEC3's blocks make the two queues jitter against each other. Padding
+      // a short extra queue with silence clicks; skip it once instead, which
+      // leaves it a frame ahead from then on. Cap the lead to bound latency.
+      if (this.pendingExtra.length > 4 * FRAME_SAMPLES) this.pendingExtra.splice(0, this.pendingExtra.length - 2 * FRAME_SAMPLES);
       while (this.pending.length >= FRAME_SAMPLES) {
         const frame = this.pending.splice(0, FRAME_SAMPLES);
-        const extra = this.pendingExtra.splice(0, FRAME_SAMPLES);
+        const extra = this.pendingExtra.length >= FRAME_SAMPLES ? this.pendingExtra.splice(0, FRAME_SAMPLES) : [];
         const int16 = new Int16Array(FRAME_SAMPLES);
         for (let i = 0; i < FRAME_SAMPLES; i++) {
-          const clamped = Math.max(-1, Math.min(1, frame[i] + (extra[i] ?? 0)));
+          // Shared music is mastered near full scale; at -6 dB it leaves room
+          // for the voice on top instead of clipping.
+          const clamped = Math.max(-1, Math.min(1, frame[i] + (extra[i] ?? 0) * 0.5));
           int16[i] = clamped < 0 ? clamped * 32768 : clamped * 32767;
         }
         this.onFrame(int16ToBase64(int16));
