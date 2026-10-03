@@ -8722,7 +8722,13 @@ function AppInner() {
       // Browsers only offer audio together with a video capture. The video
       // track stays alive (at 1 fps) until sharing stops: stopping it right
       // away may end or silence the capture session the audio belongs to.
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: true });
+      // Edge applies voice processing to the capture by default: echo
+      // cancellation then subtracts exactly what the speakers play, so
+      // Windows system audio arrives as pure silence (measured: peak 0).
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 1 },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
     } catch {
       return; // picker cancelled
     }
