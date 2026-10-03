@@ -293,6 +293,12 @@ enum Event {
 	Talkers { clients: Vec<u16> },
 	#[serde(rename = "disconnected")]
 	Disconnected { reason: String },
+	/// Lost the server (timeout, server restart); tsclientlib is reconnecting
+	/// on its own. Followed by "reconnected" once it is back.
+	#[serde(rename = "reconnecting")]
+	Reconnecting { reason: String },
+	#[serde(rename = "reconnected")]
+	Reconnected,
 	#[serde(rename = "error")]
 	Error { message: String },
 	/// A "switch" to a password-protected channel was rejected because no (or
@@ -1060,6 +1066,7 @@ async fn run(args: Args) -> Result<()> {
 	// TeaSpeak may reveal hidden channels after a group/permission change. Debounce
 	// a channelsubscribeall so we pick up any channels the server only exposes then.
 	let mut resubscribe_at: Option<tokio::time::Instant> = None;
+	let mut ts_reconnecting = false;
 
 	enum LoopOutcome {
 		StdinLine(std::io::Result<Option<String>>),
@@ -2437,6 +2444,13 @@ async fn run(args: Args) -> Result<()> {
 			},
 			LoopOutcome::ConEvent(ev) => match ev {
 				Some(Ok(StreamItem::BookEvents(events))) => {
+					if ts_reconnecting {
+						// The new session starts unsubscribed, which would leave
+						// everyone but us invisible.
+						ts_reconnecting = false;
+						resubscribe_at = Some(tokio::time::Instant::now());
+						emit(&Event::Reconnected);
+					}
 					let own_id = con.get_state()?.own_client;
 					for event in &events {
 						if let BookEvent::Message { target, invoker, message } = event {
@@ -3008,6 +3022,10 @@ async fn run(args: Args) -> Result<()> {
 						emit(&Event::Error { message: format!("File transfer failed: {e}") });
 					}
 				}
+				Some(Ok(StreamItem::DisconnectedTemporarily(reason))) => {
+					ts_reconnecting = true;
+					emit(&Event::Reconnecting { reason: format!("{reason:?}") });
+				}
 				Some(Ok(_)) => {}
 				Some(Err(e)) => {
 					emit(&Event::Disconnected { reason: e.to_string() });
@@ -3029,7 +3047,9 @@ async fn run(args: Args) -> Result<()> {
 				}
 			}
 			LoopOutcome::ServerVarsRefresh => {
-				send_server_get_variables(&mut con);
+				if !ts_reconnecting {
+					send_server_get_variables(&mut con);
+				}
 			}
 			LoopOutcome::AudioTick => {
 				if !audio_handler.get_queues().is_empty() {

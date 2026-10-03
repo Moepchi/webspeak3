@@ -154,6 +154,8 @@ export type Ts3ConnectionEvent =
   | { type: "audioOut"; pcm: string }
   | { type: "talkers"; clients: number[] }
   | { type: "disconnected"; reason: string }
+  | { type: "reconnecting"; reason: string }
+  | { type: "reconnected" }
   | { type: "error"; message: string }
   | { type: "channelPasswordRequired"; channelId: number }
   | ({ type: "serverLog" } & ServerLogEntry)
@@ -362,6 +364,8 @@ export class Ts3Connection {
           | { type: "audioOut"; pcm: string }
           | { type: "talkers"; clients: number[] }
           | { type: "disconnected"; reason: string }
+          | { type: "reconnecting"; reason: string }
+          | { type: "reconnected" }
           | { type: "error"; message: string }
           | { type: "channelPasswordRequired"; channel_id: number }
           | ({ type: "serverLog" } & ServerLogEntry)

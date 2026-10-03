@@ -659,6 +659,8 @@
   "tabs.closeTab": "Tab schließen: {label}",
   "identity.importInvalid": "„{file}“ ist keine gültige Identitätsdatei.",
   "log.fileTransferFailed": "Dateiübertragung fehlgeschlagen:",
+  "log.serverReconnecting": "Verbindung zum Server verloren, verbinde neu…",
+  "log.serverReconnected": "Wieder mit dem Server verbunden",
   "log.fileTransferInvalidAddress": "Dateiübertragung fehlgeschlagen (ungültige Adresse)",
   "sounds.importFailed": "Das Soundpack konnte nicht gelesen werden – ist es eine gültige .ts3soundpack-/ZIP-Datei?",
   "tabs.connections": "Server-Verbindungen",

@@ -7449,6 +7449,17 @@ function AppInner() {
         case "talkers":
           setTalkers(new Set<number>(data.clients));
           break;
+        case "reconnecting":
+          // The gateway lost the TS server and is reconnecting by itself.
+          appendLog({ text: t("log.serverReconnecting"), kind: "error" });
+          logClient("warning", "Connection", `Lost the server, reconnecting: ${data.reason}`);
+          updateTabMeta(sessionId, { connecting: true });
+          break;
+        case "reconnected":
+          appendLog({ text: t("log.serverReconnected"), kind: "info" });
+          logClient("info", "Connection", "Reconnected to the server");
+          updateTabMeta(sessionId, { connecting: false });
+          break;
         case "streamEvent": {
           const streamEvent = data as StreamEvent;
           if (streamEvent.name === "notifystreaminfo" || streamEvent.name === "notifystreamstarted") {
@@ -7744,10 +7755,28 @@ function AppInner() {
 
   const wireSocket = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams) => {
     const current = () => socketHandlersRef.current(sessionId, socket, params);
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
     socket.onopen = () => current().onopen();
-    socket.onmessage = (event) => current().onmessage(event);
+    socket.onmessage = (event) => {
+      // Armed by the "hello" announcing "keepalive", or by the first keepalive.
+      // The quoted word cannot come from user text, where JSON escapes quotes.
+      if (watchdog !== undefined || String(event.data).includes('"keepalive"')) {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(() => {
+          // close() on a dead link may take a minute to fire onclose, so
+          // detach and run the drop handling right away.
+          socket.onmessage = socket.onerror = socket.onclose = null;
+          socket.close();
+          current().onclose();
+        }, KEEPALIVE_TIMEOUT_MS);
+      }
+      if (event.data !== KEEPALIVE_MESSAGE) current().onmessage(event);
+    };
     socket.onerror = () => current().onerror();
-    socket.onclose = () => current().onclose();
+    socket.onclose = () => {
+      clearTimeout(watchdog);
+      current().onclose();
+    };
   };
 
   const handleConnect = (overrides?: {
@@ -7878,6 +7907,11 @@ function AppInner() {
   // instantly, which without a delay would tight-loop). Reset to 0 once a
   // session actually reaches "connected" again (see the two spots below).
   const reconnectAttemptsRef = useRef<Map<string, number>>(new Map());
+  // The gateway sends this every 20 s (heartbeat in gateway/src/index.ts). A
+  // network that dies silently never closes the socket on this side, so a
+  // socket that stays quiet this long counts as dropped.
+  const KEEPALIVE_MESSAGE = '{"type":"keepalive"}';
+  const KEEPALIVE_TIMEOUT_MS = 50_000;
   const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const scheduleReconnect = (sessionId: string) => {
     if (reconnectTimersRef.current.has(sessionId)) return; // already scheduled
@@ -7939,11 +7973,19 @@ function AppInner() {
       }
     };
 
+    // Back online: retry now instead of waiting out a backoff of up to 30 s.
+    const onOnline = () => {
+      reconnectAttemptsRef.current.clear();
+      for (const id of sessionsRef.current.keys()) reconnectSessionRef.current(id);
+    };
+
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("online", onOnline);
     requestWakeLock();
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", onOnline);
       releaseWakeLock();
     };
   }, [sessionTabs.length]);

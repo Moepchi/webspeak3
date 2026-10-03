@@ -112,7 +112,7 @@ const WEB_DIST = process.env.WEB_DIST ?? path.resolve(__dirname, "../../web/dist
 const SERVE_STATIC = process.env.WEB_STATIC !== "0";
 
 // Sent to every browser in the "hello" message on socket open; see there.
-const GATEWAY_FEATURES = ["clientVolume"];
+const GATEWAY_FEATURES = ["clientVolume", "keepalive"];
 
 // Optional TURN relay for screen streams, also handed out in "hello". With
 // TURN_SECRET (coturn's use-auth-secret) every socket gets its own credential,
@@ -585,6 +585,9 @@ const heartbeatTimer = setInterval(() => {
     }
     state.isAlive = false;
     socket.ping();
+    // Protocol pings are invisible to browser JS; this lets the page notice
+    // a dead network on its side too (KEEPALIVE_MESSAGE in web/src/App.tsx).
+    socket.send('{"type":"keepalive"}');
   }
 }, HEARTBEAT_INTERVAL_MS);
 

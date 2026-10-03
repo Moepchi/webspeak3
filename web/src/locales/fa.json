@@ -658,6 +658,8 @@
   "tabs.closeTab": "بستن زبانه: {label}",
   "identity.importInvalid": "«{file}» یک فایل هویت معتبر نیست.",
   "log.fileTransferFailed": "انتقال فایل ناموفق بود:",
+  "log.serverReconnecting": "اتصال به سرور قطع شد، در حال اتصال دوباره…",
+  "log.serverReconnected": "دوباره به سرور متصل شد",
   "log.fileTransferInvalidAddress": "انتقال فایل ناموفق بود (نشانی نامعتبر)",
   "sounds.importFailed": "این بسته صدا خوانده نشد - آیا یک فایل ‎.ts3soundpack/ZIP معتبر است؟",
   "tabs.connections": "اتصال‌های سرور",

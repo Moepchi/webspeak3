@@ -658,6 +658,8 @@
   "tabs.closeTab": "关闭标签页：{label}",
   "identity.importInvalid": "“{file}”不是有效的身份文件。",
   "log.fileTransferFailed": "文件传输失败：",
+  "log.serverReconnecting": "与服务器的连接已断开，正在重新连接…",
+  "log.serverReconnected": "已重新连接到服务器",
   "log.fileTransferInvalidAddress": "文件传输失败（地址无效）",
   "sounds.importFailed": "无法读取此音效包——它是有效的 .ts3soundpack/ZIP 文件吗？",
   "tabs.connections": "服务器连接",

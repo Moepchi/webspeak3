@@ -659,6 +659,8 @@
   "tabs.closeTab": "Close tab: {label}",
   "identity.importInvalid": "\"{file}\" is not a valid identity file.",
   "log.fileTransferFailed": "File transfer failed:",
+  "log.serverReconnecting": "Connection to the server lost, reconnecting…",
+  "log.serverReconnected": "Reconnected to the server",
   "log.fileTransferInvalidAddress": "File transfer failed (invalid address)",
   "sounds.importFailed": "Could not read this soundpack - is it a valid .ts3soundpack/ZIP file?",
   "tabs.connections": "Server connections",
