@@ -338,6 +338,8 @@
   "app.language.zh-CN": "简体中文",
   "app.language.fa": "فارسی (بتا)",
   "app.language.helpTranslate": "Missing your language or spotted a wrong translation? Help out on Weblate →",
+  "app.serverBanner": "Show server banners",
+  "app.serverBanner.hint": "The banner loads straight from the address the server admin set, and that host sees your IP address.",
   "playback.title": "Playback",
   "playback.subtitle": "Change your playback settings",
   "playback.profile": "Profile",

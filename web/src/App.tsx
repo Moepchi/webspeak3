@@ -490,6 +490,9 @@ function loadFavorites(): Favorite[] {
 }
 
 const AWAY_PRESETS_KEY = "webspeak3:away-presets";
+/** "off" hides the server banner: it loads from whatever host the server
+ *  admin picked, which then sees the viewer's IP (review S12). */
+const SERVER_BANNER_KEY = "webspeak3:server-banner";
 const DISCONNECT_MESSAGE_KEY = "webspeak3:disconnect-message";
 const COLLECTED_URLS_KEY = "webspeak3:collected-urls";
 
@@ -1552,7 +1555,7 @@ function ConnectDialog({
       ) : (
         <div className="ts-dialog-titlebar">
           <span>{t("connect.title")}</span>
-          <button onClick={onCancel} title={t("dialog.close")}>
+          <button onClick={onCancel} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -1958,7 +1961,7 @@ function StreamSettingsDialog({
           <span>
             {t("publish.dialog.title")} <AlphaBadge />
           </span>
-          <button onClick={onCancel} title={t("dialog.close")}>
+          <button onClick={onCancel} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -2418,7 +2421,7 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
       <div className="ts-dialog ts-feedback-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("feedback.dialog.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -2582,7 +2585,7 @@ function FavoritesDialog({
       <div className="ts-dialog ts-favorites-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("favorites.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -2757,7 +2760,7 @@ function CollectedUrlsDialog({
       <div className="ts-dialog ts-collected-urls-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("collectedUrls.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -2824,7 +2827,7 @@ function InviteFriendDialog({
       <div className="ts-dialog ts-invite-friend-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("inviteFriend.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -2918,7 +2921,7 @@ function ClientLogDialog({ entries, onClose }: { entries: ClientLogEntry[]; onCl
       <div className="ts-dialog ts-client-log-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("clientLog.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -3006,7 +3009,7 @@ function BanListDialog({
       <div className="ts-dialog ts-ban-list-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("banList.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -3087,7 +3090,7 @@ function ComplainListDialog({
       <div className="ts-dialog ts-complain-list-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("complainList.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -3183,7 +3186,7 @@ function OfflineMessagesDialog({
       <div className="ts-dialog ts-offline-messages-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("offlineMessages.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -3306,7 +3309,7 @@ function GroupAssignDialog({
           <span>
             {kind === "channel" ? t("groupAssign.channelTitle") : t("groupAssign.serverTitle")} - {clientName}
           </span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -3374,7 +3377,7 @@ function MoveClientDialog({
           <span>
             {t("moveClient.title")} - {clientName}
           </span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -3490,7 +3493,7 @@ function FileBrowserDialog({
           <span>
             {t("fileBrowser.title")} - {channelName}
           </span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -3754,7 +3757,7 @@ function ServerIconsDialog({
       <div className="ts-dialog ts-server-icons-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("serverIcons.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -3973,7 +3976,7 @@ function PermissionsEditorDialog({
       <div className="ts-dialog ts-perms-editor-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("permsEditor.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -4235,7 +4238,7 @@ function PermissionOverviewDialog({
       <div className="ts-dialog ts-permission-overview-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("permissionOverview.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -4315,7 +4318,7 @@ function ServerProtocolLogDialog({
       <div className="ts-dialog ts-server-protocol-log-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("serverProtocolLog.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -4365,7 +4368,7 @@ function WhisperHistoryDialog({
       <div className="ts-dialog ts-whisper-history-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("whisperHistory.title", { server: serverName })}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -4427,7 +4430,7 @@ function WhisperListsDialog({
       <div className="ts-dialog ts-whisper-lists-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("whisperLists.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -4500,7 +4503,7 @@ function ClientConnectionInfoDialog({
       <div className="ts-dialog ts-connection-info-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("connectionInfo.clientTitle", { name: clientName })}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -4572,7 +4575,7 @@ function ServerConnectionInfoDialog({
       <div className="ts-dialog ts-connection-info-dialog ts-server-conn-info" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("connectionInfo.serverTitle")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -4711,7 +4714,7 @@ function IdentitiesDialog({
       <div className="ts-dialog ts-identities-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("identities.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -4888,7 +4891,7 @@ function ContactsDialog({
       <div className="ts-dialog ts-contacts-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("contacts.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -5017,7 +5020,7 @@ function AwayDialog({
       <div className="ts-dialog ts-away-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("away.dialog.title")}</span>
-          <button onClick={onCancel} title={t("dialog.close")}>
+          <button onClick={onCancel} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -5325,7 +5328,13 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
   );
 }
 
-function AnwendungPanel() {
+function AnwendungPanel({
+  showServerBanner,
+  onShowServerBannerChange,
+}: {
+  showServerBanner: boolean;
+  onShowServerBannerChange: (on: boolean) => void;
+}) {
   const t = useT();
   const { langPref, setLangPref } = useLanguage();
   return (
@@ -5347,6 +5356,11 @@ function AnwendungPanel() {
           {t("app.language.helpTranslate")}
         </a>
       </p>
+      <label className="ts-options-checkbox">
+        <input type="checkbox" checked={showServerBanner} onChange={(e) => onShowServerBannerChange(e.target.checked)} />
+        {t("app.serverBanner")}
+      </label>
+      <p className="ts-options-hint">{t("app.serverBanner.hint")}</p>
     </>
   );
 }
@@ -6136,6 +6150,8 @@ function OptionsDialog({
   customThemes,
   onSaveCustomTheme,
   onDeleteCustomTheme,
+  showServerBanner,
+  onShowServerBannerChange,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -6146,6 +6162,8 @@ function OptionsDialog({
   customThemes: CustomTheme[];
   onSaveCustomTheme: (theme: CustomTheme) => void;
   onDeleteCustomTheme: (id: string) => void;
+  showServerBanner: boolean;
+  onShowServerBannerChange: (on: boolean) => void;
 }) {
   const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
@@ -6155,7 +6173,7 @@ function OptionsDialog({
       <div className="ts-dialog ts-options-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("options.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -6174,7 +6192,7 @@ function OptionsDialog({
           </div>
           <div className="ts-options-content">
             {active.id === "anwendung" ? (
-              <AnwendungPanel />
+              <AnwendungPanel showServerBanner={showServerBanner} onShowServerBannerChange={onShowServerBannerChange} />
             ) : active.id === "wiedergabe" ? (
               <WiedergabePanel audio={audio} />
             ) : active.id === "aufnahme" ? (
@@ -6294,7 +6312,7 @@ function ServerEditDialog({
       <div className="ts-dialog ts-options-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="ts-dialog-titlebar">
           <span>{t("serverEdit.title")}</span>
-          <button onClick={onClose} title={t("dialog.close")}>
+          <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
             ✕
           </button>
         </div>
@@ -6524,6 +6542,7 @@ function AppInner() {
   const [serverLicense, setServerLicense] = useState("");
   const [serverLicenseId, setServerLicenseId] = useState(0);
   const [serverBannerUrl, setServerBannerUrl] = useState("");
+  const [showServerBanner, setShowServerBanner] = useState(() => localStorage.getItem(SERVER_BANNER_KEY) !== "off");
   const [serverWelcomeMessage, setServerWelcomeMessage] = useState("");
   const [serverEditOpen, setServerEditOpen] = useState(false);
   const [serverProtocolLogOpen, setServerProtocolLogOpen] = useState(false);
@@ -10779,6 +10798,15 @@ function AppInner() {
           customThemes={customThemes}
           onSaveCustomTheme={handleSaveCustomTheme}
           onDeleteCustomTheme={handleDeleteCustomTheme}
+          showServerBanner={showServerBanner}
+          onShowServerBannerChange={(on) => {
+            setShowServerBanner(on);
+            try {
+              localStorage.setItem(SERVER_BANNER_KEY, on ? "on" : "off");
+            } catch {
+              /* private mode: setting just doesn't persist */
+            }
+          }}
           audio={{
             outputDevices,
             outputDeviceId,
@@ -11440,9 +11468,9 @@ function AppInner() {
           <div className="ts-resize-handle-vertical" onMouseDown={startTreeResize} />
 
           <div className="ts-side-panel">
-            {connected && serverBannerUrl && (
+            {connected && serverBannerUrl && showServerBanner && (
               <div className="ts-banner-panel">
-                <img className="ts-server-banner" src={serverBannerUrl} alt="" />
+                <img className="ts-server-banner" src={serverBannerUrl} alt="" referrerPolicy="no-referrer" />
               </div>
             )}
             {connected && (

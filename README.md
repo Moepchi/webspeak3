@@ -65,6 +65,7 @@ not need to be installed on the same machine, modified, or operated by you.
 |---|---|
 | 🔌 **Real TeamSpeak protocol** | Connects to actual TS3/TS6, TeaSpeak, and GreenTeaSpeak servers over a WebSocket gateway — the server stays exactly as-is |
 | 🎙️ **Low-latency voice** | Opus-encoded voice with voice activation ("Sprachaktivierung") and adjustable sensitivity |
+| 🎵 **Tab audio** | Mix a browser tab's sound (music, a video) into your voice, without the echo canceller eating it |
 | 🤫 **Whisper** | Target your voice at specific channels or clients instead of your whole current channel |
 | 🔊 **Custom audio output picker** | Route playback to any output device — works even in browsers without `AudioContext.setSinkId` |
 | 💬 **Full text chat** | Channel, server-wide, and private (1:1) chat, each in its own tab — Shift+Enter for a newline |
@@ -81,7 +82,8 @@ not need to be installed on the same machine, modified, or operated by you.
 | 🌍 **Localized UI** | Interface available in German, English, Simplified Chinese, and Persian (Beta), detected automatically or switchable in Options |
 | 🌗 **Dark / light theme** | Clean, modern UI that adapts to your preference |
 | 🔁 **Multi-join (server tabs)** | Several connections in parallel — one tab per server, like GreenTeaSpeak 2. Audio stays on the active tab |
-| 🔁 **Seamless reconnect** | Switch or add connections mid-session without tearing down unrelated tabs |
+| 🔁 **Seamless reconnect** | Switch or add connections mid-session without tearing down unrelated tabs; dropped connections come back on their own, with the channel tree intact |
+| ⌨️ **Keyboard basics** | Tab through the tree (Enter joins, context-menu key opens the menu), focus-trapped dialogs, labelled toolbar buttons |
 | 🍵 **GreenTeaSpeak support** | Connects to real GreenTeaSpeak servers (not just TS3/TS6/TeaSpeak), plus an optional GTS-styled UI chrome (dark panels, gold menu bar, connection-tab strip) alongside the default look |
 | 🖥️ **Screen streaming to/from TS6** | <sub>**ALPHA · UNSTABLE**</sub> Share your screen to native TeamSpeak 6 clients and watch theirs. Built on TS6's undocumented Stream/Call protocol — expect it to break; see [Roadmap](ROADMAP.md) |
 
@@ -208,6 +210,8 @@ All optional; add them under `environment:` in your compose override next to `PO
 | `TRUST_PROXY` | off | Set to `1` when the gateway is **only** reachable through a reverse proxy/tunnel (e.g. cloudflared): per-IP limits then use `CF-Connecting-IP` / `X-Forwarded-For` instead of the proxy's own address. Don't set it on a directly exposed gateway - clients could then spoof their IP. |
 
 > **Trust model:** the gateway speaks the TeamSpeak protocol on the user's behalf, so whoever runs it necessarily handles their identity key, server/channel passwords and privilege keys (they're kept out of process listings, but the operator can still see them). Only use gateways you trust, and serve them over HTTPS/WSS (`TLS_CERT`/`TLS_KEY` or a TLS-terminating proxy) - plain HTTP exposes all of that on the wire. File uploads are limited to 24 MiB, downloads to 25 MiB.
+
+> **Stored in the browser:** identities (including their private keys), favorites with any passwords you typed into them, and settings live in the browser's `localStorage`, unencrypted - the same way the native client keeps them in its settings files. Anyone with access to your browser profile can read them; leave favorite password fields empty on shared machines and export identities you care about. Server banners load directly from the host the server admin configured; turn them off under Options → Application if you don't want that host to see your IP.
 
 <details>
 <summary><b>🛠️ Manual installation (without Docker)</b></summary>
