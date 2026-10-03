@@ -8719,14 +8719,16 @@ function AppInner() {
     }
     let stream: MediaStream;
     try {
-      // Browsers only offer audio together with a video capture.
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      // Browsers only offer audio together with a video capture. The video
+      // track stays alive (at 1 fps) until sharing stops: stopping it right
+      // away may end or silence the capture session the audio belongs to.
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: true });
     } catch {
       return; // picker cancelled
     }
-    stream.getVideoTracks().forEach((track) => track.stop());
     const track = stream.getAudioTracks()[0];
     if (!track) {
+      stream.getTracks().forEach((track) => track.stop());
       appendLog({ text: t("tabAudio.noAudio"), kind: "error" });
       return;
     }
