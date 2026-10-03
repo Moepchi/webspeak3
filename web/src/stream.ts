@@ -62,7 +62,7 @@ export interface StreamViewerOptions {
   iceServers?: RTCIceServer[];
 }
 
-const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+export const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:turn.teamspeak.com:3478" },
   { urls: "stun:turn2.teamspeak.com:3478" },
   { urls: "stun:stun.l.google.com:19302" },

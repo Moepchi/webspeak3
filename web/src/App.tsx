@@ -34,7 +34,7 @@ import {
   type PublishState,
   type StreamPublishOptions,
 } from "./publish";
-import { StreamViewer, parseStreamInfo, type StreamEvent, type StreamInfo } from "./stream";
+import { DEFAULT_ICE_SERVERS, StreamViewer, parseStreamInfo, type StreamEvent, type StreamInfo } from "./stream";
 import { DEMO_HOST, DEMO_MODE, DemoSocket } from "./demoMode";
 import {
   SOUND_EVENTS,
@@ -6424,6 +6424,8 @@ function AppInner() {
   // What the gateway announced in its "hello" (gateway/src/index.ts). Empty for
   // a gateway older than the handshake, so a feature newer than it stays hidden.
   const [gatewayFeatures, setGatewayFeatures] = useState<ReadonlySet<string>>(new Set());
+  // TURN relay the gateway offers for screen streams (TURN_URLS), if any.
+  const [turnServers, setTurnServers] = useState<RTCIceServer[]>([]);
   // Terms of use, own-hosted instance only (see IS_OWN_HOSTED_INSTANCE): shown
   // mandatorily on first visit, reopenable any time from the menu afterwards.
   const [tosOpen, setTosOpen] = useState(false);
@@ -7290,6 +7292,7 @@ function AppInner() {
       }
       if (data.type === "hello") {
         setGatewayFeatures(new Set(Array.isArray(data.features) ? data.features : []));
+        setTurnServers(Array.isArray(data.iceServers) ? data.iceServers : []);
         return;
       }
 
@@ -8989,6 +8992,7 @@ function AppInner() {
     const viewer = new StreamViewer(info.id, info.clientId, {
       send: (message) => socketRef.current?.send(JSON.stringify(message)),
       onTrack: setStreamMedia,
+      iceServers: [...DEFAULT_ICE_SERVERS, ...turnServers],
       onStateChange: setStreamState,
       onError: setStreamError,
       onClosed: () => {
@@ -9042,6 +9046,7 @@ function AppInner() {
       onViewersChange: setPublishViewers,
       onPendingChange: setPublishPending,
       onError: setPublishError,
+      iceServers: [...DEFAULT_ICE_SERVERS, ...turnServers],
     });
     publisherRef.current = publisher;
     void publisher.start(options);

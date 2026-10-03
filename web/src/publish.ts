@@ -15,7 +15,7 @@
 // TS6's P2P mode is a mesh: there is no SFU in the path, so every viewer gets
 // its own peer connection and its own copy of the encoded media.
 
-import type { StreamEvent } from "./stream";
+import { DEFAULT_ICE_SERVERS, type StreamEvent } from "./stream";
 
 // The three enums below are read straight out of TS6's own UI bundle
 // (main.js), not inferred - see ts6-re/findings §10.
@@ -43,12 +43,6 @@ export const StreamMode = {
   P2P: 1,
   SFU: 2,
 } as const;
-
-const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
-  { urls: "stun:turn.teamspeak.com:3478" },
-  { urls: "stun:turn2.teamspeak.com:3478" },
-  { urls: "stun:stun.l.google.com:19302" },
-];
 
 export interface StreamPublishOptions {
   name: string;

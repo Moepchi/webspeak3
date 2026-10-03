@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { createServer as createSecureServer } from "node:https";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -111,13 +111,29 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = process.env.WEB_DIST ?? path.resolve(__dirname, "../../web/dist");
 const SERVE_STATIC = process.env.WEB_STATIC !== "0";
 
+// Sent to every browser in the "hello" message on socket open; see there.
+const GATEWAY_FEATURES = ["clientVolume"];
+
+// Optional TURN relay for screen streams, also handed out in "hello". With
+// TURN_SECRET (coturn's use-auth-secret) every socket gets its own credential,
+// valid for a day; TURN_USERNAME/TURN_CREDENTIAL are static and so readable by
+// every visitor. ponytail: a socket open longer than a day hands an expired
+// credential to a stream started after that; reconnecting fixes it.
+const TURN_URLS = (process.env.TURN_URLS ?? "").split(",").map((u) => u.trim()).filter(Boolean);
+function turnServers() {
+  if (!TURN_URLS.length) return undefined;
+  const secret = process.env.TURN_SECRET;
+  if (!secret) {
+    return [{ urls: TURN_URLS, username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL }];
+  }
+  const username = `${Math.floor(Date.now() / 1000) + 24 * 3600}:webspeak3`;
+  return [{ urls: TURN_URLS, username, credential: createHmac("sha1", secret).update(username).digest("base64") }];
+}
+
 // Runtime counterpart of the web build's VITE_DEFAULT_SERVER/_CHANNEL (GitHub
 // issue #12): set on the container, these end up in the served index.html as
 // <meta> tags the client reads at startup, so changing them needs no rebuild.
 // Meta tags rather than an inline script, which CONTENT_SECURITY_POLICY forbids.
-// Sent to every browser in the "hello" message on socket open; see there.
-const GATEWAY_FEATURES = ["clientVolume"];
-
 const RUNTIME_CONFIG_META = Object.entries({
   "webspeak3-default-server": process.env.DEFAULT_SERVER,
   "webspeak3-default-channel": process.env.DEFAULT_CHANNEL,
@@ -635,7 +651,7 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
   // pulled, so the browser must not assume a feature exists just because it
   // knows about it. A gateway without "hello" (before v0.15) supports the
   // v0.14 feature set, streaming included; anything newer gets a name here.
-  socket.send(JSON.stringify({ type: "hello", features: GATEWAY_FEATURES }));
+  socket.send(JSON.stringify({ type: "hello", features: GATEWAY_FEATURES, iceServers: turnServers() }));
 
   heartbeats.set(socket, { isAlive: true });
   socket.on("pong", () => {
