@@ -492,7 +492,10 @@ function loadFavorites(): Favorite[] {
 // Only Chromium hands out tab/system audio via getDisplayMedia; Firefox and
 // Safari return video only, so the button would just say "no audio" there.
 // userAgentData itself only exists in Chromium-based browsers.
+// Switched off for now (2026-10-03): clicks in the mix, and Edge delivers
+// Windows system audio as silence. Code stays; flip back once that's solved.
 const TAB_AUDIO_SUPPORTED =
+  false &&
   typeof navigator.mediaDevices?.getDisplayMedia === "function" &&
   !!(navigator as Navigator & { userAgentData?: { brands: { brand: string }[] } }).userAgentData?.brands.some(
     (b) => b.brand === "Chromium"

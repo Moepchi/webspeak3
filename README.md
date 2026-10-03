@@ -65,7 +65,6 @@ not need to be installed on the same machine, modified, or operated by you.
 |---|---|
 | 🔌 **Real TeamSpeak protocol** | Connects to actual TS3/TS6, TeaSpeak, and GreenTeaSpeak servers over a WebSocket gateway — the server stays exactly as-is |
 | 🎙️ **Low-latency voice** | Opus-encoded voice with voice activation ("Sprachaktivierung") and adjustable sensitivity |
-| 🎵 **Tab audio** | Mix a browser tab's sound (music, a video) into your voice, without the echo canceller eating it |
 | 🤫 **Whisper** | Target your voice at specific channels or clients instead of your whole current channel |
 | 🔊 **Custom audio output picker** | Route playback to any output device — works even in browsers without `AudioContext.setSinkId` |
 | 💬 **Full text chat** | Channel, server-wide, and private (1:1) chat, each in its own tab — Shift+Enter for a newline |
