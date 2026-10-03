@@ -6721,6 +6721,9 @@ function AppInner() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioPlayerRef = useRef<AudioPlayer | null>(null);
   const micCaptureRef = useRef<MicCapture | null>(null);
+  // A shared tab's or window's audio, mixed into the mic (MicCapture.setExtraAudio).
+  const tabAudioRef = useRef<MediaStream | null>(null);
+  const [tabAudioOn, setTabAudioOn] = useState(false);
   const recordProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const recordSilenceRef = useRef<GainNode | null>(null);
   const recordChunksRef = useRef<{ left: Float32Array[]; right: Float32Array[] }>({ left: [], right: [] });
@@ -8504,6 +8507,7 @@ function AppInner() {
       }
       micCaptureRef.current?.stop();
       micCaptureRef.current = mic;
+      mic.setExtraAudio(tabAudioRef.current);
       setMicOn(true);
       refreshOutputDevices();
       refreshInputDevices();
@@ -8605,6 +8609,38 @@ function AppInner() {
     } finally {
       setAec3Loading(false);
     }
+  };
+
+  const stopTabAudio = () => {
+    tabAudioRef.current?.getTracks().forEach((track) => track.stop());
+    tabAudioRef.current = null;
+    micCaptureRef.current?.setExtraAudio(null);
+    setTabAudioOn(false);
+  };
+
+  const handleToggleTabAudio = async () => {
+    if (tabAudioRef.current) {
+      stopTabAudio();
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      // Browsers only offer audio together with a video capture.
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    } catch {
+      return; // picker cancelled
+    }
+    stream.getVideoTracks().forEach((track) => track.stop());
+    const track = stream.getAudioTracks()[0];
+    if (!track) {
+      appendLog({ text: t("tabAudio.noAudio"), kind: "error" });
+      return;
+    }
+    // Also the browser's own "stop sharing" bar.
+    track.addEventListener("ended", stopTabAudio);
+    tabAudioRef.current = stream;
+    micCaptureRef.current?.setExtraAudio(stream);
+    setTabAudioOn(true);
   };
 
   const handleToggleMicTest = () => {
@@ -10290,6 +10326,17 @@ function AppInner() {
           >
             {publishState === "live" ? "🛑" : "🖥️"}
           </button>
+          {typeof navigator.mediaDevices?.getDisplayMedia === "function" && (
+            <button
+              className={`ts-icon-button${tabAudioOn ? " ts-mic-on" : ""}`}
+              onClick={handleToggleTabAudio}
+              disabled={!micOn}
+              aria-pressed={tabAudioOn}
+              title={tabAudioOn ? t("tabAudio.stop") : t("tabAudio.start")}
+            >
+              🎵
+            </button>
+          )}
           <span className="ts-toolbar-sep" />
           <button
             className={`ts-icon-button${outputMuted ? " ts-muted-on" : ""}`}

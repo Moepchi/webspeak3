@@ -60,6 +60,9 @@ export interface MicCaptureOptions {
 export class MicCapture {
   private stream: MediaStream | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
+  private merger: ChannelMergerNode | null = null;
+  private extra: MediaStreamAudioSourceNode | null = null;
+  private pendingExtra: number[] = [];
   private processor: ScriptProcessorNode | null = null;
   private silence: GainNode | null = null;
   private monitorTarget: AudioNode | null = null;
@@ -117,7 +120,9 @@ export class MicCapture {
     // before the AudioContext would otherwise be allowed to leave "suspended".
     if (this.context.state === "suspended") await this.context.resume();
     this.source = this.context.createMediaStreamSource(this.stream);
-    this.processor = this.context.createScriptProcessor(2048, 1, 1);
+    // Channel 0 is the mic, channel 1 the optional extra source (setExtraAudio).
+    this.merger = this.context.createChannelMerger(2);
+    this.processor = this.context.createScriptProcessor(2048, 2, 1);
     this.processor.onaudioprocess = (event) => {
       const raw = event.inputBuffer.getChannelData(0);
       let input: Float32Array = raw;
@@ -141,7 +146,8 @@ export class MicCapture {
 
       const now = this.context.currentTime;
       if (rms >= this.threshold) this.activeUntil = now + this.hangoverSeconds;
-      const shouldBeActive = now < this.activeUntil;
+      // Shared audio (music, a video) has its own pauses; keep sending throughout.
+      const shouldBeActive = this.extra !== null || now < this.activeUntil;
       if (shouldBeActive !== this.active) {
         this.active = shouldBeActive;
         this.onActivity?.(this.active);
@@ -151,11 +157,19 @@ export class MicCapture {
       if (!this.active) return;
 
       for (let i = 0; i < input.length; i++) this.pending.push(input[i]);
+      // Mixed in per frame rather than per tick: AEC3 may hand back a block of
+      // a different size than it got, and the extra source never went through
+      // it (it isn't an echo of anything).
+      if (this.extra) {
+        const extra = event.inputBuffer.getChannelData(1);
+        for (let i = 0; i < extra.length; i++) this.pendingExtra.push(extra[i]);
+      }
       while (this.pending.length >= FRAME_SAMPLES) {
         const frame = this.pending.splice(0, FRAME_SAMPLES);
+        const extra = this.pendingExtra.splice(0, FRAME_SAMPLES);
         const int16 = new Int16Array(FRAME_SAMPLES);
         for (let i = 0; i < FRAME_SAMPLES; i++) {
-          const clamped = Math.max(-1, Math.min(1, frame[i]));
+          const clamped = Math.max(-1, Math.min(1, frame[i] + (extra[i] ?? 0)));
           int16[i] = clamped < 0 ? clamped * 32768 : clamped * 32767;
         }
         this.onFrame(int16ToBase64(int16));
@@ -165,9 +179,22 @@ export class MicCapture {
     // it through a muted gain node so we don't hear our own mic echoed back.
     this.silence = this.context.createGain();
     this.silence.gain.value = 0;
-    this.source.connect(this.processor);
+    this.source.connect(this.merger, 0, 0);
+    this.merger.connect(this.processor);
     this.processor.connect(this.silence);
     this.silence.connect(this.context.destination);
+  }
+
+  /** Mixes a second stream (e.g. a shared tab's audio) into what is sent, or
+   *  removes it with null. The caller keeps ownership of the stream. */
+  setExtraAudio(stream: MediaStream | null): void {
+    this.extra?.disconnect();
+    this.extra = null;
+    this.pendingExtra = [];
+    if (stream && this.merger) {
+      this.extra = this.context.createMediaStreamSource(stream);
+      this.extra.connect(this.merger, 0, 1);
+    }
   }
 
   /** The raw mic input node, e.g. to additionally route it into a recorder. */
@@ -198,6 +225,11 @@ export class MicCapture {
     this.processor?.disconnect();
     this.silence?.disconnect();
     this.source?.disconnect();
+    this.extra?.disconnect();
+    this.merger?.disconnect();
+    this.extra = null;
+    this.merger = null;
+    this.pendingExtra = [];
     this.stream?.getTracks().forEach((t) => t.stop());
     this.processor = null;
     this.silence = null;
