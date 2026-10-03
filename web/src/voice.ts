@@ -63,6 +63,8 @@ export class MicCapture {
   private merger: ChannelMergerNode | null = null;
   private extra: MediaStreamAudioSourceNode | null = null;
   private pendingExtra: number[] = [];
+  /** Loudest extra-source sample since setExtraAudio(), to spot a silent share. */
+  extraPeak = 0;
   private processor: ScriptProcessorNode | null = null;
   private silence: GainNode | null = null;
   private monitorTarget: AudioNode | null = null;
@@ -162,7 +164,10 @@ export class MicCapture {
       // it (it isn't an echo of anything).
       if (this.extra) {
         const extra = event.inputBuffer.getChannelData(1);
-        for (let i = 0; i < extra.length; i++) this.pendingExtra.push(extra[i]);
+        for (let i = 0; i < extra.length; i++) {
+          this.pendingExtra.push(extra[i]);
+          this.extraPeak = Math.max(this.extraPeak, Math.abs(extra[i]));
+        }
       }
       while (this.pending.length >= FRAME_SAMPLES) {
         const frame = this.pending.splice(0, FRAME_SAMPLES);
@@ -191,6 +196,7 @@ export class MicCapture {
     this.extra?.disconnect();
     this.extra = null;
     this.pendingExtra = [];
+    this.extraPeak = 0;
     if (stream && this.merger) {
       this.extra = this.context.createMediaStreamSource(stream);
       this.extra.connect(this.merger, 0, 1);

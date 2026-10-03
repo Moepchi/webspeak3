@@ -8735,6 +8735,12 @@ function AppInner() {
     tabAudioRef.current = stream;
     micCaptureRef.current?.setExtraAudio(stream);
     setTabAudioOn(true);
+    // Windows system audio only covers the default output device; music on
+    // another device arrives as pure silence, with nothing else to tell why.
+    setTimeout(() => {
+      if (tabAudioRef.current === stream && micCaptureRef.current && micCaptureRef.current.extraPeak < 1e-4)
+        appendLog({ text: t("tabAudio.silent"), kind: "error" });
+    }, 5000);
   };
 
   const handleToggleMicTest = () => {
