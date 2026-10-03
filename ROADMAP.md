@@ -47,21 +47,16 @@ This roadmap is intentionally outcome-focused. It does not promise fixed dates.
 
 ### Accessibility
 
-The interface currently assumes a mouse and sighted use; a real pass is
-still needed:
+Basics are in place: the UI language sets the document's `lang`/`dir`,
+dialogs take focus on open, keep Tab inside, close on Escape, and hand focus
+back; toolbar icon buttons are labelled; channel and client rows are
+focusable (Enter joins a channel or opens a private chat, Space selects,
+the context-menu key or Shift+F10 opens the menu with focus in it). Still to do:
 
-- Replace clickable `<div>`s that aren't real `<button>`s with actual
-  buttons, so they're reachable and operable by keyboard
-- Add keyboard handlers next to the many click-only interactions (channel
-  tree, context menus, client list)
-- Label icon-only toggle controls (mute, away, streaming, recording, ...)
-  with `aria-label`/`aria-pressed` so their state is announced, not just shown
-  as a color/icon change
-- Fix the document's `lang` attribute to follow the active UI language
-  instead of staying fixed
-- Manage focus in modals and dialogs: move it in on open, return it on close
+- Replace the remaining clickable `<div>`s with real buttons
+- Arrow-key navigation through the tree and menus
 - Do a full screen-reader pass (NVDA/VoiceOver) through a real connect
-  session to find what else is missing beyond the above
+  session to find what else is missing
 
 ### Deployment experience
 

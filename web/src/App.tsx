@@ -2,11 +2,46 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import "./App.css";
 
-/** Only dismiss on a genuine backdrop click, not a text-selection drag that
- *  starts inside the dialog and releases over the backdrop. */
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Props for a modal dialog's backdrop. Dismisses on Escape or a genuine
+ *  backdrop click (not a text-selection drag that starts inside the dialog
+ *  and releases over the backdrop). Moves focus in on open unless an
+ *  autoFocus field already took it, keeps Tab inside, and hands focus back to
+ *  whatever had it before on close. */
 function useBackdropDismiss(onDismiss: () => void) {
   const mouseDownOnBackdrop = useRef(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const el = ref.current;
+    if (el && !el.contains(document.activeElement)) el.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    return () => previous?.focus?.();
+  }, []);
   return {
+    ref,
+    role: "dialog",
+    "aria-modal": true,
+    onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onDismiss();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = [...e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    },
     onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => {
       mouseDownOnBackdrop.current = e.target === e.currentTarget;
     },
@@ -946,7 +981,7 @@ function ChannelTree({
           .filter((g): g is GroupEntry => !!g && g.iconId !== 0)
       : [];
 
-  const toggleCollapsed = (channelId: number, event: React.MouseEvent) => {
+  const toggleCollapsed = (channelId: number, event: React.SyntheticEvent) => {
     event.stopPropagation();
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -996,6 +1031,16 @@ function ChannelTree({
               onSwitchChannel(channel.id);
             }}
             onContextMenu={(e) => onChannelContextMenu(e, channel.id, channel.name)}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter") onSwitchChannel(channel.id);
+              else if (e.key === " ") onSelectItem({ type: "channel", id: channel.id });
+              else if (hasChildren && (e.key === "ArrowLeft" || e.key === "ArrowRight") && isCollapsed === (e.key === "ArrowRight"))
+                toggleCollapsed(channel.id, e);
+              else return;
+              e.preventDefault();
+            }}
             onDragOver={(e) => {
               if (![...e.dataTransfer.types].includes(CLIENT_DRAG_MIME)) return;
               e.preventDefault();
@@ -1082,6 +1127,13 @@ function ChannelTree({
                       c.id === ownClientId ? undefined : () => onOpenPrivateChat(c.id, c.name)
                     }
                     onContextMenu={(e) => onClientContextMenu(e, c.id, c.name, c.id === ownClientId)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && c.id !== ownClientId) onOpenPrivateChat(c.id, c.name);
+                      else if (e.key === " ") onSelectItem({ type: "client", id: c.id });
+                      else return;
+                      e.preventDefault();
+                    }}
                     title={
                       c.id === ownClientId
                         ? undefined
@@ -8175,9 +8227,14 @@ function AppInner() {
     };
     window.addEventListener("mousedown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
+    // Keyboard users (context-menu key / Shift+F10) land in the menu and get
+    // focus back on the row once it closes.
+    const previous = document.activeElement as HTMLElement | null;
+    clientContextMenuRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     return () => {
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
+      if (document.activeElement === document.body) previous?.focus();
     };
   }, [clientContextMenu]);
 
@@ -8191,9 +8248,14 @@ function AppInner() {
     };
     window.addEventListener("mousedown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
+    // Keyboard users (context-menu key / Shift+F10) land in the menu and get
+    // focus back on the row once it closes.
+    const previous = document.activeElement as HTMLElement | null;
+    serverContextMenuRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     return () => {
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
+      if (document.activeElement === document.body) previous?.focus();
     };
   }, [serverContextMenu]);
 
@@ -8207,9 +8269,14 @@ function AppInner() {
     };
     window.addEventListener("mousedown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
+    // Keyboard users (context-menu key / Shift+F10) land in the menu and get
+    // focus back on the row once it closes.
+    const previous = document.activeElement as HTMLElement | null;
+    channelContextMenuRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     return () => {
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
+      if (document.activeElement === document.body) previous?.focus();
     };
   }, [channelContextMenu]);
 
@@ -9603,6 +9670,10 @@ function AppInner() {
       ? serverClientsOnline + (showServerQueryClients ? queryClientCount : 0)
       : treeClients.length;
   const novaSplash = designTheme === "nova" && !connected;
+  const micLabel = !micOn ? t("toolbar.micEnable") : inputMuted ? t("toolbar.micUnmute") : t("toolbar.micMute");
+  const streamLabel = DEMO_MODE
+    ? t("publish.demoUnavailable")
+    : `${publishState === "live" ? t("publish.stop") : t("publish.start")} (${t("publish.alpha")})`;
 
   return (
     <div
@@ -10185,6 +10256,7 @@ function AppInner() {
               onClick={() => sendAway(!isAway, "")}
               disabled={!connected}
               title={isAway ? t("toolbar.backOnline") : t("toolbar.setAway")}
+              aria-label={isAway ? t("toolbar.backOnline") : t("toolbar.setAway")}
             >
               💤
             </button>
@@ -10196,6 +10268,9 @@ function AppInner() {
               }}
               disabled={!connected}
               title={t("toolbar.awayOptions")}
+              aria-label={t("toolbar.awayOptions")}
+              aria-haspopup="menu"
+              aria-expanded={awayMenuOpen}
             >
               ▾
             </button>
@@ -10245,6 +10320,9 @@ function AppInner() {
               onClick={() => setWhisperMenuOpen((v) => !v)}
               disabled={!connected}
               title={t("toolbar.whisper")}
+              aria-label={t("toolbar.whisper")}
+              aria-haspopup="menu"
+              aria-expanded={whisperMenuOpen}
             >
               🤫
             </button>
@@ -10290,13 +10368,8 @@ function AppInner() {
           <button
             className={`ts-icon-button${micOn && !inputMuted ? " ts-mic-on" : ""}${micOn && inputMuted ? " ts-muted-on" : ""}`}
             onClick={handleToggleMic}
-            title={
-              !micOn
-                ? t("toolbar.micEnable")
-                : inputMuted
-                  ? t("toolbar.micUnmute")
-                  : t("toolbar.micMute")
-            }
+            title={micLabel}
+            aria-label={micLabel}
           >
             {micOn && !inputMuted ? "🎤" : "🔇"}
           </button>
@@ -10309,6 +10382,7 @@ function AppInner() {
               step={0.002}
               value={vadThreshold}
               onChange={(e) => setVadThreshold(Number(e.target.value))}
+              aria-label={t("toolbar.vadSensitivity")}
             />
           </label>
           <button
@@ -10318,11 +10392,8 @@ function AppInner() {
             // panel would sit at "starting" forever - after the browser has
             // already asked the visitor to pick a screen. Don't offer it.
             disabled={!connected || ownClientId === null || DEMO_MODE}
-            title={
-              DEMO_MODE
-                ? t("publish.demoUnavailable")
-                : `${publishState === "live" ? t("publish.stop") : t("publish.start")} (${t("publish.alpha")})`
-            }
+            title={streamLabel}
+            aria-label={streamLabel}
           >
             {publishState === "live" ? "🛑" : "🖥️"}
           </button>
@@ -10331,8 +10402,8 @@ function AppInner() {
               className={`ts-icon-button${tabAudioOn ? " ts-mic-on" : ""}`}
               onClick={handleToggleTabAudio}
               disabled={!micOn}
-              aria-pressed={tabAudioOn}
               title={tabAudioOn ? t("tabAudio.stop") : t("tabAudio.start")}
+              aria-label={tabAudioOn ? t("tabAudio.stop") : t("tabAudio.start")}
             >
               🎵
             </button>
@@ -10343,11 +10414,12 @@ function AppInner() {
             onClick={handleToggleOutputMuted}
             disabled={!connected}
             title={outputMuted ? t("toolbar.unmuteSound") : t("toolbar.muteSound")}
+            aria-label={outputMuted ? t("toolbar.unmuteSound") : t("toolbar.muteSound")}
           >
             {outputMuted ? "🔇" : "🔊"}
           </button>
           {hasNativeOutputPicker() ? (
-            <button className="ts-icon-button" onClick={handlePickOutputDevice} title={t("toolbar.chooseOutputDevice")}>
+            <button className="ts-icon-button" onClick={handlePickOutputDevice} title={t("toolbar.chooseOutputDevice")} aria-label={t("toolbar.chooseOutputDevice")}>
               🎧
             </button>
           ) : (
@@ -10357,6 +10429,7 @@ function AppInner() {
                 value={outputDeviceId}
                 onChange={(e) => handleOutputDeviceChange(e.target.value)}
                 onFocus={refreshOutputDevices}
+                aria-label={t("toolbar.chooseOutputDevice")}
               >
                 <option value="">{t("playback.systemDefault")}</option>
                 {outputDevices.map((d) => (
@@ -10368,7 +10441,7 @@ function AppInner() {
             </label>
           )}
           {recording && (
-            <button className="ts-icon-button ts-recording-on" onClick={stopRecording} title={t("menu.extras.stopRecording")}>
+            <button className="ts-icon-button ts-recording-on" onClick={stopRecording} title={t("menu.extras.stopRecording")} aria-label={t("menu.extras.stopRecording")}>
               🔴
             </button>
           )}
@@ -10377,6 +10450,7 @@ function AppInner() {
             className="ts-icon-button"
             onClick={() => setTheme((mode) => (mode === "dark" ? "light" : "dark"))}
             title={t("toolbar.toggleTheme")}
+            aria-label={t("toolbar.toggleTheme")}
           >
             {theme === "dark" ? "☀️" : "🌙"}
           </button>

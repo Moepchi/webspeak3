@@ -2016,6 +2016,11 @@
   box-sizing: border-box;
 }
 
+.ts-app .ts-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .ts-tree-search {
   box-sizing: border-box;
   width: 100%;
