@@ -489,6 +489,14 @@ function loadFavorites(): Favorite[] {
   }
 }
 
+// Only Chromium hands out tab/system audio via getDisplayMedia; Firefox and
+// Safari return video only, so the button would just say "no audio" there.
+// userAgentData itself only exists in Chromium-based browsers.
+const TAB_AUDIO_SUPPORTED =
+  typeof navigator.mediaDevices?.getDisplayMedia === "function" &&
+  !!(navigator as Navigator & { userAgentData?: { brands: { brand: string }[] } }).userAgentData?.brands.some(
+    (b) => b.brand === "Chromium"
+  );
 const AWAY_PRESETS_KEY = "webspeak3:away-presets";
 /** "off" hides the server banner: it loads from whatever host the server
  *  admin picked, which then sees the viewer's IP (review S12). */
@@ -10416,7 +10424,7 @@ function AppInner() {
           >
             {publishState === "live" ? "🛑" : "🖥️"}
           </button>
-          {typeof navigator.mediaDevices?.getDisplayMedia === "function" && (
+          {TAB_AUDIO_SUPPORTED && (
             <button
               className={`ts-icon-button${tabAudioOn ? " ts-mic-on" : ""}`}
               onClick={handleToggleTabAudio}
