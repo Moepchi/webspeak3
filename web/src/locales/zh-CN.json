@@ -454,6 +454,8 @@
   "clientContext.privateChat": "私聊",
   "clientContext.poke": "戳一戳",
   "clientContext.moveTo": "移动到…",
+  "clientContext.volume": "音量",
+  "clientContext.volumeHint": "仅对你生效。双击恢复为 100%。",
   "clientContext.copyName": "复制名称",
   "clientContext.connectionInfo": "查看连接信息",
   "clientContext.addWhisperTarget": "添加为悄悄话目标",

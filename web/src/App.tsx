@@ -536,6 +536,18 @@ interface Contact {
 }
 
 const CONTACTS_KEY = "webspeak3:contacts";
+// Per-speaker playback volume by client UID (1 = unchanged), mixed in the
+// connector. Keyed by UID so it follows a person across servers and reconnects.
+const CLIENT_VOLUMES_KEY = "webspeak3:client-volumes";
+
+function loadClientVolumes(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(CLIENT_VOLUMES_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
 
 function loadContacts(): Contact[] {
   try {
@@ -1797,25 +1809,6 @@ const STREAM_PRESETS: Record<
 const RESOLUTION_CHOICES = [360, 480, 720, 1080, 1440, 0];
 const FPS_CHOICES = [5, 30, 60];
 const AUDIO_BITRATE_CHOICES = [64, 96, 128, 192, 256, 320];
-
-// Kill switch for the streaming UI.
-//
-// The frontend and the gateway ship on different schedules: client.webspeak3.de
-// is rebuilt by Cloudflare Pages on every push to main, while the gateway and
-// connector are a Docker image that has to be pulled onto the host by hand. So
-// right after a release the browser can already know about setupStream while
-// the gateway it talks to does not - and an unsupported setupStream is not an
-// error, it is silence: the publish panel waits at "starting" forever, after
-// the browser has already asked the user to share a screen.
-//
-// Flip this to false again whenever the frontend gains a stream feature the
-// deployed gateway does not have yet, and back once it has caught up. The
-// durable fix is a capability handshake so the client can tell on its own;
-// see ROADMAP.md.
-//
-// On since 2026-09-11: the gateway on client.webspeak3.de was rebuilt on the
-// v0.11.0-beta.1 image and answers setupStream/joinStream/sendStreamSignal.
-const STREAM_UI_ENABLED = true;
 
 // Streaming talks to TS6 over a protocol nobody published, so it is marked
 // alpha everywhere the user can reach it: the settings dialog, both stream
@@ -6378,6 +6371,9 @@ function AppInner() {
   // Gateway-broadcast "notice" (currently: SIGTERM restart warning). Global,
   // not per-session - it should show no matter which tab is active.
   const [restartNotice, setRestartNotice] = useState<string | null>(null);
+  // What the gateway announced in its "hello" (gateway/src/index.ts). Empty for
+  // a gateway older than the handshake, so a feature newer than it stays hidden.
+  const [gatewayFeatures, setGatewayFeatures] = useState<ReadonlySet<string>>(new Set());
   // Terms of use, own-hosted instance only (see IS_OWN_HOSTED_INSTANCE): shown
   // mandatorily on first visit, reopenable any time from the menu afterwards.
   const [tosOpen, setTosOpen] = useState(false);
@@ -6395,6 +6391,7 @@ function AppInner() {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [clients, setClients] = useState<ClientInfo[]>([]);
+  const [clientVolumes, setClientVolumes] = useState<Record<string, number>>(loadClientVolumes);
   /** Stream metadata per publishing client id, keyed by clid. */
   const [streamInfos, setStreamInfos] = useState<Record<number, StreamInfo>>({});
   const [watchedStream, setWatchedStream] = useState<StreamInfo | null>(null);
@@ -6701,6 +6698,27 @@ function AppInner() {
   useEffect(() => {
     localStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts));
   }, [contacts]);
+
+  useEffect(() => {
+    localStorage.setItem(CLIENT_VOLUMES_KEY, JSON.stringify(clientVolumes));
+  }, [clientVolumes]);
+
+  // Push each visible client's volume to its connector. Remembered per socket,
+  // so a reconnect (fresh connector) resends everything, and a client id reused
+  // by someone else gets reset to that person's volume.
+  const sentClientVolumesRef = useRef(new WeakMap<object, Map<number, number>>());
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !connected || !gatewayFeatures.has("clientVolume")) return;
+    let sent = sentClientVolumesRef.current.get(socket);
+    if (!sent) sentClientVolumesRef.current.set(socket, (sent = new Map()));
+    for (const c of clients) {
+      const volume = clientVolumes[c.uid] ?? 1;
+      if ((sent.get(c.id) ?? 1) === volume) continue;
+      socket.send(JSON.stringify({ type: "setClientVolume", clientId: c.id, volume }));
+      sent.set(c.id, volume);
+    }
+  }, [clients, clientVolumes, connected, gatewayFeatures]);
 
   useEffect(() => {
     localStorage.setItem(WHISPER_LISTS_KEY, JSON.stringify(whisperLists));
@@ -7217,6 +7235,10 @@ function AppInner() {
         // the SIGTERM restart warning) without knowing the client's language;
         // message is a plain-text fallback for anything else.
         setRestartNotice(data.messageKey ? t(data.messageKey) : String(data.message || ""));
+        return;
+      }
+      if (data.type === "hello") {
+        setGatewayFeatures(new Set(Array.isArray(data.features) ? data.features : []));
         return;
       }
 
@@ -10112,7 +10134,6 @@ function AppInner() {
               onChange={(e) => setVadThreshold(Number(e.target.value))}
             />
           </label>
-          {STREAM_UI_ENABLED && (
           <button
             className={`ts-icon-button${publishState === "live" ? " ts-mic-on" : ""}`}
             onClick={handleStreamButton}
@@ -10128,7 +10149,6 @@ function AppInner() {
           >
             {publishState === "live" ? "🛑" : "🖥️"}
           </button>
-          )}
           <span className="ts-toolbar-sep" />
           <button
             className={`ts-icon-button${outputMuted ? " ts-muted-on" : ""}`}
@@ -10798,7 +10818,43 @@ function AppInner() {
             <span className="ts-menu-item-icon">👉</span>
             <span className="ts-menu-item-label">{t("clientContext.poke")}</span>
           </button>
-          {STREAM_UI_ENABLED && !clientContextMenu.isSelf && streamInfos[clientContextMenu.clientId] && (
+          {!clientContextMenu.isSelf &&
+            gatewayFeatures.has("clientVolume") &&
+            (() => {
+              const uid = clients.find((c) => c.id === clientContextMenu.clientId)?.uid;
+              if (!uid) return null;
+              const percent = Math.round((clientVolumes[uid] ?? 1) * 100);
+              return (
+                <label className="ts-menu-item ts-menu-volume" title={t("clientContext.volumeHint")}>
+                  <span className="ts-menu-item-icon">{percent === 0 ? "🔇" : "🔉"}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={200}
+                    step={5}
+                    value={percent}
+                    aria-label={t("clientContext.volume")}
+                    onChange={(e) => {
+                      const volume = Number(e.target.value) / 100;
+                      setClientVolumes((prev) => {
+                        const next = { ...prev };
+                        if (volume === 1) delete next[uid];
+                        else next[uid] = volume;
+                        return next;
+                      });
+                    }}
+                    onDoubleClick={() =>
+                      setClientVolumes((prev) => {
+                        const { [uid]: _, ...rest } = prev;
+                        return rest;
+                      })
+                    }
+                  />
+                  <span className="ts-menu-volume-value">{percent}%</span>
+                </label>
+              );
+            })()}
+          {!clientContextMenu.isSelf && streamInfos[clientContextMenu.clientId] && (
             <button
               className="ts-menu-item"
               onClick={() => {

@@ -599,6 +599,8 @@
   "clientContext.poke": "سقلمه",
   "clientContext.watchStream": "تماشای پخش زنده",
   "clientContext.moveTo": "انتقال به…",
+  "clientContext.volume": "بلندی صدا",
+  "clientContext.volumeHint": "فقط برای شما. دوبار کلیک به ۱۰۰٪ برمی‌گرداند.",
   "clientContext.copyName": "کپی نام",
   "clientContext.connectionInfo": "نمایش اطلاعات اتصال",
   "clientContext.addWhisperTarget": "افزودن به مقصدهای نجوا",

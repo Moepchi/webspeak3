@@ -115,6 +115,9 @@ const SERVE_STATIC = process.env.WEB_STATIC !== "0";
 // issue #12): set on the container, these end up in the served index.html as
 // <meta> tags the client reads at startup, so changing them needs no rebuild.
 // Meta tags rather than an inline script, which CONTENT_SECURITY_POLICY forbids.
+// Sent to every browser in the "hello" message on socket open; see there.
+const GATEWAY_FEATURES = ["clientVolume"];
+
 const RUNTIME_CONFIG_META = Object.entries({
   "webspeak3-default-server": process.env.DEFAULT_SERVER,
   "webspeak3-default-channel": process.env.DEFAULT_CHANNEL,
@@ -628,6 +631,12 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
   const ip = clientIp(req);
   connectionsPerIp.set(ip, (connectionsPerIp.get(ip) ?? 0) + 1);
 
+  // The hosted UI updates on every push, the gateway only when its image is
+  // pulled, so the browser must not assume a feature exists just because it
+  // knows about it. A gateway without "hello" (before v0.15) supports the
+  // v0.14 feature set, streaming included; anything newer gets a name here.
+  socket.send(JSON.stringify({ type: "hello", features: GATEWAY_FEATURES }));
+
   heartbeats.set(socket, { isAlive: true });
   socket.on("pong", () => {
     const state = heartbeats.get(socket);
@@ -807,6 +816,10 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
       }
       case "setOutputMuted": {
         await connection?.setOutputMuted(msg.muted);
+        break;
+      }
+      case "setClientVolume": {
+        connection?.setClientVolume(Number(msg.clientId), Number(msg.volume));
         break;
       }
       case "setNickname": {

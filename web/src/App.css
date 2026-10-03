@@ -1417,6 +1417,17 @@
   flex: 1;
 }
 
+.ts-menu-volume input {
+  flex: 1;
+  min-width: 6rem;
+}
+
+.ts-menu-volume-value {
+  min-width: 2.6rem;
+  text-align: right;
+  color: var(--text-muted);
+}
+
 .ts-menu-item-shortcut {
   color: var(--text-muted);
 }

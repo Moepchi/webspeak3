@@ -930,6 +930,11 @@ export class Ts3Connection {
     this.writeLine(`muteoutput ${muted ? "1" : "0"}`);
   }
 
+  /** Playback volume for one speaker, mixed in the connector (1 = unchanged). */
+  setClientVolume(clientId: number, volume: number): void {
+    if (Number.isInteger(clientId) && Number.isFinite(volume)) this.writeLine(`clientvolume ${clientId} ${volume}`);
+  }
+
   async setNickname(nickname: string): Promise<void> {
     const sanitized = nickname.replace(/[\r\n]+/g, " ").trim();
     if (sanitized) this.writeLine(`nickname ${sanitized}`);

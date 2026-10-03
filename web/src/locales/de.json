@@ -600,6 +600,8 @@
   "clientContext.poke": "Anstupsen",
   "clientContext.watchStream": "Stream ansehen",
   "clientContext.moveTo": "Verschieben in…",
+  "clientContext.volume": "Lautstärke",
+  "clientContext.volumeHint": "Nur für dich. Doppelklick setzt auf 100 % zurück.",
   "clientContext.copyName": "Namen kopieren",
   "clientContext.connectionInfo": "Verbindungsinformationen anzeigen",
   "clientContext.addWhisperTarget": "Als Whisper-Ziel hinzufügen",

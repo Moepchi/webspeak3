@@ -976,6 +976,10 @@ async fn run(args: Args) -> Result<()> {
 	)?;
 	let mut audio_handler = AudioHandler::<ClientId>::new();
 	let mut talking: HashSet<u16> = HashSet::new();
+	// Per-speaker playback volume set by the browser (`clientvolume`). Kept
+	// outside the AudioHandler because its queues only live while someone
+	// talks; a new queue picks its volume up from here.
+	let mut client_volumes: HashMap<u16, f32> = HashMap::new();
 	let mut audio_ticker = tokio::time::interval(tokio::time::Duration::from_millis(20));
 	// Commands sent via `send()` fail silently if the server rejects them (e.g.
 	// missing permission) - no reply is sent back without a return code. Using
@@ -1310,6 +1314,28 @@ async fn run(args: Args) -> Result<()> {
 						let part = con.get_state()?.client_update().set_output_muted(rest.trim() == "1");
 						if let Err(e) = part.send(&mut con) {
 							emit(&Event::Error { message: e.to_string() });
+						}
+					} else if let Some(rest) = l.strip_prefix("clientvolume ") {
+						// `clientvolume <clid> <factor>`, 1 = unchanged, 0 = silent.
+						let mut parts = rest.split_whitespace();
+						match (
+							parts.next().and_then(|v| v.parse::<u16>().ok()),
+							parts.next().and_then(|v| v.parse::<f32>().ok()).filter(|v| v.is_finite()),
+						) {
+							(Some(clid), Some(volume)) => {
+								let volume = volume.clamp(0.0, 2.0);
+								if volume == 1.0 {
+									client_volumes.remove(&clid);
+								} else {
+									client_volumes.insert(clid, volume);
+								}
+								if let Some(queue) = audio_handler.get_mut_queues().get_mut(&ClientId(clid)) {
+									queue.volume = volume;
+								}
+							}
+							_ => emit(&Event::Error {
+								message: format!("Malformed clientvolume command: {rest}"),
+							}),
 						}
 					} else if let Some(rest) = l.strip_prefix("nickname ") {
 						let part = con.get_state()?.client_update().set_name(rest.trim());
@@ -2536,6 +2562,12 @@ async fn run(args: Args) -> Result<()> {
 					};
 					if let Some(from) = from {
 						if let Ok(Some(new_talker)) = audio_handler.handle_packet(from, packet) {
+							if let (Some(&volume), Some(queue)) = (
+								client_volumes.get(&new_talker.0),
+								audio_handler.get_mut_queues().get_mut(&new_talker),
+							) {
+								queue.volume = volume;
+							}
 							if talking.insert(new_talker.0) {
 								emit(&Event::Talkers { clients: talking.iter().copied().collect() });
 							}

@@ -600,6 +600,8 @@
   "clientContext.poke": "Poke",
   "clientContext.watchStream": "Watch stream",
   "clientContext.moveTo": "Move to…",
+  "clientContext.volume": "Volume",
+  "clientContext.volumeHint": "Only for you. Double-click resets to 100%.",
   "clientContext.copyName": "Copy name",
   "clientContext.connectionInfo": "Show connection info",
   "clientContext.addWhisperTarget": "Add as whisper target",
