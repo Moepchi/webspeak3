@@ -382,6 +382,8 @@
   "info.serverGroups": "گروه‌های سرور:",
   "info.yes": "بله",
   "info.no": "خیر",
+  "tree.noMatches": "نتیجه‌ای یافت نشد",
+  "tree.search": "جستجوی کانال‌ها و کاربران",
   "tree.notConnected": "متصل نیست",
   "tree.clickToSelect": "برای انتخاب کلیک کن، برای ورود دوبار کلیک کن",
   "tree.clickToJoin": "برای ورود دوبار کلیک کن",

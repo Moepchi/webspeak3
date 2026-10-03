@@ -903,6 +903,7 @@ function ChannelTree({
   groupIconImages,
   selected,
   sessionKey,
+  expandAll,
   onSelectItem,
   onSwitchChannel,
   onOpenPrivateChat,
@@ -921,6 +922,8 @@ function ChannelTree({
   /** Identifies which multi-join tab this tree belongs to, so the manual
    *  double-click detection below can't pair clicks across two tabs. */
   sessionKey: string;
+  /** While searching: show every match, ignoring channels the user collapsed. */
+  expandAll?: boolean;
   onSelectItem: (item: SelectedItem) => void;
   onSwitchChannel: (channelId: number) => void;
   onOpenPrivateChat: (clientId: number, clientName: string) => void;
@@ -961,7 +964,7 @@ function ChannelTree({
         const channelClients = clients.filter((c) => c.channel === channel.id);
         const hasSubChannels = channels.some((c) => c.parent === channel.id);
         const hasChildren = channelClients.length > 0 || hasSubChannels;
-        const isCollapsed = collapsed.has(channel.id);
+        const isCollapsed = !expandAll && collapsed.has(channel.id);
         const spacerClass = spacer.isSpacer
           ? ` ts-spacer ts-spacer-align-${spacer.alignment}${spacer.isLine ? " ts-spacer-line" : ""}${
               spacer.isBoxArt ? " ts-spacer-boxart" : ""
@@ -1156,6 +1159,7 @@ function ChannelTree({
               groupIconImages={groupIconImages}
               selected={selected}
               sessionKey={sessionKey}
+              expandAll={expandAll}
               onSelectItem={onSelectItem}
               onSwitchChannel={onSwitchChannel}
               onOpenPrivateChat={onOpenPrivateChat}
@@ -6437,6 +6441,7 @@ function AppInner() {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [clients, setClients] = useState<ClientInfo[]>([]);
+  const [treeFilter, setTreeFilter] = useState("");
   const [clientVolumes, setClientVolumes] = useState<Record<string, number>>(loadClientVolumes);
   /** Stream metadata per publishing client id, keyed by clid. */
   const [streamInfos, setStreamInfos] = useState<Record<number, StreamInfo>>({});
@@ -9487,6 +9492,25 @@ function AppInner() {
     () => (showServerQueryClients ? clients : clients.filter((c) => !c.isQuery)),
     [clients, showServerQueryClients]
   );
+  // Tree search: a channel whose name matches keeps all its clients, a client
+  // whose name matches keeps its channel; either way the parent chain stays so
+  // the match is shown where it lives.
+  const treeSearch = useMemo(() => {
+    const query = treeFilter.trim().toLowerCase();
+    if (!query) return null;
+    const hit = (name: string) => name.toLowerCase().includes(query);
+    const channelHits = new Set(channels.filter((c) => hit(c.name)).map((c) => c.id));
+    const shownClients = treeClients.filter((c) => hit(c.name) || channelHits.has(c.channel));
+    const parentOf = new Map(channels.map((c) => [c.id, c.parent]));
+    const keep = new Set<number>();
+    for (let id of [...channelHits, ...shownClients.map((c) => c.channel)]) {
+      while (id && !keep.has(id)) {
+        keep.add(id);
+        id = parentOf.get(id) ?? 0;
+      }
+    }
+    return { channels: channels.filter((c) => keep.has(c.id)), clients: shownClients };
+  }, [treeFilter, channels, treeClients]);
   const queryClientCount = useMemo(
     () => clients.reduce((n, c) => n + (c.isQuery ? 1 : 0), 0),
     [clients]
@@ -11207,9 +11231,24 @@ function AppInner() {
                   <ServerIcon />
                   <span>{serverName || host}</span>
                 </div>
+                <input
+                  type="search"
+                  className="ts-tree-search"
+                  value={treeFilter}
+                  placeholder={t("tree.search")}
+                  aria-label={t("tree.search")}
+                  onChange={(e) => setTreeFilter(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setTreeFilter("");
+                  }}
+                />
+                {treeSearch && treeSearch.channels.length === 0 && (
+                  <div className="ts-tree-empty">{t("tree.noMatches")}</div>
+                )}
                 <ChannelTree
-                  channels={channels}
-                  clients={treeClients}
+                  channels={treeSearch?.channels ?? channels}
+                  clients={treeSearch?.clients ?? treeClients}
+                  expandAll={!!treeSearch}
                   parent={0}
                   ownClientId={ownClientId ?? ownClient?.id ?? null}
                   talkers={displayTalkers}

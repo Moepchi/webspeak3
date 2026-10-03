@@ -284,6 +284,8 @@
   "info.serverGroups": "服务器组：",
   "info.yes": "是",
   "info.no": "否",
+  "tree.noMatches": "无匹配结果",
+  "tree.search": "搜索频道和用户",
   "tree.notConnected": "未连接",
   "tree.clickToSelect": "单击选择，双击加入",
   "tree.clickToJoin": "双击加入",

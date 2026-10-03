@@ -383,6 +383,8 @@
   "info.serverGroups": "Server groups:",
   "info.yes": "Yes",
   "info.no": "No",
+  "tree.noMatches": "No matches",
+  "tree.search": "Search channels and users",
   "tree.notConnected": "Not connected",
   "tree.clickToSelect": "Click to select, double-click to join",
   "tree.clickToJoin": "Double-click to join",

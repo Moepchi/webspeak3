@@ -383,6 +383,8 @@
   "info.serverGroups": "Servergruppen:",
   "info.yes": "Ja",
   "info.no": "Nein",
+  "tree.noMatches": "Keine Treffer",
+  "tree.search": "Kanäle und Nutzer suchen",
   "tree.notConnected": "Nicht verbunden",
   "tree.clickToSelect": "Klicken zum Auswählen, Doppelklick zum Beitreten",
   "tree.clickToJoin": "Doppelklick zum Beitreten",

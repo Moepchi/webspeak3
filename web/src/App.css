@@ -2016,6 +2016,18 @@
   box-sizing: border-box;
 }
 
+.ts-tree-search {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 0.3rem;
+  background: var(--input-bg);
+  color: var(--input-text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.25rem 0.5rem;
+  font-size: 12px;
+}
+
 .ts-server-row {
   font-weight: 600;
   color: var(--accent);
