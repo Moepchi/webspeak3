@@ -38,6 +38,9 @@ const FRAME_SAMPLES: usize = 960;
 /// Upper bound for a file download relayed to the browser (see its use).
 const MAX_DOWNLOAD_BYTES: u64 = 25 << 20;
 const MAX_ICON_BYTES: u64 = 512 << 10;
+/// Avatars are fetched for everyone in the user's channel without asking;
+/// TS3 servers default to a 300 KiB avatar size limit.
+const MAX_AVATAR_BYTES: u64 = 512 << 10;
 const OUT_CHANNELS: usize = 2;
 
 #[derive(Parser, Debug)]
@@ -118,6 +121,9 @@ struct ClientInfo {
 	/// sends no stream command in that case, so the id has to be fetched with
 	/// `requeststreaminfo`. Always `false` on servers that don't report it.
 	is_streaming: bool,
+	/// `client_flag_avatar`: MD5 of the client's avatar, empty without one. The
+	/// file itself is `/avatar_<uid>` in channel 0, fetched by the browser.
+	avatar_hash: String,
 }
 
 /// Payload for the "streamsetup " stdin command - the `setupstream` args, which
@@ -669,6 +675,7 @@ fn snapshot(con: &data::Connection) -> Event {
 				has_talk_power,
 				is_query: matches!(c.client_type, ClientType::Query { .. }),
 				is_streaming: c.is_streaming.unwrap_or(false),
+				avatar_hash: c.avatar_hash.clone(),
 			}
 		})
 		.collect::<Vec<_>>();
@@ -2955,7 +2962,11 @@ async fn run(args: Args) -> Result<()> {
 						let announced_size = result.size;
 						// Group/server icons are fetched automatically, without the user
 						// asking, so they get a far smaller budget than explicit downloads.
-						let limit = if cid == 0 && path.starts_with("/icon_") { MAX_ICON_BYTES } else { MAX_DOWNLOAD_BYTES };
+						let limit = match path.as_str() {
+							p if cid == 0 && p.starts_with("/icon_") => MAX_ICON_BYTES,
+							p if cid == 0 && p.starts_with("/avatar_") => MAX_AVATAR_BYTES,
+							_ => MAX_DOWNLOAD_BYTES,
+						};
 						tokio::spawn(async move {
 							if announced_size > limit {
 								emit(&Event::Error {

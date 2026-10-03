@@ -59,6 +59,8 @@ export interface ClientInfo {
   isQuery: boolean;
   /** Broadcasting a TS6 Stream/Call. The stream id is fetched separately. */
   isStreaming: boolean;
+  /** MD5 of the avatar (`client_flag_avatar`), empty without one. */
+  avatarHash: string;
 }
 
 export interface GroupEntry {
@@ -318,6 +320,7 @@ export class Ts3Connection {
           has_talk_power: boolean;
           is_query?: boolean;
           is_streaming?: boolean;
+          avatar_hash?: string;
         }
 
         interface RawChannelInfo {
@@ -493,6 +496,7 @@ export class Ts3Connection {
               hasTalkPower: c.has_talk_power,
               isQuery: Boolean(c.is_query),
               isStreaming: Boolean(c.is_streaming),
+              avatarHash: c.avatar_hash ?? "",
             })),
             ownClientId: event.own_client_id ?? 0,
             serverMaxClients: event.server_max_clients ?? 0,

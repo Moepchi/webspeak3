@@ -1417,6 +1417,22 @@
   flex: 1;
 }
 
+.ts-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.ts-info-avatar {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin: 0.2rem 0 0.4rem;
+}
+
 .ts-menu-volume input {
   flex: 1;
   min-width: 6rem;

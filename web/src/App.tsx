@@ -647,6 +647,8 @@ interface ClientInfo {
   isStreaming?: boolean;
   /** ServerQuery client; filtered from the tree unless a favorite enables them. */
   isQuery?: boolean;
+  /** MD5 of the avatar, empty without one; missing from gateways before v0.15. */
+  avatarHash?: string;
 }
 
 interface GroupEntry {
@@ -1099,14 +1101,12 @@ function ChannelTree({
                     <span className="ts-client-status-leading">
                       <ClientStatusIcons client={c} />
                     </span>
-                    <span
+                    <AvatarTile
+                      client={c}
+                      images={groupIconImages}
                       className="ts-client-avatar"
-                      style={{
-                        background: c.id === ownClientId ? "var(--accent)" : clientAvatarColor(c.name),
-                      }}
-                    >
-                      {c.name.trim().charAt(0).toUpperCase() || "?"}
-                    </span>
+                      isSelf={c.id === ownClientId}
+                    />
                     {countryFlag(c.country) && <span title={c.country}>{countryFlag(c.country)}</span>}
                     <span className="ts-tree-label">{c.name}</span>
                     {c.away && c.awayMessage && (
@@ -1180,10 +1180,12 @@ function SpeakingNowBar({
   clients,
   talkers,
   ownClientId,
+  images,
 }: {
   clients: ClientInfo[];
   talkers: Set<number>;
   ownClientId: number | null;
+  images: Record<string, string>;
 }) {
   const own = clients.find((c) => c.id === ownClientId);
   if (!own) return null;
@@ -1198,12 +1200,7 @@ function SpeakingNowBar({
           className={`ts-speaking-now-tile${talkers.has(c.id) ? " ts-speaking-now-tile-active" : ""}`}
           title={c.name}
         >
-          <span
-            className="ts-speaking-now-avatar"
-            style={{ background: c.id === ownClientId ? "var(--accent)" : clientAvatarColor(c.name) }}
-          >
-            {c.name.trim().charAt(0).toUpperCase() || "?"}
-          </span>
+          <AvatarTile client={c} images={images} className="ts-speaking-now-avatar" isSelf={c.id === ownClientId} />
           <span className="ts-speaking-now-name">{c.name}</span>
         </div>
       ))}
@@ -1224,6 +1221,7 @@ function InfoPanel({
   channels,
   clients,
   serverGroups,
+  images,
   onShowServerConnectionInfo,
   onEditServer,
 }: {
@@ -1239,6 +1237,7 @@ function InfoPanel({
   channels: ChannelInfo[];
   clients: ClientInfo[];
   serverGroups: GroupEntry[] | null;
+  images: Record<string, string>;
   onShowServerConnectionInfo: () => void;
   onEditServer: () => void;
 }) {
@@ -1301,6 +1300,9 @@ function InfoPanel({
           />
           <span>{client.name}</span>
         </div>
+        {clientAvatarUrl(client, images) && (
+          <img className="ts-info-avatar" src={clientAvatarUrl(client, images)!} alt="" />
+        )}
         {client.country && (
           <div className="ts-info-row">
             <span>{t("info.country")}</span>{" "}
@@ -3579,6 +3581,50 @@ function sniffImageMime(binary: string): string {
 
 function iconDataUrl(base64: string): string {
   return `data:${sniffImageMime(atob(base64))};base64,${base64}`;
+}
+
+// TeamSpeak keeps a client's avatar as /avatar_<uid> in channel 0's files,
+// with the UID's decoded bytes spelled as one letter a-p per nibble.
+function avatarPath(uid: string): string | null {
+  try {
+    const letters = [...atob(uid)].map((ch) => {
+      const b = ch.charCodeAt(0);
+      return String.fromCharCode(97 + (b >> 4), 97 + (b & 15));
+    });
+    return letters.length ? `/avatar_${letters.join("")}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Data URL of a client's downloaded avatar, or null to fall back to initials. */
+function clientAvatarUrl(client: ClientInfo, images: Record<string, string>): string | null {
+  const path = client.avatarHash ? avatarPath(client.uid) : null;
+  const base64 = path ? images[path] : undefined;
+  return base64 ? iconDataUrl(base64) : null;
+}
+
+/** The initials tile, or the real avatar once it has been downloaded. */
+function AvatarTile({
+  client,
+  images,
+  className,
+  isSelf,
+}: {
+  client: ClientInfo;
+  images: Record<string, string>;
+  className: string;
+  isSelf: boolean;
+}) {
+  const url = clientAvatarUrl(client, images);
+  return (
+    <span
+      className={className}
+      style={{ background: url ? undefined : isSelf ? "var(--accent)" : clientAvatarColor(client.name) }}
+    >
+      {url ? <img className="ts-avatar-img" src={url} alt="" /> : client.name.trim().charAt(0).toUpperCase() || "?"}
+    </span>
+  );
 }
 
 // IDs below this are TeamSpeak's built-in default group icons - they ship
@@ -7282,6 +7328,7 @@ function AppInner() {
         case "connected":
           logClient("info", "Connection", `Connected to ${data.serverName}`);
           reconnectAttemptsRef.current.delete(sessionId);
+          autoConnectPendingRef.current = false;
           hasConnectedRef.current = true;
           everConnectedRef.current.add(sessionId);
           setConnecting(false);
@@ -8162,6 +8209,26 @@ function AppInner() {
     }
   }, [clients, serverGroups, serverIconImages]);
 
+  // Avatars share that cid-0 cache, keyed by path; the hash makes a changed
+  // avatar download again. ponytail: only the own channel and the selected
+  // client - a big server's every avatar would be megabytes through the
+  // gateway; widen this if the tree designs ever need all of them.
+  const requestedAvatarHashesRef = useRef(new Map<string, string>());
+  useEffect(() => {
+    if (!connected) requestedAvatarHashesRef.current.clear();
+  }, [connected]);
+
+  useEffect(() => {
+    const ownChannel = clients.find((c) => c.id === ownClientId)?.channel;
+    for (const c of clients) {
+      const wanted = c.channel === ownChannel || (selected?.type === "client" && selected.id === c.id);
+      const path = wanted && c.avatarHash ? avatarPath(c.uid) : null;
+      if (!path || requestedAvatarHashesRef.current.get(path) === c.avatarHash) continue;
+      requestedAvatarHashesRef.current.set(path, c.avatarHash!);
+      socketRef.current?.send(JSON.stringify({ type: "downloadFile", channelId: 0, path }));
+    }
+  }, [clients, ownClientId, selected]);
+
   useEffect(() => {
     if (!connected) {
       setWhisperChannelIds(new Set());
@@ -8322,9 +8389,10 @@ function AppInner() {
 
   // Nova-theme-only: the connect dialog IS the app until a connection exists -
   // it's forced open on load and after every disconnect, and closes itself the
-  // moment a connection succeeds.
+  // moment a connection succeeds (an auto-connect never went through the
+  // dialog's own close, so this has to do it).
   useEffect(() => {
-    if (designTheme === "nova" && !connected) setConnectDialogOpen(true);
+    if (designTheme === "nova") setConnectDialogOpen(!connected);
   }, [designTheme, connected]);
 
   // Overrides let a device/DSP-setting change take effect immediately, without
@@ -9319,11 +9387,13 @@ function AppInner() {
     setServerIconsOpen(true);
     setServerIconEntries(null);
     setServerIconImages({});
+    requestedAvatarHashesRef.current.clear();
     socketRef.current?.send(JSON.stringify({ type: "getFileList", channelId: 0, path: "/" }));
   };
 
   const handleServerIconsRefresh = () => {
     setServerIconImages({});
+    requestedAvatarHashesRef.current.clear();
     socketRef.current?.send(JSON.stringify({ type: "getFileList", channelId: 0, path: "/" }));
   };
 
@@ -11184,6 +11254,7 @@ function AppInner() {
                 channels={channels}
                 clients={treeClients}
                 serverGroups={serverGroups}
+                images={serverIconImages}
                 onShowServerConnectionInfo={handleShowServerConnectionInfo}
                 onEditServer={() => setServerEditOpen(true)}
               />
@@ -11195,7 +11266,12 @@ function AppInner() {
 
         <div className="ts-chat-panel">
           {connected && designTheme === "pulse" && (
-            <SpeakingNowBar clients={treeClients} talkers={displayTalkers} ownClientId={ownClient?.id ?? null} />
+            <SpeakingNowBar
+              clients={treeClients}
+              talkers={displayTalkers}
+              ownClientId={ownClient?.id ?? null}
+              images={serverIconImages}
+            />
           )}
           <div className="ts-chat-messages">
             {activeTab === "channel"
