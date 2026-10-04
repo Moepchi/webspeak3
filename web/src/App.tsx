@@ -143,6 +143,7 @@ import {
   GreenteaSpeakChrome,
   isGreenteaSpeakTheme,
 } from "./themes/greenteaspeak";
+import { renderBbcode } from "./lib/bbcode";
 import { parseChannelName, spacerDisplayName } from "./lib/spacer";
 import {
   applyParkedGatewayEvent,
@@ -11646,7 +11647,7 @@ function AppInner() {
                     className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
                   >
                     <span className="ts-chat-from">{entry.from}:</span>{" "}
-                    <span className="ts-chat-bubble">{entry.message}</span>
+                    <span className="ts-chat-bubble">{renderBbcode(entry.message)}</span>
                   </div>
                 ))
               : activeTab === "server"
@@ -11661,7 +11662,7 @@ function AppInner() {
                         className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
                       >
                         <span className="ts-chat-from">{entry.from}:</span>{" "}
-                        <span className="ts-chat-bubble">{entry.message}</span>
+                        <span className="ts-chat-bubble">{renderBbcode(entry.message)}</span>
                       </div>
                     )
                   )
@@ -11670,7 +11671,7 @@ function AppInner() {
                       <span className="ts-chat-from">
                         {entry.fromSelf ? t("chat.you") : pmThreads[activeTab].partnerName}:
                       </span>{" "}
-                      <span className="ts-chat-bubble">{entry.message}</span>
+                      <span className="ts-chat-bubble">{renderBbcode(entry.message)}</span>
                     </div>
                   ))}
             <div ref={chatEndRef} />

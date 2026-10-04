@@ -2452,6 +2452,11 @@
   word-break: break-word;
 }
 
+.ts-chat-bubble a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .ts-chat-from {
   font-weight: 600;
   color: var(--accent);
