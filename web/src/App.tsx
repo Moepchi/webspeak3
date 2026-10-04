@@ -143,7 +143,7 @@ import {
   GreenteaSpeakChrome,
   isGreenteaSpeakTheme,
 } from "./themes/greenteaspeak";
-import { renderBbcode } from "./lib/bbcode";
+import { BARE_URL_REGEX, renderBbcode, wrapUrls } from "./lib/bbcode";
 import { parseChannelName, spacerDisplayName } from "./lib/spacer";
 import {
   applyParkedGatewayEvent,
@@ -574,8 +574,6 @@ function loadCollectedUrls(): CollectedUrl[] {
     return [];
   }
 }
-
-const URL_REGEX = /https?:\/\/[^\s<>"]+/g;
 
 type LogLevel = "critical" | "error" | "warning" | "info" | "debug";
 
@@ -6962,7 +6960,7 @@ function AppInner() {
   };
 
   const recordUrlsFromMessage = (message: string, sender: string) => {
-    const found = message.match(URL_REGEX);
+    const found = message.match(BARE_URL_REGEX);
     if (!found) return;
     const now = Date.now();
     setCollectedUrls((prev) => {
@@ -8991,7 +8989,7 @@ function AppInner() {
   }, [chatInput, designTheme, connected]);
 
   const handleSendChat = () => {
-    const message = chatInput.trim();
+    const message = wrapUrls(chatInput.trim());
     if (!message) return;
     if (activeTab === "channel") {
       socketRef.current?.send(JSON.stringify({ type: "sendChatMessage", message }));
@@ -9408,7 +9406,7 @@ function AppInner() {
   };
 
   const handleSendOfflineMessage = (clientUid: string, subject: string, message: string) => {
-    socketRef.current?.send(JSON.stringify({ type: "sendOfflineMessage", clientUid, subject, message }));
+    socketRef.current?.send(JSON.stringify({ type: "sendOfflineMessage", clientUid, subject, message: wrapUrls(message) }));
   };
 
   const handleClientContextMenu = (

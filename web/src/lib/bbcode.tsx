@@ -7,7 +7,9 @@ import { Fragment, type ReactNode } from "react";
 // render as plain text ([img] as a link, so it never loads a remote image).
 
 const TAG_REGEX = /\[(\/?)(b|i|u|s|url|img|color)(?:=([^\]]*))?\]/gi;
-const BARE_URL_REGEX = /https?:\/\/[^\s<>"\[\]]+/g;
+export const BARE_URL_REGEX = /https?:\/\/[^\s<>"\[\]]+/g;
+// An already-tagged link (left alone) or a bare URL (wrapped).
+const WRAP_REGEX = new RegExp(`(\\[(url|img)(?:=[^\\]]*)?\\][\\s\\S]*?\\[\\/\\2\\])|${BARE_URL_REGEX.source}`, "gi");
 const COLOR_REGEX = /^(#[0-9a-f]{3}|#[0-9a-f]{6}|[a-z]+)$/i;
 
 interface Node {
@@ -98,4 +100,9 @@ export function renderBbcode(text: string): ReactNode {
   }
   if (last < text.length) stack[stack.length - 1].children.push(text.slice(last));
   return render(root, 0);
+}
+
+// Outgoing: native clients send links as [URL]...[/URL] and only link those.
+export function wrapUrls(text: string): string {
+  return text.replace(WRAP_REGEX, (m, tagged) => (tagged ? m : `[URL]${m}[/URL]`));
 }
