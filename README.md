@@ -82,7 +82,7 @@ not need to be installed on the same machine, modified, or operated by you.
 | 🌗 **Dark / light theme** | Clean, modern UI that adapts to your preference |
 | 🔁 **Multi-join (server tabs)** | Several connections in parallel — one tab per server, like GreenTeaSpeak 2. Audio stays on the active tab |
 | 🔁 **Seamless reconnect** | Switch or add connections mid-session without tearing down unrelated tabs; dropped connections come back on their own, with the channel tree intact |
-| ⌨️ **Keyboard basics** | Tab through the tree (Enter joins, context-menu key opens the menu), focus-trapped dialogs, labelled toolbar buttons |
+| ⌨️ **Keyboard & screen readers** | Arrow keys through the channel tree (exposed as an ARIA tree) and through menus, Enter joins, context-menu key opens the menu; focus-trapped dialogs, labelled toolbar buttons |
 | 🍵 **GreenTeaSpeak support** | Connects to real GreenTeaSpeak servers (not just TS3/TS6/TeaSpeak), plus an optional GTS-styled UI chrome (dark panels, gold menu bar, connection-tab strip) alongside the default look |
 | 🖥️ **Screen streaming to/from TS6** | <sub>**ALPHA · UNSTABLE**</sub> Share your screen to native TeamSpeak 6 clients and watch theirs. Built on TS6's undocumented Stream/Call protocol — expect it to break; see [Roadmap](ROADMAP.md) |
 

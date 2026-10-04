@@ -49,14 +49,17 @@ This roadmap is intentionally outcome-focused. It does not promise fixed dates.
 
 Basics are in place: the UI language sets the document's `lang`/`dir`,
 dialogs take focus on open, keep Tab inside, close on Escape, and hand focus
-back; toolbar icon buttons are labelled; channel and client rows are
-focusable (Enter joins a channel or opens a private chat, Space selects,
-the context-menu key or Shift+F10 opens the menu with focus in it). Still to do:
+back; toolbar icon and menu bar buttons are real, labelled buttons. The
+channel tree is an ARIA tree with one Tab stop: arrow keys walk it (selection
+follows focus), Left/Right collapse, expand and jump to parent or child,
+Enter joins a channel or opens a private chat, and the context-menu key or
+Shift+F10 opens the menu. Menus take focus on open, move with the arrow keys,
+and Escape hands focus back to the button that opened them. An axe-core scan
+of the connected UI is clean in every built-in design except for landmark
+best practices and GreenTeaSpeak's native selection colours. Still to do:
 
-- Replace the remaining clickable `<div>`s with real buttons
-- Arrow-key navigation through the tree and menus
 - Do a full screen-reader pass (NVDA/VoiceOver) through a real connect
-  session to find what else is missing
+  session to find what else is missing (e.g. announcing who is talking)
 
 ### Deployment experience
 

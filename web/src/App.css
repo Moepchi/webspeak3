@@ -12,7 +12,7 @@
   --border: #b7bcc3;
   --border-soft: #d3d7db;
   --text: #1a1a1a;
-  --text-muted: #888;
+  --text-muted: #6b6b6b;
   --accent: #2b4a6b;
   --input-bg: #ffffff;
   --input-text: #1a1a1a;
@@ -2016,9 +2016,30 @@
   box-sizing: border-box;
 }
 
-.ts-app .ts-row:focus-visible {
+.ts-app .ts-row:focus-visible,
+.ts-plain-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* A real <button> that looks like the <span>/<li> text it replaced. :where()
+   keeps this at zero specificity, so every theme rule still wins. */
+:where(.ts-plain-button) {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: inherit;
+  text-align: inherit;
+}
+
+:where(li > .ts-plain-button) {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ts-tree-search {
@@ -3847,6 +3868,8 @@
   pointer-events: none;
 }
 
+/* No theme defines --panel-bg, so the update toast and the feedback bubble
+   are always dark: their text colors are fixed, not the theme's. */
 .ts-update-toast {
   position: fixed;
   left: 50%;
@@ -3857,7 +3880,7 @@
   align-items: center;
   gap: 0.6rem;
   background: var(--panel-bg, #23262e);
-  color: var(--text, #eee);
+  color: #eee;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.6rem 0.7rem 0.6rem 0.9rem;
@@ -3877,7 +3900,7 @@
 
 .ts-update-toast-dismiss {
   background: transparent !important;
-  color: var(--text-muted, #999) !important;
+  color: #aaa !important;
   border: none !important;
   padding: 0 0.2rem !important;
   font-size: 12px;
@@ -3935,7 +3958,7 @@
   padding: 0 0.85rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  background: #ff5e5b;
+  background: #d6403d; /* Ko-fi red, darkened to 4.5:1 for the white label */
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -3947,7 +3970,7 @@
 }
 
 .ts-donate-fab:hover {
-  background: #ff4b47;
+  background: #c4362f;
   transform: scale(1.06);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
@@ -3961,7 +3984,7 @@
   position: relative;
   max-width: 13rem;
   background: var(--panel-bg, #23262e);
-  color: var(--text, #eee);
+  color: #eee;
   border: 1px solid var(--border);
   border-radius: 0.6rem;
   padding: 0.5rem 0.7rem;
@@ -3993,7 +4016,7 @@
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--panel-bg, #23262e);
-  color: var(--text-muted, #999);
+  color: #aaa;
   font-size: 10px;
   line-height: 1;
   display: flex;

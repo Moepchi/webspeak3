@@ -23,7 +23,7 @@
   --gts-border: #1c1f24;
   --border-light: #3a4450;
   --gts-text: #d7dee6;
-  --gts-text-muted: #7a8490;
+  --gts-text-muted: #8a94a0; /* native #7a8490, lifted to 4.5:1 on the panel */
   --menu-text: #c8b882;
   --menu-hover: #c8b882;
   --menu-hover-text: #1a1a1a;
@@ -34,7 +34,7 @@
   --error: #e62222;
   --selection: #4a5560;
   --selection-tree: #5a7ea0;
-  --server-log-text: #7a8490;
+  --server-log-text: #8a94a0;
   --chat-separator: #1c1f24;
   --chat-separator-selected: #4a5560;
   --tree-fg: #d1d1d1;
@@ -375,7 +375,10 @@
   color: var(--gts-text);
 }
 
-/* Multi-join tabs for Standard / Nova (same strip, slightly softer chrome) */
+/* Multi-join tabs for Standard / Nova (same strip, slightly softer chrome).
+   Only GTS defines --bg-app/--bg-toolbar/--bg-panel, so this strip is always
+   dark here: its text colors are fixed, not the theme's --text (which is dark
+   in the light theme and made the active tab unreadable). */
 .ts-app:not(.ts-design-greenteaspeak) .gts-connection-tabs {
   display: flex;
   gap: 1px;
@@ -396,7 +399,7 @@
   background: var(--bg-toolbar, #2a2a2a);
   border: 1px solid var(--border, #444);
   border-bottom: none;
-  color: var(--text-muted, #aaa);
+  color: #aaa;
   padding: 0 4px 0 10px;
   max-width: 280px;
   height: 100%;
@@ -408,7 +411,7 @@
 
 .ts-app:not(.ts-design-greenteaspeak) .gts-connection-tab-active {
   background: var(--bg-panel, #333);
-  color: var(--text, #eee);
+  color: #eee;
   border-color: #b0b8c0;
 }
 
@@ -422,6 +425,7 @@
 
 .ts-app:not(.ts-design-greenteaspeak) .gts-connection-tab-close {
   flex-shrink: 0;
+  text-align: center;
   width: 16px;
   height: 16px;
   padding: 0;

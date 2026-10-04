@@ -57,22 +57,31 @@ export function GreenteaSpeakChrome({
                   tab.connecting ? " gts-connection-tab-connecting" : ""
                 }`}
                 onClick={() => onSelectTab?.(tab.id)}
+                tabIndex={0}
+                aria-keyshortcuts={onCloseTab ? "Delete" : undefined}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  // The × below is mouse-only (a button can't sit inside a tab); Delete closes.
+                  if (e.key === "Delete" && onCloseTab) onCloseTab(tab.id);
+                  else if (e.key === "Enter" || e.key === " ") onSelectTab?.(tab.id);
+                  else return;
+                  e.preventDefault();
+                }}
                 title={tab.label}
               >
                 <span className="gts-connection-tab-label">{tab.label}</span>
                 {onCloseTab ? (
-                  <button
-                    type="button"
+                  <span
                     className="gts-connection-tab-close"
+                    aria-hidden="true"
                     title={t("tabs.disconnect")}
-                    aria-label={t("tabs.closeTab", { label: tab.label })}
                     onClick={(e) => {
                       e.stopPropagation();
                       onCloseTab(tab.id);
                     }}
                   >
                     ×
-                  </button>
+                  </span>
                 ) : null}
               </div>
             );

@@ -50,6 +50,57 @@ function useBackdropDismiss(onDismiss: () => void) {
     },
   };
 }
+
+/** Callback ref for a dropdown menu: focus its first item when it opens.
+ *  Module-level so React calls it once per mount, not on every render. */
+function focusFirstItem(el: HTMLElement | null) {
+  el?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+}
+
+/** onKeyDown for dropdown and context menus: Up/Down/Home/End move between
+ *  items, and Escape puts focus back on the button that opened the menu
+ *  before the window-level Escape listener closes it. */
+function handleMenuKeyDown(e: React.KeyboardEvent<HTMLElement>) {
+  if (e.key === "Escape") {
+    e.currentTarget.parentElement?.querySelector<HTMLElement>(":scope > button[aria-expanded]")?.focus();
+    return;
+  }
+  // Arrows belong to sliders, text fields and selects (the volume slider).
+  if ((e.target as HTMLElement).matches("input:not([type=checkbox]), select, textarea")) return;
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  const next =
+    e.key === "ArrowDown" ? items[(i + 1) % items.length]
+    : e.key === "ArrowUp" ? items[(i - 1 + items.length) % items.length]
+    : e.key === "Home" ? items[0]
+    : e.key === "End" ? items[items.length - 1]
+    : undefined;
+  if (!next) return;
+  e.preventDefault();
+  next.focus();
+}
+
+/** onKeyDown for the tree panel (server row + channel tree): Up/Down/Home/End
+ *  walk the visible rows, Left goes to the parent row and Right into an open
+ *  channel. A channel row handles Left/Right itself first when it can
+ *  collapse or expand, and marks the event as handled. */
+function handleTreeKeyDown(e: React.KeyboardEvent<HTMLElement>) {
+  const row = e.target as HTMLElement;
+  if (e.defaultPrevented || !row.classList.contains("ts-row")) return;
+  const rows = [...e.currentTarget.querySelectorAll<HTMLElement>(".ts-row[tabindex]")];
+  const i = rows.indexOf(row);
+  const next =
+    e.key === "ArrowDown" ? rows[i + 1]
+    : e.key === "ArrowUp" ? rows[i - 1]
+    : e.key === "Home" ? rows[0]
+    : e.key === "End" ? rows[rows.length - 1]
+    : e.key === "ArrowLeft" ? (row.closest("ul")?.closest("li")?.querySelector<HTMLElement>(":scope > .ts-row") ?? rows[0])
+    : e.key === "ArrowRight" ? row.closest("li")?.querySelector<HTMLElement>(":scope > ul .ts-row")
+    : undefined;
+  if (next === undefined && !["ArrowDown", "ArrowUp", "ArrowRight"].includes(e.key)) return;
+  e.preventDefault();
+  next?.focus();
+}
 import {
   AudioPlayer,
   MicCapture,
@@ -953,6 +1004,7 @@ function ChannelTree({
   selected,
   sessionKey,
   expandAll,
+  level = 1,
   onSelectItem,
   onSwitchChannel,
   onOpenPrivateChat,
@@ -973,6 +1025,8 @@ function ChannelTree({
   sessionKey: string;
   /** While searching: show every match, ignoring channels the user collapsed. */
   expandAll?: boolean;
+  /** aria-level of this list's channels; their clients sit one deeper. */
+  level?: number;
   onSelectItem: (item: SelectedItem) => void;
   onSwitchChannel: (channelId: number) => void;
   onOpenPrivateChat: (clientId: number, clientName: string) => void;
@@ -1006,25 +1060,38 @@ function ChannelTree({
   };
 
   return (
-    <ul className={`ts-tree-list${parent === 0 ? " ts-tree-list-root" : ""}`}>
-      {children.map((channel) => {
+    <ul
+      className={`ts-tree-list${parent === 0 ? " ts-tree-list-root" : ""}`}
+      role={parent === 0 ? "tree" : "group"}
+      aria-label={parent === 0 ? t("tree.label") : undefined}
+    >
+      {children.map((channel, index) => {
         const isRoot = parent === 0;
         const spacer = spacerDisplayName(channel.name, isRoot);
         const channelClients = clients.filter((c) => c.channel === channel.id);
         const hasSubChannels = channels.some((c) => c.parent === channel.id);
         const hasChildren = channelClients.length > 0 || hasSubChannels;
         const isCollapsed = !expandAll && collapsed.has(channel.id);
+        const isSelected = selected?.type === "channel" && selected.id === channel.id;
+        // One Tab stop for the whole tree (arrow keys move inside it, see
+        // handleTreeKeyDown): the selected row, or the first channel while
+        // nothing in the tree is selected.
+        const isTabStop = isSelected || (parent === 0 && index === 0 && selected?.type !== "channel" && selected?.type !== "client");
         const spacerClass = spacer.isSpacer
           ? ` ts-spacer ts-spacer-align-${spacer.alignment}${spacer.isLine ? " ts-spacer-line" : ""}${
               spacer.isBoxArt ? " ts-spacer-boxart" : ""
             }`
           : "";
         return (
-        <li key={channel.id}>
+        <li key={channel.id} role="none">
           <div
             className={`ts-row ts-channel-row${spacerClass}${
-              selected?.type === "channel" && selected.id === channel.id ? " ts-row-selected" : ""
+              isSelected ? " ts-row-selected" : ""
             }${dragOverChannelId === channel.id ? " ts-drop-target" : ""}`}
+            role="treeitem"
+            aria-level={level}
+            aria-selected={isSelected}
+            aria-expanded={hasChildren ? !isCollapsed : undefined}
             onClick={() => {
               onSelectItem({ type: "channel", id: channel.id });
               // Manual double-click: native dblclick is often lost when the first
@@ -1045,7 +1112,10 @@ function ChannelTree({
               onSwitchChannel(channel.id);
             }}
             onContextMenu={(e) => onChannelContextMenu(e, channel.id, channel.name)}
-            tabIndex={0}
+            tabIndex={isTabStop ? 0 : -1}
+            onFocus={(e) => {
+              if (e.target === e.currentTarget && !isSelected) onSelectItem({ type: "channel", id: channel.id });
+            }}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return;
               if (e.key === "Enter") onSwitchChannel(channel.id);
@@ -1081,7 +1151,7 @@ function ChannelTree({
                 className={`ts-tree-expander${hasChildren ? "" : " ts-tree-expander-empty"}${
                   isCollapsed ? " ts-tree-expander-collapsed" : ""
                 }`}
-                aria-label={isCollapsed ? t("tree.expand") : t("tree.collapse")}
+                aria-hidden="true"
                 tabIndex={-1}
                 onMouseDown={(e) => {
                   // Keep focus on the row so a nearby double-click still joins.
@@ -1112,9 +1182,11 @@ function ChannelTree({
             )}
           </div>
           {!isCollapsed && (
-            <ul className="ts-tree-list">
-              {channelClients.map((c) => (
-                <li key={c.id}>
+            <ul className="ts-tree-list" role="group">
+              {channelClients.map((c) => {
+                const clientSelected = selected?.type === "client" && selected.id === c.id;
+                return (
+                <li key={c.id} role="none">
                   <div
                     className={`ts-row ts-client-row${c.id === ownClientId ? " ts-self" : ""}${
                       talkers.has(c.id) &&
@@ -1123,7 +1195,10 @@ function ChannelTree({
                       c.inputHardwareEnabled
                         ? " ts-talking"
                         : ""
-                    }${selected?.type === "client" && selected.id === c.id ? " ts-row-selected" : ""}`}
+                    }${clientSelected ? " ts-row-selected" : ""}`}
+                    role="treeitem"
+                    aria-level={level + 1}
+                    aria-selected={clientSelected}
                     draggable
                     onDragStart={(e) => {
                       const payload: ClientDragPayload = {
@@ -1141,7 +1216,10 @@ function ChannelTree({
                       c.id === ownClientId ? undefined : () => onOpenPrivateChat(c.id, c.name)
                     }
                     onContextMenu={(e) => onClientContextMenu(e, c.id, c.name, c.id === ownClientId)}
-                    tabIndex={0}
+                    tabIndex={clientSelected ? 0 : -1}
+                    onFocus={(e) => {
+                      if (e.target === e.currentTarget && !clientSelected) onSelectItem({ type: "client", id: c.id });
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && c.id !== ownClientId) onOpenPrivateChat(c.id, c.name);
                       else if (e.key === " ") onSelectItem({ type: "client", id: c.id });
@@ -1211,7 +1289,8 @@ function ChannelTree({
                     </span>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
           {!isCollapsed && (
@@ -1226,6 +1305,7 @@ function ChannelTree({
               selected={selected}
               sessionKey={sessionKey}
               expandAll={expandAll}
+              level={level + 1}
               onSelectItem={onSelectItem}
               onSwitchChannel={onSwitchChannel}
               onOpenPrivateChat={onOpenPrivateChat}
@@ -2612,7 +2692,9 @@ function FavoritesDialog({
                   className={`ts-favorites-list-item${f.id === selectedId ? " ts-favorites-list-item-selected" : ""}`}
                   onClick={() => setSelectedId(f.id)}
                 >
-                  {f.bookmarkName || t("favorites.unnamed")}
+                  <button type="button" className="ts-plain-button" aria-current={f.id === selectedId}>
+                    {f.bookmarkName || t("favorites.unnamed")}
+                  </button>
                 </li>
               ))}
             </ul>
@@ -4928,9 +5010,11 @@ function ContactsDialog({
                   className={`ts-contacts-list-item ts-contacts-category-${c.category}${c.uid === selectedUid ? " ts-contacts-list-item-selected" : ""}`}
                   onClick={() => setSelectedUid(c.uid)}
                 >
-                  {onlineClients.some((cl) => cl.uid === c.uid) && <span className="ts-contacts-online-dot" />}
-                  {displayName(c)}
-                  {c.ignored && " 🚫"}
+                  <button type="button" className="ts-plain-button" aria-current={c.uid === selectedUid}>
+                    {onlineClients.some((cl) => cl.uid === c.uid) && <span className="ts-contacts-online-dot" />}
+                    {displayName(c)}
+                    {c.ignored && " 🚫"}
+                  </button>
                 </li>
               ))}
               {draft.length === 0 && <li className="ts-contacts-list-empty">{t("contacts.empty")}</li>}
@@ -9745,6 +9829,7 @@ function AppInner() {
             className="ts-icon-button ts-nova-menu-toggle"
             onClick={() => setNovaMenuOpen((v) => !v)}
             aria-label={t("menu.connections")}
+            aria-expanded={novaMenuOpen}
           >
             ☰
           </button>
@@ -9755,14 +9840,16 @@ function AppInner() {
           }`}
         >
         <div className="ts-menubar-dropdown" ref={connectionsMenuRef}>
-          <span
-            className="ts-menubar-item ts-menubar-item-active"
+          <button
+            type="button"
+            className="ts-menubar-item ts-menubar-item-active ts-plain-button"
+            aria-expanded={connectionsMenuOpen}
             onClick={() => setConnectionsMenuOpen((v) => !v)}
           >
             {t("menu.connections")}
-          </span>
+          </button>
           {connectionsMenuOpen && (
-            <div className="ts-menu">
+            <div className="ts-menu" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
               <button
                 className="ts-menu-item"
                 disabled={connecting}
@@ -9802,14 +9889,16 @@ function AppInner() {
           )}
         </div>
         <div className="ts-menubar-dropdown" ref={favoritesMenuRef}>
-          <span
-            className="ts-menubar-item ts-menubar-item-active"
+          <button
+            type="button"
+            className="ts-menubar-item ts-menubar-item-active ts-plain-button"
+            aria-expanded={favoritesMenuOpen}
             onClick={() => setFavoritesMenuOpen((v) => !v)}
           >
             {t("menu.favorites")}
-          </span>
+          </button>
           {favoritesMenuOpen && (
-            <div className="ts-menu">
+            <div className="ts-menu" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
               <button className="ts-menu-item" onClick={openAddFavorite}>
                 <span className="ts-menu-item-icon">⭐</span>
                 <span className="ts-menu-item-label">{t("menu.favorites.add")}</span>
@@ -9838,14 +9927,16 @@ function AppInner() {
           )}
         </div>
         <div className="ts-menubar-dropdown" ref={selfMenuRef}>
-          <span
-            className="ts-menubar-item ts-menubar-item-active"
+          <button
+            type="button"
+            className="ts-menubar-item ts-menubar-item-active ts-plain-button"
+            aria-expanded={selfMenuOpen}
             onClick={() => setSelfMenuOpen((v) => !v)}
           >
             {t("menu.self")}
-          </span>
+          </button>
           {selfMenuOpen && (
-            <div className="ts-menu">
+            <div className="ts-menu" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
               <button className="ts-menu-item" disabled title={t("clientContext.notSupported")}>
                 <span className="ts-menu-item-icon">🎙️</span>
                 <span className="ts-menu-item-label">{t("menu.self.recordingProfile")}</span>
@@ -9942,14 +10033,16 @@ function AppInner() {
           )}
         </div>
         <div className="ts-menubar-dropdown" ref={rightsMenuRef}>
-          <span
-            className="ts-menubar-item ts-menubar-item-active"
+          <button
+            type="button"
+            className="ts-menubar-item ts-menubar-item-active ts-plain-button"
+            aria-expanded={rightsMenuOpen}
             onClick={() => setRightsMenuOpen((v) => !v)}
           >
             {t("menu.rights")}
-          </span>
+          </button>
           {rightsMenuOpen && (
-            <div className="ts-menu">
+            <div className="ts-menu" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
               <button
                 className="ts-menu-item"
                 onClick={() => {
@@ -10010,14 +10103,16 @@ function AppInner() {
           )}
         </div>
         <div className="ts-menubar-dropdown" ref={extrasMenuRef}>
-          <span
-            className="ts-menubar-item ts-menubar-item-active"
+          <button
+            type="button"
+            className="ts-menubar-item ts-menubar-item-active ts-plain-button"
+            aria-expanded={extrasMenuOpen}
             onClick={() => setExtrasMenuOpen((v) => !v)}
           >
             {t("menu.extras")}
-          </span>
+          </button>
           {extrasMenuOpen && (
-            <div className="ts-menu">
+            <div className="ts-menu" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
               <button
                 className="ts-menu-item"
                 onClick={() => {
@@ -10185,22 +10280,25 @@ function AppInner() {
           )}
         </div>
         {IS_OWN_HOSTED_INSTANCE && (
-          <span
-            className="ts-menubar-item"
+          <button
+            type="button"
+            className="ts-menubar-item ts-plain-button"
             onClick={() => setFeedbackOpen(true)}
           >
             💬 {t("menu.extras.feedback")}
-          </span>
+          </button>
         )}
         <div className="ts-menubar-dropdown" ref={helpMenuRef}>
-          <span
-            className="ts-menubar-item ts-menubar-item-active"
+          <button
+            type="button"
+            className="ts-menubar-item ts-menubar-item-active ts-plain-button"
+            aria-expanded={helpMenuOpen}
             onClick={() => setHelpMenuOpen((v) => !v)}
           >
             {t("menu.help")}
-          </span>
+          </button>
           {helpMenuOpen && (
-            <div className="ts-menu">
+            <div className="ts-menu" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
               <a
                 className="ts-menu-item"
                 href="https://webspeak3.de"
@@ -10319,7 +10417,7 @@ function AppInner() {
               ▾
             </button>
             {awayMenuOpen && (
-              <div className="ts-menu ts-menu-away">
+              <div className="ts-menu ts-menu-away" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
                 <button
                   className="ts-menu-item"
                   onClick={() => {
@@ -10371,7 +10469,7 @@ function AppInner() {
               🤫
             </button>
             {whisperMenuOpen && (
-              <div className="ts-menu ts-menu-away">
+              <div className="ts-menu ts-menu-away" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
                 <div className="ts-context-menu-title">{t("whisper.channels")}</div>
                 {channels.map((ch) => (
                   <label key={ch.id} className="ts-menu-item">
@@ -10499,7 +10597,7 @@ function AppInner() {
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
           <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" className="ts-app-logo" />
-          <span className="ts-app-title">WebSpeak3</span>
+          <span className="ts-app-title" role="heading" aria-level={1}>WebSpeak3</span>
         </div>
 
       </div>
@@ -11108,6 +11206,7 @@ function AppInner() {
         <div
           ref={clientContextMenuRef}
           className="ts-context-menu"
+          onKeyDown={handleMenuKeyDown}
           style={{ top: clientContextMenu.y, left: clientContextMenu.x }}
         >
           <div className="ts-context-menu-title">{clientContextMenu.clientName}</div>
@@ -11304,6 +11403,7 @@ function AppInner() {
         <div
           ref={serverContextMenuRef}
           className="ts-context-menu"
+          onKeyDown={handleMenuKeyDown}
           style={{ top: serverContextMenu.y, left: serverContextMenu.x }}
         >
           <div className="ts-context-menu-title">{serverName || host}</div>
@@ -11406,6 +11506,7 @@ function AppInner() {
         <div
           ref={channelContextMenuRef}
           className="ts-context-menu"
+          onKeyDown={handleMenuKeyDown}
           style={{ top: channelContextMenu.y, left: channelContextMenu.x }}
         >
           <div className="ts-context-menu-title">{channelContextMenu.channelName}</div>
@@ -11439,15 +11540,19 @@ function AppInner() {
         </div>
       )}
 
-      <div className="ts-body">
+      <main className="ts-body">
         <div className="ts-upper" style={{ height: upperHeight }}>
-          <div className="ts-tree-panel" style={{ width: treeWidth }}>
+          <div className="ts-tree-panel" style={{ width: treeWidth }} onKeyDown={handleTreeKeyDown}>
             {connected ? (
               <>
                 <div
                   className={`ts-row ts-server-row${selected?.type === "server" ? " ts-row-selected" : ""}`}
                   onClick={() => handleSelectItem({ type: "server" })}
                   onContextMenu={handleServerContextMenu}
+                  tabIndex={0}
+                  onFocus={(e) => {
+                    if (e.target === e.currentTarget && selected?.type !== "server") handleSelectItem({ type: "server" });
+                  }}
                 >
                   <ServerIcon />
                   <span>{serverName || host}</span>
@@ -11590,9 +11695,15 @@ function AppInner() {
                   thread.unread ? " ts-chat-tab-unread" : ""
                 }`}
                 onClick={() => setActiveTab(thread.partnerId)}
+                aria-keyshortcuts="Delete"
+                onKeyDown={(e) => {
+                  // The × can't be its own button inside this one; Delete closes from the keyboard.
+                  if (e.key === "Delete") handleClosePrivateChat(thread.partnerId);
+                }}
               >
                 {thread.partnerName}
                 <span
+                  aria-hidden="true"
                   className="ts-chat-tab-close"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -11632,7 +11743,7 @@ function AppInner() {
             </button>
           </div>
         </div>
-      </div>
+      </main>
 
       <div className="ts-log">
         {log.slice(-50).map((entry, i) => {
