@@ -584,6 +584,10 @@ fn log_book_event(con: &data::Connection, event: &BookEvent) {
 				| PropertyId::ServerCodecEncryptionMode
 				| PropertyId::ServerTempChannelDefaultDeleteDelay
 				| PropertyId::ServerPrioritySpeakerDimmModificator,
+			// Only notifyserveredited carries an invoker; the 20s
+			// servergetvariables poll answers with notifyserverupdated, which
+			// rewrites every field (changed or not) without one.
+			invoker: Some(_),
 			..
 		} => {
 			emit_server_log(ServerLogEntry::ServerEdited);

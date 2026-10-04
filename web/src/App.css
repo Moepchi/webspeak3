@@ -2393,6 +2393,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* without this the panel grows with its lines instead of scrolling them */
+  min-height: 0;
 }
 
 .ts-chat-tabs {
