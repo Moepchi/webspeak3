@@ -2457,6 +2457,50 @@
   text-decoration: underline;
 }
 
+.ts-chat-bubble code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.95em;
+  padding: 0 0.25em;
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+}
+
+.ts-bb-list {
+  margin: 0.15em 0;
+  padding-left: 1.6em;
+}
+
+.ts-bb-quote {
+  margin: 0.15em 0;
+  padding-left: 0.6em;
+  border-left: 3px solid var(--border-soft);
+}
+
+.ts-bb-hr {
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+  margin: 0.3em 0;
+}
+
+.ts-bb-h {
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.ts-bb-h1 {
+  font-size: 1.4em;
+}
+
+.ts-bb-h2 {
+  font-size: 1.2em;
+}
+
+.ts-bb-img {
+  max-width: 100%;
+  max-height: 240px;
+  vertical-align: middle;
+}
+
 .ts-chat-from {
   font-weight: 600;
   color: var(--accent);

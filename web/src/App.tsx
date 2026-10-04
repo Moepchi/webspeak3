@@ -556,6 +556,8 @@ const AWAY_PRESETS_KEY = "webspeak3:away-presets";
 /** "off" hides the server banner: it loads from whatever host the server
  *  admin picked, which then sees the viewer's IP (review S12). */
 const SERVER_BANNER_KEY = "webspeak3:server-banner";
+// Off by default: an inline chat image loads from whatever host the sender picked.
+const CHAT_IMAGES_KEY = "webspeak3:chat-images";
 const DISCONNECT_MESSAGE_KEY = "webspeak3:disconnect-message";
 const COLLECTED_URLS_KEY = "webspeak3:collected-urls";
 
@@ -5425,9 +5427,13 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
 function AnwendungPanel({
   showServerBanner,
   onShowServerBannerChange,
+  chatImages,
+  onChatImagesChange,
 }: {
   showServerBanner: boolean;
   onShowServerBannerChange: (on: boolean) => void;
+  chatImages: boolean;
+  onChatImagesChange: (on: boolean) => void;
 }) {
   const t = useT();
   const { langPref, setLangPref } = useLanguage();
@@ -5455,6 +5461,11 @@ function AnwendungPanel({
         {t("app.serverBanner")}
       </label>
       <p className="ts-options-hint">{t("app.serverBanner.hint")}</p>
+      <label className="ts-options-checkbox">
+        <input type="checkbox" checked={chatImages} onChange={(e) => onChatImagesChange(e.target.checked)} />
+        {t("app.chatImages")}
+      </label>
+      <p className="ts-options-hint">{t("app.chatImages.hint")}</p>
     </>
   );
 }
@@ -6246,6 +6257,8 @@ function OptionsDialog({
   onDeleteCustomTheme,
   showServerBanner,
   onShowServerBannerChange,
+  chatImages,
+  onChatImagesChange,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -6258,6 +6271,8 @@ function OptionsDialog({
   onDeleteCustomTheme: (id: string) => void;
   showServerBanner: boolean;
   onShowServerBannerChange: (on: boolean) => void;
+  chatImages: boolean;
+  onChatImagesChange: (on: boolean) => void;
 }) {
   const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
@@ -6286,7 +6301,12 @@ function OptionsDialog({
           </div>
           <div className="ts-options-content">
             {active.id === "anwendung" ? (
-              <AnwendungPanel showServerBanner={showServerBanner} onShowServerBannerChange={onShowServerBannerChange} />
+              <AnwendungPanel
+                showServerBanner={showServerBanner}
+                onShowServerBannerChange={onShowServerBannerChange}
+                chatImages={chatImages}
+                onChatImagesChange={onChatImagesChange}
+              />
             ) : active.id === "wiedergabe" ? (
               <WiedergabePanel audio={audio} />
             ) : active.id === "aufnahme" ? (
@@ -6637,6 +6657,7 @@ function AppInner() {
   const [serverLicenseId, setServerLicenseId] = useState(0);
   const [serverBannerUrl, setServerBannerUrl] = useState("");
   const [showServerBanner, setShowServerBanner] = useState(() => localStorage.getItem(SERVER_BANNER_KEY) !== "off");
+  const [chatImages, setChatImages] = useState(() => localStorage.getItem(CHAT_IMAGES_KEY) === "on");
   const [serverWelcomeMessage, setServerWelcomeMessage] = useState("");
   const [serverEditOpen, setServerEditOpen] = useState(false);
   const [serverProtocolLogOpen, setServerProtocolLogOpen] = useState(false);
@@ -10929,6 +10950,15 @@ function AppInner() {
               /* private mode: setting just doesn't persist */
             }
           }}
+          chatImages={chatImages}
+          onChatImagesChange={(on) => {
+            setChatImages(on);
+            try {
+              localStorage.setItem(CHAT_IMAGES_KEY, on ? "on" : "off");
+            } catch {
+              /* private mode: setting just doesn't persist */
+            }
+          }}
           audio={{
             outputDevices,
             outputDeviceId,
@@ -11645,7 +11675,7 @@ function AppInner() {
                     className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
                   >
                     <span className="ts-chat-from">{entry.from}:</span>{" "}
-                    <span className="ts-chat-bubble">{renderBbcode(entry.message)}</span>
+                    <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages })}</span>
                   </div>
                 ))
               : activeTab === "server"
@@ -11660,7 +11690,7 @@ function AppInner() {
                         className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
                       >
                         <span className="ts-chat-from">{entry.from}:</span>{" "}
-                        <span className="ts-chat-bubble">{renderBbcode(entry.message)}</span>
+                        <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages })}</span>
                       </div>
                     )
                   )
@@ -11669,7 +11699,7 @@ function AppInner() {
                       <span className="ts-chat-from">
                         {entry.fromSelf ? t("chat.you") : pmThreads[activeTab].partnerName}:
                       </span>{" "}
-                      <span className="ts-chat-bubble">{renderBbcode(entry.message)}</span>
+                      <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages })}</span>
                     </div>
                   ))}
             <div ref={chatEndRef} />
