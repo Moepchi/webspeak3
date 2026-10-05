@@ -9,8 +9,9 @@ services:
       # This file publishes no port - the gateway is only reachable through
       # the cloudflared tunnel below, so the client IP it forwards can be
       # trusted (per-IP limits would otherwise see every user as the tunnel).
-      # Remove this if you publish a port directly instead.
-      - TRUST_PROXY=1
+      # Remove this if you publish a port directly instead; behind your own
+      # reverse proxy use TRUST_PROXY=1.
+      - TRUST_PROXY=cloudflare
     # Nothing in here needs Linux capabilities (unprivileged port, plain
     # TCP/UDP sockets), so drop them all.
     cap_drop: [ALL]

@@ -1,19 +1,20 @@
 import type { IncomingMessage } from "node:http";
 
-// Behind a reverse proxy / tunnel (e.g. cloudflared) every request arrives
-// from the proxy's own address, so per-IP limits would lump all users into
-// one bucket. TRUST_PROXY=1 makes us read the client IP the proxy reports
-// instead - only set it when the gateway is reachable *solely* through that
-// proxy, otherwise anyone can send the header and pick their own "IP".
-const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+// Behind a reverse proxy / tunnel every request arrives from the proxy's own
+// address, so per-IP limits would lump all users into one bucket. Only set
+// TRUST_PROXY when the gateway is reachable *solely* through that proxy:
+// - "cloudflare": CF-Connecting-IP, which Cloudflare always sets itself.
+// - "1": the last X-Forwarded-For entry, the one our own proxy appended;
+//   anything before it came from the client and can be made up.
+const TRUST_PROXY = process.env.TRUST_PROXY;
 
 export function clientIp(req: IncomingMessage): string {
-  if (TRUST_PROXY) {
+  if (TRUST_PROXY === "cloudflare") {
     const cf = req.headers["cf-connecting-ip"];
-    if (typeof cf === "string" && cf) return cf.trim();
-    const xff = req.headers["x-forwarded-for"];
-    const first = (Array.isArray(xff) ? xff[0] : xff)?.split(",")[0]?.trim();
-    if (first) return first;
+    if (typeof cf === "string" && cf.trim()) return cf.trim();
+  } else if (TRUST_PROXY === "1") {
+    const last = String(req.headers["x-forwarded-for"] ?? "").split(",").at(-1)?.trim();
+    if (last) return last;
   }
   return (req.socket.remoteAddress ?? "unknown").replace(/^::ffff:/, "");
 }
