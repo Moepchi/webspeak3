@@ -187,7 +187,7 @@ The **Design Store** (browse/upload community themes) points at the maintainer's
 
 #### Environment variables
 
-All optional; add them under `environment:` in your compose override next to `PORT`.
+All optional; add them under `environment:` in your compose override next to `PORT`. These are the common ones - the full list (logging, feedback form, Design Store details, build-time variables) is on the wiki's [Configuration & Environment Variables](https://github.com/Moepchi/webspeak3/wiki/Configuration-and-Environment-Variables) page.
 
 | Variable | Default | Purpose |
 |---|---|---|
