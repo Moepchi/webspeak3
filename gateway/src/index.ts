@@ -54,8 +54,8 @@ function isServerAllowed(host: unknown): boolean {
   return ALLOWED_SERVERS.some((entry) => {
     // "*.example.com" matches any subdomain (TLS-wildcard-style: not the
     // bare apex itself - list that separately if it should be allowed too).
-    if (entry.startsWith("*.")) return target.endsWith(entry.slice(1));
-    return target === entry;
+    if (entry.startsWith("*.")) return target.endsWith(stripPort(entry).slice(1));
+    return target === stripPort(entry);
   });
 }
 
@@ -134,9 +134,17 @@ function turnServers() {
 // issue #12): set on the container, these end up in the served index.html as
 // <meta> tags the client reads at startup, so changing them needs no rebuild.
 // Meta tags rather than an inline script, which CONTENT_SECURITY_POLICY forbids.
+// The allowlist goes along so the client can offer it as a dropdown (or a
+// locked field for a single entry) instead of a free-text address; not with
+// wildcards, which can't be listed, nor with SERVER_PICKER=0.
+const SERVER_PICKER =
+  process.env.SERVER_PICKER !== "0" && !ALLOWED_SERVERS.some((e) => e.startsWith("*."))
+    ? ALLOWED_SERVERS.join(",")
+    : undefined;
 const RUNTIME_CONFIG_META = Object.entries({
   "webspeak3-default-server": process.env.DEFAULT_SERVER,
   "webspeak3-default-channel": process.env.DEFAULT_CHANNEL,
+  "webspeak3-allowed-servers": SERVER_PICKER,
 })
   .flatMap(([name, value]) =>
     value ? [`<meta name="${name}" content="${value.replace(/[&"<>]/g, (c) => `&#${c.charCodeAt(0)};`)}">`] : [],

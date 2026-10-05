@@ -257,6 +257,9 @@ const runtimeConfig = (name: string) =>
   document.querySelector<HTMLMetaElement>(`meta[name="webspeak3-${name}"]`)?.content;
 const DEFAULT_SERVER = runtimeConfig("default-server") || import.meta.env.VITE_DEFAULT_SERVER || null;
 const DEFAULT_CHANNEL = runtimeConfig("default-channel") || import.meta.env.VITE_DEFAULT_CHANNEL || "";
+// The gateway admin's ALLOWED_SERVERS (unless SERVER_PICKER=0): one server
+// locks the address field to it, several turn it into a dropdown.
+const SERVER_CHOICES = runtimeConfig("allowed-servers")?.split(",").filter(Boolean) ?? [];
 
 // Terms of use, own-hosted instance only (see TODO.md #2/#7.1). Versioned so
 // a rule change can re-surface the modal: bump TOS_VERSION and everyone who
@@ -1656,7 +1659,20 @@ function ConnectDialog({
         <div className="ts-dialog-row">
           <label className="ts-dialog-field ts-dialog-field-grow">
             {t("connect.serverAddress")}
-            <input autoFocus value={host} onChange={(e) => onHostChange(e.target.value)} />
+            {SERVER_CHOICES.length > 1 ? (
+              <select autoFocus value={host} onChange={(e) => onHostChange(e.target.value)}>
+                {SERVER_CHOICES.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                autoFocus
+                value={host}
+                disabled={SERVER_CHOICES.length === 1}
+                onChange={(e) => onHostChange(e.target.value)}
+              />
+            )}
           </label>
           <label className="ts-dialog-field">
             {t("connect.serverPassword")}
@@ -7968,6 +7984,10 @@ function AppInner() {
     };
   };
 
+  // A remembered or favorite host outside the admin's list isn't one of the
+  // choices; fall back to the first.
+  const dialogHost = SERVER_CHOICES.length && !SERVER_CHOICES.includes(host) ? SERVER_CHOICES[0] : host;
+
   const handleConnect = (overrides?: {
     host?: string;
     nickname?: string;
@@ -10633,7 +10653,7 @@ function AppInner() {
 
       {connectDialogOpen && (
         <ConnectDialog
-          host={host}
+          host={dialogHost}
           nickname={nickname}
           serverPassword={serverPassword}
           channelPassword={channelPassword}
@@ -10653,8 +10673,8 @@ function AppInner() {
           onServerTypeChange={setServerType}
           onActiveIdentityChange={handleActiveIdentityChange}
           onToggleExpanded={() => setConnectDialogExpanded((v) => !v)}
-          onConnect={() => handleConnect()}
-          onConnectNewTab={() => handleConnect()}
+          onConnect={() => handleConnect({ host: dialogHost })}
+          onConnectNewTab={() => handleConnect({ host: dialogHost })}
           canOpenNewTab={sessionTabs.length > 0 || connected}
           onCancel={novaSplash ? () => {} : () => setConnectDialogOpen(false)}
           nova={designTheme === "nova"}
