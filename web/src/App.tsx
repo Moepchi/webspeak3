@@ -7530,7 +7530,7 @@ function AppInner() {
           connecting: rec.parked.connecting,
         });
         if (data.type === "connected") {
-          reconnectAttemptsRef.current.delete(sessionId);
+          connectedAtRef.current.set(sessionId, Date.now());
           void playSound("connect");
         }
         else if (data.type === "poke") void playSound("poke");
@@ -7540,7 +7540,7 @@ function AppInner() {
       switch (data.type) {
         case "connected":
           logClient("info", "Connection", `Connected to ${data.serverName}`);
-          reconnectAttemptsRef.current.delete(sessionId);
+          connectedAtRef.current.set(sessionId, Date.now());
           autoConnectPendingRef.current = false;
           hasConnectedRef.current = true;
           everConnectedRef.current.add(sessionId);
@@ -8116,6 +8116,11 @@ function AppInner() {
   // instantly, which without a delay would tight-loop). Reset to 0 once a
   // session actually reaches "connected" again (see the two spots below).
   const reconnectAttemptsRef = useRef<Map<string, number>>(new Map());
+  // The backoff only starts over once a connection held for a while: on a
+  // flaky network a reconnect that drops again after a few seconds used to
+  // reset it to 1 s every time, so each tab reconnected every few seconds.
+  const connectedAtRef = useRef<Map<string, number>>(new Map());
+  const STABLE_CONNECTION_MS = 30_000;
   // The gateway sends this every 20 s (heartbeat in gateway/src/index.ts). A
   // network that dies silently never closes the socket on this side, so a
   // socket that stays quiet this long counts as dropped.
@@ -8124,6 +8129,11 @@ function AppInner() {
   const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const scheduleReconnect = (sessionId: string) => {
     if (reconnectTimersRef.current.has(sessionId)) return; // already scheduled
+    const connectedAt = connectedAtRef.current.get(sessionId);
+    connectedAtRef.current.delete(sessionId);
+    if (connectedAt !== undefined && Date.now() - connectedAt >= STABLE_CONNECTION_MS) {
+      reconnectAttemptsRef.current.delete(sessionId);
+    }
     const attempt = reconnectAttemptsRef.current.get(sessionId) ?? 0;
     const delay = Math.min(1000 * 2 ** attempt, 30_000);
     reconnectAttemptsRef.current.set(sessionId, attempt + 1);
