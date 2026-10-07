@@ -93,6 +93,12 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
 const MAX_CONNECTIONS_PER_IP = Number(process.env.MAX_CONNECTIONS_PER_IP ?? 10);
 const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS ?? 300);
 const connectionsPerIp = new Map<string, number>();
+// Every "connect" spawns a fresh connector, and a socket can send any number
+// of them - without this, 10 sockets were enough to join-flood a TS server
+// through this gateway at several joins per second. Real clients (reconnect
+// backoff, restoring a handful of tabs) stay far below it.
+const CONNECT_RATE_LIMIT = Number(process.env.CONNECT_RATE_LIMIT ?? 30);
+const isConnectRateLimited = createRateLimiter(CONNECT_RATE_LIMIT, 60_000);
 
 // Largest single WS message: file uploads travel base64-encoded inside one,
 // so this is ~4/3 of the biggest uploadable file (see MAX_UPLOAD_BYTES in
@@ -705,6 +711,13 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
         if (!isServerAllowed(msg.host)) {
           socket.send(
             JSON.stringify({ type: "error", message: "This server is not allowed by this gateway's admin." }),
+          );
+          break;
+        }
+        if (CONNECT_RATE_LIMIT > 0 && isConnectRateLimited(ip)) {
+          console.warn(`[ratelimit] too many connects from one IP, target host=${msg.host}`);
+          socket.send(
+            JSON.stringify({ type: "error", message: "Too many connection attempts. Please wait a minute." }),
           );
           break;
         }
