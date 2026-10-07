@@ -338,6 +338,7 @@
   "app.language.en": "Angličtina",
   "app.language.zh-CN": "简体中文",
   "app.language.fa": "فارسی (بتا)",
+  "app.language.cs-CZ": "Čeština",
   "app.language.helpTranslate": "Missing your language or spotted wrong translation? Help out on Weblate →",
   "app.serverBanner": "Zobrazovat bannery serveru",
   "app.serverBanner.hint": "Banner se načítá přímo z adresy nastavené administrátorem serveru a tento hostitel vidí vaši IP adresu.",
