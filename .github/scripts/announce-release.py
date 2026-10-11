@@ -47,16 +47,23 @@ def xrpc(method: str, payload: dict | bytes, token: str | None = None, content_t
         return json.load(res)
 
 
-def fetch(url: str, retries: int = 2) -> tuple[bytes, str]:
+def fetch(url: str, attempt: int = 1) -> tuple[bytes, str]:
     req = urllib.request.Request(url, headers={"User-Agent": "webspeak3-release-announcer"})
     try:
         with urllib.request.urlopen(req, timeout=30) as res:
             return res.read(), res.headers.get_content_type()
     except urllib.error.HTTPError as err:
-        if err.code != 429 or not retries:  # GitHub's image service throttles bursts now and then
+        # GitHub's image service throttles right after a release, often for over a minute.
+        # 15+30+45+60 s stays well inside the job's 5-minute timeout.
+        if err.code != 429 or attempt > 4:
             raise
-        time.sleep(10)
-        return fetch(url, retries - 1)
+        wait = 15 * attempt
+        retry_after = err.headers.get("Retry-After", "")
+        if retry_after.isdigit():
+            wait = min(int(retry_after), 60)
+        print(f"Preview image throttled (429), retrying in {wait} s.")
+        time.sleep(wait)
+        return fetch(url, attempt + 1)
 
 
 def link_card(release: dict, text: str) -> dict:
