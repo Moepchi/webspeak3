@@ -37,6 +37,16 @@ use tsproto_packets::packets::{AudioData, CodecType, Direction, Flags, OutAudio,
 const FRAME_SAMPLES: usize = 960;
 /// Upper bound for a file download relayed to the browser (see its use).
 const MAX_DOWNLOAD_BYTES: u64 = 25 << 20;
+/// Uploads are capped the same way, independent of what the browser checks.
+const MAX_UPLOAD_BYTES: u64 = 24 << 20;
+/// File transfers cross the gateway in pieces of this size (raw bytes, a
+/// multiple of 3 so the base64 pieces can simply be concatenated). One huge
+/// line per file made the Node gateway hold several copies of it at once and
+/// run out of heap (2026-10-11).
+const TRANSFER_CHUNK_BYTES: usize = 192 << 10;
+/// Half-received chunked uploads per connection - each can hold up to
+/// MAX_UPLOAD_BYTES until it completes.
+const MAX_PARTIAL_UPLOADS: usize = 4;
 const MAX_ICON_BYTES: u64 = 512 << 10;
 /// Avatars are fetched for everyone in the user's channel without asking;
 /// TS3 servers default to a 300 KiB avatar size limit.
@@ -385,12 +395,11 @@ enum Event {
 	/// Reply to a "ftlist" request - one channel/path's directory listing.
 	#[serde(rename = "fileList")]
 	FileList { cid: u64, path: String, entries: Vec<FileListEntry> },
-	/// A requested file download finished; `data` is the full file content,
-	/// base64-encoded. Whole files are buffered in memory and sent as one
-	/// event rather than streamed incrementally - fine for the file sizes a
-	/// TS3 channel filebase realistically holds, not meant for huge transfers.
-	#[serde(rename = "fileDownloadData")]
-	FileDownloadData { cid: u64, path: String, data: String },
+	/// One piece of a requested file download, base64-encoded. `offset` is
+	/// the raw byte offset of this piece (0 starts a new download), `done`
+	/// marks the last one. Pieces arrive in order.
+	#[serde(rename = "fileDownloadChunk")]
+	FileDownloadChunk { cid: u64, path: String, offset: u64, data: String, done: bool },
 	/// A requested file upload finished successfully.
 	#[serde(rename = "fileUploadDone")]
 	FileUploadDone { cid: u64, path: String },
@@ -487,6 +496,54 @@ struct FileListEntry {
 	size: u64,
 	is_file: bool,
 	timestamp: String,
+}
+
+/// Handles one `ftuploadchunk <cid>\t<offset>\t<total>\t<path>\t<base64>`
+/// line. Pieces come in order; offset 0 starts an upload. Returns the complete
+/// file once the piece that reaches <total> has arrived.
+fn take_upload_chunk(
+	partials: &mut HashMap<(u64, String), (u64, Vec<u8>)>,
+	rest: &str,
+) -> Result<Option<(u64, String, Vec<u8>)>, String> {
+	let mut parts: Vec<&str> = rest.splitn(5, '\t').collect();
+	// The stdin loop trims each line, which eats the trailing tab of an empty piece.
+	if parts.len() == 4 {
+		parts.push("");
+	}
+	let [cid, offset, total, path, data] = parts.as_slice() else {
+		return Err("Invalid ftuploadchunk args".into());
+	};
+	let (Ok(cid), Ok(offset), Ok(total), Ok(bytes)) = (
+		cid.trim().parse::<u64>(),
+		offset.trim().parse::<u64>(),
+		total.trim().parse::<u64>(),
+		base64::engine::general_purpose::STANDARD.decode(data.trim()),
+	) else {
+		return Err("Invalid ftuploadchunk args".into());
+	};
+	let key = (cid, path.to_string());
+	if offset == 0 {
+		if total > MAX_UPLOAD_BYTES {
+			return Err(format!("Upload refused: {path} is larger than {} KiB", MAX_UPLOAD_BYTES >> 10));
+		}
+		if !partials.contains_key(&key) && partials.len() >= MAX_PARTIAL_UPLOADS {
+			return Err("Too many uploads at once".into());
+		}
+		partials.insert(key.clone(), (total, Vec::with_capacity(total as usize)));
+	}
+	let Some((expected, buf)) = partials.get_mut(&key) else {
+		return Err(format!("Upload failed: {path} has no upload in progress"));
+	};
+	if buf.len() as u64 != offset || *expected != total || offset + bytes.len() as u64 > total {
+		partials.remove(&key);
+		return Err(format!("Upload failed: {path} arrived out of order"));
+	}
+	buf.extend_from_slice(&bytes);
+	if (buf.len() as u64) < total {
+		return Ok(None);
+	}
+	let (_, bytes) = partials.remove(&key).expect("present, checked above");
+	Ok(Some((cid, key.1, bytes)))
 }
 
 fn emit(event: &Event) {
@@ -1056,6 +1113,8 @@ async fn run(args: Args) -> Result<()> {
 	// request that stream belongs to.
 	let mut pending_downloads: HashMap<u16, (u64, String)> = HashMap::new();
 	let mut pending_uploads: HashMap<u16, (u64, String, Vec<u8>)> = HashMap::new();
+	// Chunked uploads still arriving from the browser: (cid, path) -> (total size, bytes so far).
+	let mut partial_uploads: HashMap<(u64, String), (u64, Vec<u8>)> = HashMap::new();
 	// Set by "permissionlist" while waiting to emit the full permission
 	// catalog (name-resolution reuses the same permission_names cache/fetch
 	// as "permoverview" above).
@@ -2178,6 +2237,19 @@ async fn run(args: Args) -> Result<()> {
 							}
 							_ => emit(&Event::Error { message: "Invalid ftupload args".into() }),
 						}
+					} else if let Some(rest) = l.strip_prefix("ftuploadchunk ") {
+						match take_upload_chunk(&mut partial_uploads, rest) {
+							Ok(Some((cid, path, bytes))) => {
+								match con.upload_file(ChannelId(cid), &path, None, bytes.len() as u64, true, false) {
+									Ok(handle) => {
+										pending_uploads.insert(handle.0, (cid, path, bytes));
+									}
+									Err(e) => emit(&Event::Error { message: format!("Upload failed: {e}") }),
+								}
+							}
+							Ok(None) => {}
+							Err(message) => emit(&Event::Error { message }),
+						}
 					} else if l == "permissionlist" {
 						if pending_permission_list {
 							// A catalog fetch is already in flight (triggered by an
@@ -2973,9 +3045,9 @@ async fn run(args: Args) -> Result<()> {
 						// file does not stall channel switches, chat, etc. while in flight;
 						// emit() is just a println! under the hood, so it is safe to call
 						// from a spawned task even while the main loop is emitting too.
-						// Everything is buffered and then sent as one base64 JSON line,
-						// so cap it - a server could otherwise announce (or just send)
-						// gigabytes and take the whole gateway host's memory with it.
+						// It goes out in TRANSFER_CHUNK_BYTES pieces but the browser
+						// still assembles the whole file, so cap it - a server could
+						// otherwise announce (or just send) gigabytes.
 						let stream = result.stream;
 						let announced_size = result.size;
 						// Group/server icons are fetched automatically, without the user
@@ -2992,16 +3064,42 @@ async fn run(args: Args) -> Result<()> {
 								});
 								return;
 							}
-							let mut buf = Vec::new();
-							match stream.take(limit + 1).read_to_end(&mut buf).await {
-								Ok(_) if buf.len() as u64 > limit => emit(&Event::Error {
-									message: format!("Download aborted: {path} is larger than {} KiB", limit >> 10),
-								}),
-								Ok(_) => {
-									let data = base64::engine::general_purpose::STANDARD.encode(&buf);
-									emit(&Event::FileDownloadData { cid, path, data });
+							let mut stream = stream.take(limit + 1);
+							let mut buf = vec![0u8; TRANSFER_CHUNK_BYTES];
+							let mut offset = 0u64;
+							loop {
+								// Fill the whole chunk (or hit EOF) so every piece but the
+								// last is exactly TRANSFER_CHUNK_BYTES - see its comment.
+								let mut filled = 0;
+								let read = loop {
+									match stream.read(&mut buf[filled..]).await {
+										Ok(0) => break Ok(()),
+										Ok(n) => {
+											filled += n;
+											if filled == buf.len() {
+												break Ok(());
+											}
+										}
+										Err(e) => break Err(e),
+									}
+								};
+								if let Err(e) = read {
+									emit(&Event::Error { message: format!("Download failed: {e}") });
+									return;
 								}
-								Err(e) => emit(&Event::Error { message: format!("Download failed: {e}") }),
+								if offset + filled as u64 > limit {
+									emit(&Event::Error {
+										message: format!("Download aborted: {path} is larger than {} KiB", limit >> 10),
+									});
+									return;
+								}
+								let done = filled < buf.len();
+								let data = base64::engine::general_purpose::STANDARD.encode(&buf[..filled]);
+								emit(&Event::FileDownloadChunk { cid, path: path.clone(), offset, data, done });
+								if done {
+									return;
+								}
+								offset += filled as u64;
 							}
 						});
 					}
@@ -3082,4 +3180,35 @@ async fn run(args: Args) -> Result<()> {
 	}
 
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn chunk(offset: u64, total: u64, data: &[u8]) -> String {
+		format!("7\t{offset}\t{total}\t/a b.txt\t{}", base64::engine::general_purpose::STANDARD.encode(data))
+	}
+
+	#[test]
+	fn upload_chunks_assemble_in_order_and_reject_gaps() {
+		let mut partials = HashMap::new();
+		assert_eq!(take_upload_chunk(&mut partials, &chunk(0, 5, b"abc")), Ok(None));
+		assert_eq!(
+			take_upload_chunk(&mut partials, &chunk(3, 5, b"de")),
+			Ok(Some((7, "/a b.txt".to_string(), b"abcde".to_vec())))
+		);
+		assert!(partials.is_empty());
+
+		take_upload_chunk(&mut partials, &chunk(0, 5, b"abc")).unwrap();
+		assert!(take_upload_chunk(&mut partials, &chunk(4, 5, b"e")).is_err());
+		assert!(partials.is_empty(), "a gap drops the upload");
+		assert!(take_upload_chunk(&mut partials, &chunk(0, MAX_UPLOAD_BYTES + 1, b"a")).is_err());
+
+		// An empty file's only piece reaches us with its trailing tab trimmed off.
+		assert_eq!(
+			take_upload_chunk(&mut partials, chunk(0, 0, b"").trim_end()),
+			Ok(Some((7, "/a b.txt".to_string(), Vec::new())))
+		);
+	}
 }

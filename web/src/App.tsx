@@ -3806,6 +3806,18 @@ const CUSTOM_ICON_ID_THRESHOLD = 1000;
 // Keep in sync with WS_MAX_PAYLOAD in gateway/src/index.ts (base64 adds ~4/3).
 const MAX_UPLOAD_BYTES = 24 * 1024 * 1024;
 
+function readBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string; // data:*/*;base64,AAAA...
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 /** Deterministic color for a group's letter badge - same icon id always
  *  produces the same hue, so a group looks consistent across the tree
  *  without needing the real (unavailable) TeamSpeak icon graphics. */
@@ -7483,8 +7495,23 @@ function AppInner() {
       );
     };
 
+    // Downloads arrive in pieces (see the connector's TRANSFER_CHUNK_BYTES),
+    // keyed by channel + path; every piece but the last is a whole number of
+    // base64 groups, so the strings just concatenate.
+    const downloadChunks = new Map<string, string[]>();
+
     const onmessage = (event: MessageEvent) => {
-      const data = JSON.parse(event.data);
+      let data = JSON.parse(event.data);
+      if (data.type === "fileDownloadChunk") {
+        const key = `${data.cid}\n${data.path}`;
+        if (data.offset === 0) downloadChunks.set(key, []);
+        const pieces = downloadChunks.get(key);
+        if (!pieces) return;
+        pieces.push(data.data);
+        if (!data.done) return;
+        downloadChunks.delete(key);
+        data = { type: "fileDownloadData", cid: data.cid, path: data.path, data: pieces.join("") };
+      }
 
       // Broadcast, not tied to any one session - show it regardless of which
       // tab is active, and regardless of which tab's socket it arrived on
@@ -9693,8 +9720,8 @@ function AppInner() {
     );
   };
 
-  // Uploads travel base64-encoded in a single WebSocket message; anything
-  // above the gateway's maxPayload would make it drop the whole connection.
+  // The connector refuses anything bigger. Gateways without "chunkedUpload"
+  // also take the whole file as one WebSocket message, capped by maxPayload.
   const rejectOversizedUpload = (file: File): boolean => {
     if (file.size <= MAX_UPLOAD_BYTES) return false;
     appendLog({ text: t("fileBrowser.tooLarge", { mb: String(MAX_UPLOAD_BYTES >> 20) }), kind: "error" });
@@ -9704,17 +9731,24 @@ function AppInner() {
   const handleFileBrowserUpload = (file: File) => {
     if (!fileBrowserTarget) return;
     if (rejectOversizedUpload(file)) return;
-    const channelId = fileBrowserTarget.channelId;
-    const targetPath = ftJoinPath(fileBrowserPath, file.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string; // data:*/*;base64,AAAA...
-      const base64 = result.slice(result.indexOf(",") + 1);
-      socketRef.current?.send(
-        JSON.stringify({ type: "uploadFile", channelId, path: targetPath, dataBase64: base64 })
-      );
-    };
-    reader.readAsDataURL(file);
+    void sendUpload(fileBrowserTarget.channelId, ftJoinPath(fileBrowserPath, file.name), file);
+  };
+
+  // Small pieces keep the gateway from holding a whole file (several times
+  // over) in memory. 192 KiB is a multiple of 3, so each piece base64-encodes
+  // on its own without padding.
+  const sendUpload = async (channelId: number, path: string, file: File) => {
+    const socket = socketRef.current;
+    if (!gatewayFeatures.has("chunkedUpload")) {
+      socket?.send(JSON.stringify({ type: "uploadFile", channelId, path, dataBase64: await readBase64(file) }));
+      return;
+    }
+    const chunkBytes = 192 * 1024;
+    // offset === 0 still sends one (empty) piece for an empty file.
+    for (let offset = 0; offset === 0 || offset < file.size; offset += chunkBytes) {
+      const data = await readBase64(file.slice(offset, offset + chunkBytes));
+      socket?.send(JSON.stringify({ type: "uploadFileChunk", channelId, path, offset, total: file.size, data }));
+    }
   };
 
   const handleShowServerIcons = () => {
@@ -9733,15 +9767,7 @@ function AppInner() {
 
   const handleServerIconUpload = (iconId: number, file: File) => {
     if (rejectOversizedUpload(file)) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.slice(result.indexOf(",") + 1);
-      socketRef.current?.send(
-        JSON.stringify({ type: "uploadFile", channelId: 0, path: `/icon_${iconId}`, dataBase64: base64 })
-      );
-    };
-    reader.readAsDataURL(file);
+    void sendUpload(0, `/icon_${iconId}`, file);
   };
 
   const handleServerIconDelete = (entry: FileListEntry) => {

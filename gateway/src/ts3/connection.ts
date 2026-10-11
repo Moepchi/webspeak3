@@ -205,7 +205,7 @@ export type Ts3ConnectionEvent =
   | { type: "serverGroupList"; entries: GroupEntry[] }
   | { type: "permissionOverview"; entries: PermissionOverviewEntry[] }
   | { type: "fileList"; cid: number; path: string; entries: FileListEntry[] }
-  | { type: "fileDownloadData"; cid: number; path: string; data: string }
+  | { type: "fileDownloadChunk"; cid: number; path: string; offset: number; data: string; done: boolean }
   | { type: "fileUploadDone"; cid: number; path: string }
   | { type: "permList"; scope: PermScope; id1: number; id2: number | null; entries: PermissionOverviewEntry[] }
   | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] }
@@ -451,7 +451,7 @@ export class Ts3Connection {
               entries: { name: string; description: string; value: number; negated: boolean; skip: boolean }[];
             }
           | { type: "fileList"; cid: number; path: string; entries: FileListEntry[] }
-          | { type: "fileDownloadData"; cid: number; path: string; data: string }
+          | { type: "fileDownloadChunk"; cid: number; path: string; offset: number; data: string; done: boolean }
           | { type: "fileUploadDone"; cid: number; path: string }
           | { type: "permList"; scope: PermScope; id1: number; id2: number | null; entries: PermissionOverviewEntry[] }
           | { type: "permissionCatalog"; entries: PermissionCatalogEntry[] }
@@ -822,6 +822,17 @@ export class Ts3Connection {
   async uploadFile(channelId: number, path: string, dataBase64: string): Promise<void> {
     const sanitizedPath = path.replace(/[\r\n\t]+/g, " ").trim();
     this.writeLine(`ftupload ${channelId}\t${sanitizedPath}\t${dataBase64}`);
+  }
+
+  /** One piece of a chunked upload (see "chunkedUpload" in GATEWAY_FEATURES).
+   *  Pieces must arrive in order; offset 0 starts the upload and the piece
+   *  that reaches `total` sends it. Keeps every message small, unlike
+   *  uploadFile above, which only stays for clients from before the split. */
+  async uploadFileChunk(channelId: number, path: string, offset: number, total: number, dataBase64: string): Promise<void> {
+    if (![channelId, offset, total].every(Number.isSafeInteger)) return;
+    if (typeof dataBase64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64)) return;
+    const sanitizedPath = path.replace(/[\r\n\t]+/g, " ").trim();
+    this.writeLine(`ftuploadchunk ${channelId}\t${offset}\t${total}\t${sanitizedPath}\t${dataBase64}`);
   }
 
   async sendChatMessage(message: string): Promise<void> {

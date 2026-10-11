@@ -100,9 +100,11 @@ const connectionsPerIp = new Map<string, number>();
 const CONNECT_RATE_LIMIT = Number(process.env.CONNECT_RATE_LIMIT ?? 30);
 const isConnectRateLimited = createRateLimiter(CONNECT_RATE_LIMIT, 60_000);
 
-// Largest single WS message: file uploads travel base64-encoded inside one,
-// so this is ~4/3 of the biggest uploadable file (see MAX_UPLOAD_BYTES in
-// web/src/App.tsx). ws's own default is 100 MiB.
+// Largest single WS message. Uploads now arrive in small "uploadFileChunk"
+// pieces; this size only stays for browsers still running a client from
+// before that, which send the whole file base64-encoded in one "uploadFile"
+// message (~4/3 of MAX_UPLOAD_BYTES in web/src/App.tsx). ws's own default is
+// 100 MiB.
 const WS_MAX_PAYLOAD = 34 * 1024 * 1024;
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -118,7 +120,7 @@ const WEB_DIST = process.env.WEB_DIST ?? path.resolve(__dirname, "../../web/dist
 const SERVE_STATIC = process.env.WEB_STATIC !== "0";
 
 // Sent to every browser in the "hello" message on socket open; see there.
-const GATEWAY_FEATURES = ["clientVolume", "keepalive"];
+const GATEWAY_FEATURES = ["clientVolume", "keepalive", "chunkedUpload"];
 
 // Optional TURN relay for screen streams, also handed out in "hello". With
 // TURN_SECRET (coturn's use-auth-secret) every socket gets its own credential,
@@ -992,6 +994,10 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
       }
       case "uploadFile": {
         await connection?.uploadFile(msg.channelId, msg.path, msg.dataBase64);
+        break;
+      }
+      case "uploadFileChunk": {
+        await connection?.uploadFileChunk(msg.channelId, msg.path, msg.offset, msg.total, msg.data);
         break;
       }
       case "getPermissionCatalog": {
