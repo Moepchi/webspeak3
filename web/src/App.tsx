@@ -8000,14 +8000,17 @@ function AppInner() {
           // detach and run the drop handling right away.
           socket.onmessage = socket.onerror = socket.onclose = null;
           socket.close();
+          logClient("warning", "Connection", `No keepalive from the gateway for ${KEEPALIVE_TIMEOUT_MS / 1000} s`);
           current().onclose();
         }, KEEPALIVE_TIMEOUT_MS);
       }
       if (event.data !== KEEPALIVE_MESSAGE) current().onmessage(event);
     };
     socket.onerror = () => current().onerror();
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       clearTimeout(watchdog);
+      // 1000/1001 are clean closes; 1006 means the link died without a close frame.
+      logClient("info", "Connection", `Gateway connection closed (code ${event.code ?? "?"})`);
       current().onclose();
     };
   };
@@ -8113,12 +8116,23 @@ function AppInner() {
   // network blip, or the page coming back from being backgrounded/suspended
   // — without disturbing which tab is active or losing chat/scroll history.
   const reconnectSession = (sessionId: string) => {
-    const params = sessionParamsRef.current.get(sessionId);
+    let params = sessionParamsRef.current.get(sessionId);
     const rec = sessionsRef.current.get(sessionId);
     if (!params || !rec) return;
     // Already open or mid-(re)connect — nothing to do.
     if (rec.socket && rec.socket.readyState !== WebSocket.CLOSED && rec.socket.readyState !== WebSocket.CLOSING) {
       return;
+    }
+
+    // Come back in the channel we were in, like the native client does. Kept
+    // in the params so a failed attempt (empty client list) still aims there.
+    const isActive = sessionId === activeSessionIdRef.current;
+    const state = isActive ? { clients, ownClientId } : rec.parked;
+    const lastChannel = state?.clients.find((c) => c.id === state.ownClientId)?.channel;
+    if (lastChannel) {
+      const cachedPassword = isActive ? channelPasswordCacheRef.current.get(lastChannel) : undefined;
+      params = { ...params, defaultChannel: `/${lastChannel}`, channelPassword: cachedPassword ?? params.channelPassword };
+      sessionParamsRef.current.set(sessionId, params);
     }
 
     logClient("info", "Connection", `Reconnecting to ${params.host}…`);
