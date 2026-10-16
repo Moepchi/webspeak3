@@ -234,11 +234,11 @@ fn parse_codec_encryption_mode(s: &str) -> Option<CodecEncryptionMode> {
 /// Human-facing entries for the Server tab's log-style notifications
 /// (client join/leave/switch, channel group assignment, channel/server
 /// changes, own permission errors) - mirrors what the native TS3 client
-/// shows inline in the server chat. `rename_all = "camelCase"` covers both
-/// the `kind` tag values and field names, so this needs no remapping on the
+/// shows inline in the server chat. `rename_all` covers the `kind` tag values
+/// and `rename_all_fields` the field names, so this needs no remapping on the
 /// gateway side (unlike the snake_case variants below).
 #[derive(Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 enum ServerLogEntry {
 	ClientJoin { client: String, channel: String },
 	ClientLeave { client: String },
@@ -3192,6 +3192,19 @@ mod tests {
 
 	fn chunk(offset: u64, total: u64, data: &[u8]) -> String {
 		format!("7\t{offset}\t{total}\t/a b.txt\t{}", base64::engine::general_purpose::STANDARD.encode(data))
+	}
+
+	#[test]
+	fn server_log_fields_are_camel_case() {
+		let entry = ServerLogEntry::ClientChannelSwitch {
+			client: "a".into(),
+			from_channel: "b".into(),
+			to_channel: "c".into(),
+		};
+		assert_eq!(
+			serde_json::to_string(&entry).unwrap(),
+			r#"{"kind":"clientChannelSwitch","client":"a","fromChannel":"b","toChannel":"c"}"#
+		);
 	}
 
 	#[test]
