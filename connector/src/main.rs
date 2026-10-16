@@ -1148,6 +1148,10 @@ async fn run(args: Args) -> Result<()> {
 	loop {
 		let mut events = con.events();
 		let outcome = tokio::select! {
+			// After a stall (e.g. CPU steal) the missed audio ticks fire in a burst.
+			// Polling in order drains the queued packets first, otherwise a tick can
+			// find an empty queue and play Opus loss concealment instead.
+			biased;
 			line = stdin_lines.next_line() => LoopOutcome::StdinLine(line),
 			ev = events.next() => LoopOutcome::ConEvent(ev),
 			_ = audio_ticker.tick() => LoopOutcome::AudioTick,
