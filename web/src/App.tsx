@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import "./App.css";
+// After App.css: its :where() base variables have the same (zero) specificity.
+import "./styles/ide.css";
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -396,7 +398,7 @@ const DESIGN_THEME_KEY = "webspeak3:design-theme";
 const DESIGN_SELECTION_KEY = "webspeak3:design-selection";
 const CUSTOM_THEMES_KEY = "webspeak3:custom-themes";
 
-type DesignTheme = "standard" | "nova" | "greenteaspeak" | "pulse";
+type DesignTheme = "standard" | "nova" | "greenteaspeak" | "pulse" | "ide";
 
 /** A user-authored theme package: a name, which built-in layout it behaves like
  *  (Standard's plain chrome, Nova's collapsed menu/splash, GreenTeaSpeak shell,
@@ -436,7 +438,9 @@ const STORE_ADMIN_TOKEN_KEY = "webspeak3:store-admin-token";
 const STORE_SCREENSHOT_MAX_DATA_URL_LENGTH = 400_000;
 
 function isDesignTheme(value: string): value is DesignTheme {
-  return value === "standard" || value === "nova" || value === "greenteaspeak" || value === "pulse";
+  return (
+    value === "standard" || value === "nova" || value === "greenteaspeak" || value === "pulse" || value === "ide"
+  );
 }
 
 function loadDesignTheme(): DesignTheme {
@@ -455,6 +459,7 @@ function resolveDesignThemeBase(selection: string, customThemes: CustomTheme[]):
 function designThemeClassName(theme: DesignTheme): string {
   if (theme === "nova") return " ts-design-nova";
   if (theme === "pulse") return " ts-design-pulse";
+  if (theme === "ide") return " ts-design-ide";
   if (isGreenteaSpeakTheme(theme)) return " ts-design-greenteaspeak";
   return "";
 }
@@ -463,6 +468,7 @@ function designThemeLabel(theme: DesignTheme, t: (key: string) => string): strin
   if (theme === "nova") return t("design.theme.nova");
   if (theme === "greenteaspeak") return t("design.theme.greenteaspeak");
   if (theme === "pulse") return t("design.theme.pulse");
+  if (theme === "ide") return t("design.theme.ide");
   return t("design.theme.standard");
 }
 
@@ -1335,12 +1341,24 @@ function SpeakingNowBar({
   talkers,
   ownClientId,
   images,
+  serverGroups,
+  selectedClientId,
+  onSelect,
+  onOpenPrivateChat,
+  onContextMenu,
 }: {
   clients: ClientInfo[];
   talkers: Set<number>;
   ownClientId: number | null;
   images: Record<string, string>;
+  /** IDE layout only: render group tags and a mic status next to the name. */
+  serverGroups?: GroupEntry[] | null;
+  selectedClientId: number | null;
+  onSelect: (clientId: number) => void;
+  onOpenPrivateChat: (clientId: number, clientName: string) => void;
+  onContextMenu: (e: React.MouseEvent, clientId: number, clientName: string, isSelf: boolean) => void;
 }) {
+  const t = useT();
   const own = clients.find((c) => c.id === ownClientId);
   if (!own) return null;
   const channelClients = clients.filter((c) => c.channel === own.channel);
@@ -1351,11 +1369,54 @@ function SpeakingNowBar({
       {channelClients.map((c) => (
         <div
           key={c.id}
-          className={`ts-speaking-now-tile${talkers.has(c.id) ? " ts-speaking-now-tile-active" : ""}`}
+          className={`ts-speaking-now-tile${talkers.has(c.id) ? " ts-speaking-now-tile-active" : ""}${
+            c.id === selectedClientId ? " ts-speaking-now-tile-selected" : ""
+          }`}
           title={c.name}
+          onClick={() => onSelect(c.id)}
+          onDoubleClick={c.id === ownClientId ? undefined : () => onOpenPrivateChat(c.id, c.name)}
+          onContextMenu={(e) => onContextMenu(e, c.id, c.name, c.id === ownClientId)}
         >
           <AvatarTile client={c} images={images} className="ts-speaking-now-avatar" isSelf={c.id === ownClientId} />
-          <span className="ts-speaking-now-name">{c.name}</span>
+          {serverGroups === undefined ? (
+            <span className="ts-speaking-now-name">{c.name}</span>
+          ) : (
+            <div className="ts-speaking-now-body">
+              <div className="ts-speaking-now-head">
+                <span className="ts-speaking-now-name">{c.name}</span>
+                {talkers.has(c.id) ? (
+                  <span className="ts-speaking-now-bars" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                ) : (
+                  (c.inputMuted || !c.inputHardwareEnabled) && (
+                    <TalkLamp talking={false} inputMuted={c.inputMuted} inputHardwareEnabled={c.inputHardwareEnabled} />
+                  )
+                )}
+              </div>
+              <div className="ts-speaking-now-groups">
+                {c.serverGroups
+                  .map((gid) => serverGroups?.find((g) => g.id === gid))
+                  .filter((g): g is GroupEntry => !!g)
+                  .map((g) => (
+                    <span
+                      key={g.id}
+                      className="ts-speaking-now-group"
+                      style={{ "--group-color": g.iconId ? groupBadgeColor(g.iconId) : "#71717a" } as React.CSSProperties}
+                    >
+                      {g.name}
+                    </span>
+                  ))}
+              </div>
+              {(c.away || c.outputMuted) && (
+                <div className="ts-speaking-now-status">
+                  {c.away ? `${t("tree.away")}${c.awayMessage ? `: ${c.awayMessage}` : ""}` : t("tree.soundMuted")}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -5549,6 +5610,7 @@ function DesignPanel({
       desc: t("design.theme.greenteaspeak.desc"),
     },
     { id: "pulse", name: t("design.theme.pulse"), desc: t("design.theme.pulse.desc") },
+    { id: "ide", name: t("design.theme.ide"), desc: t("design.theme.ide.desc") },
   ];
 
   const handleSaveEditing = () => {
@@ -5622,6 +5684,7 @@ function DesignPanel({
             <option value="nova">{t("design.theme.nova")}</option>
             <option value="greenteaspeak">{t("design.theme.greenteaspeak")}</option>
             <option value="pulse">{t("design.theme.pulse")}</option>
+            <option value="ide">{t("design.theme.ide")}</option>
           </select>
         </label>
         <label className="ts-options-field">
@@ -9889,6 +9952,8 @@ function AppInner() {
       ? serverClientsOnline + (showServerQueryClients ? queryClientCount : 0)
       : treeClients.length;
   const novaSplash = designTheme === "nova" && !connected;
+  // Nova and IDE collapse the menubar behind a hamburger button.
+  const compactMenu = designTheme === "nova" || designTheme === "ide";
   const micLabel = !micOn ? t("toolbar.micEnable") : inputMuted ? t("toolbar.micUnmute") : t("toolbar.micMute");
   const streamLabel = DEMO_MODE
     ? t("publish.demoUnavailable")
@@ -9914,8 +9979,8 @@ function AppInner() {
         </div>
       )}
       <div className="ts-menubar">
-        <div className={designTheme === "nova" ? "ts-nova-menu-dropdown" : undefined} ref={novaMenuRef}>
-        {designTheme === "nova" && (
+        <div className={compactMenu ? "ts-nova-menu-dropdown" : undefined} ref={novaMenuRef}>
+        {compactMenu && (
           <button
             className="ts-icon-button ts-nova-menu-toggle"
             onClick={() => setNovaMenuOpen((v) => !v)}
@@ -9926,7 +9991,7 @@ function AppInner() {
           </button>
         )}
         <div
-          className={`ts-menubar-items${designTheme === "nova" ? " ts-nova-menu-panel" : ""}${
+          className={`ts-menubar-items${compactMenu ? " ts-nova-menu-panel" : ""}${
             novaMenuOpen ? " ts-nova-menu-panel-open" : ""
           }`}
         >
@@ -11730,12 +11795,24 @@ function AppInner() {
         <div className="ts-resize-handle-horizontal" onMouseDown={startUpperResize} />
 
         <div className="ts-chat-panel">
-          {connected && designTheme === "pulse" && (
+          {connected && designTheme === "ide" && (
+            <div className="ts-ide-breadcrumb">
+              {serverName || host}
+              {" / "}
+              <span>{channels.find((c) => c.id === ownClient?.channel)?.name ?? ""}</span>
+            </div>
+          )}
+          {connected && (designTheme === "pulse" || designTheme === "ide") && (
             <SpeakingNowBar
               clients={treeClients}
               talkers={displayTalkers}
               ownClientId={ownClient?.id ?? null}
               images={serverIconImages}
+              serverGroups={designTheme === "ide" ? serverGroups : undefined}
+              selectedClientId={selected?.type === "client" ? selected.id : null}
+              onSelect={(id) => handleSelectItem({ type: "client", id })}
+              onOpenPrivateChat={handleOpenPrivateChat}
+              onContextMenu={handleClientContextMenu}
             />
           )}
           <div className="ts-chat-messages">

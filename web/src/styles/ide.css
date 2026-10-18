@@ -1,0 +1,674 @@
+/* Command Center (IDE style): explorer | voice grid + terminal | inspector,
+   flat zinc/emerald, always dark regardless of the light/dark toggle.
+   Variables sit in :where() so custom themes can override them; component
+   rules use .ts-app.ts-design-ide like Pulse does, so they beat App.css
+   without !important. Imported right after App.css in App.tsx - the order
+   matters for the zero-specificity block. */
+
+:where(.ts-app.ts-design-ide) {
+  --ide-mono: "Fira Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+  --ide-panel: #18181b;
+  --ide-faint: #71717a;
+  --ide-accent-bg: rgba(16, 185, 129, 0.1);
+
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+
+  --bg: #09090b;
+  --bg-toolbar-1: #18181b;
+  --bg-toolbar-2: #18181b;
+  --border: #27272a;
+  --border-soft: #27272a;
+  --text: #e4e4e7;
+  --text-muted: #a1a1aa;
+  --text-faint: #71717a;
+  --accent: #10b981;
+  --success: #10b981;
+  --input-bg: #09090b;
+  --input-text: #e4e4e7;
+  --button-bg-1: #18181b;
+  --button-bg-2: #18181b;
+  --button-bg-hover-1: #27272a;
+  --button-bg-hover-2: #27272a;
+  --row-hover: #27272a;
+  --client-text: #a1a1aa;
+  --self-text: #10b981;
+  --log-bg: #09090b;
+}
+
+.ts-app.ts-design-ide ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.ts-app.ts-design-ide ::-webkit-scrollbar-track {
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+}
+
+.ts-app.ts-design-ide ::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border: 2px solid var(--bg);
+}
+
+.ts-app.ts-design-ide *:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* ---------- Header: menubar + toolbar + connection tabs ---------- */
+
+/* No own row for the menubar: the hamburger floats into the toolbar row */
+.ts-app.ts-design-ide > .ts-menubar {
+  position: relative;
+  z-index: 20;
+  height: 0;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+}
+
+.ts-app.ts-design-ide > .ts-menubar .ts-nova-menu-dropdown {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+}
+
+.ts-app.ts-design-ide > .ts-toolbar {
+  padding-right: 3rem;
+}
+
+.ts-app.ts-design-ide > .ts-toolbar {
+  background: var(--ide-panel);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.ts-app.ts-design-ide .ts-icon-button {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+.ts-app.ts-design-ide .ts-icon-button:hover {
+  background: var(--row-hover);
+  color: #fff;
+}
+
+.ts-app.ts-design-ide .gts-connection-tabs {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--ide-mono);
+  font-size: 12px;
+}
+
+.ts-app.ts-design-ide .gts-connection-tab {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text-muted);
+}
+
+.ts-app.ts-design-ide .gts-connection-tab-active {
+  background: var(--ide-panel);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* ---------- Body: explorer | center | inspector ---------- */
+
+.ts-app.ts-design-ide > .ts-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 18rem;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* Flatten the Standard "upper row" so tree and info panel become grid cells */
+.ts-app.ts-design-ide .ts-upper {
+  display: contents;
+}
+
+.ts-app.ts-design-ide .ts-resize-handle-vertical,
+.ts-app.ts-design-ide .ts-resize-handle-horizontal {
+  display: none;
+}
+
+.ts-app.ts-design-ide .ts-tree-panel,
+.ts-app.ts-design-ide .ts-side-panel {
+  grid-row: 1;
+  overflow-y: auto;
+  background: var(--ide-panel);
+}
+
+.ts-app.ts-design-ide .ts-tree-panel {
+  grid-column: 1;
+  overflow-x: hidden;
+  min-width: 16rem;
+  padding: 0 0 0.5rem;
+  border-right: 1px solid var(--border);
+  font-family: var(--ide-mono);
+  font-size: 12px;
+}
+
+.ts-app.ts-design-ide .ts-side-panel {
+  grid-column: 3;
+  border-left: 1px solid var(--border);
+  font-family: var(--ide-mono);
+  font-size: 11px;
+}
+
+.ts-app.ts-design-ide .ts-chat-panel {
+  grid-column: 2;
+  grid-row: 1;
+  background: var(--bg);
+}
+
+/* Section headers like an IDE side bar */
+.ts-app.ts-design-ide .ts-tree-panel::before,
+.ts-app.ts-design-ide .ts-side-panel::before {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 2rem;
+  padding: 0 1rem;
+  margin-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--ide-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ide-faint);
+}
+
+.ts-app.ts-design-ide .ts-tree-panel::before {
+  content: "Explorer";
+}
+
+.ts-app.ts-design-ide .ts-side-panel::before {
+  content: "Inspector";
+  margin-bottom: 0;
+}
+
+.ts-app.ts-design-ide .ts-tree-panel > * {
+  margin-left: 0.5rem;
+  margin-right: 0.5rem;
+}
+
+.ts-app.ts-design-ide .ts-row {
+  border-radius: 0;
+}
+
+.ts-app.ts-design-ide .ts-row-selected {
+  background: var(--ide-accent-bg);
+  color: var(--text);
+}
+
+/* Explorer tree as in the mockup: carets and dots instead of folder/server icons and orbs */
+.ts-app.ts-design-ide .ts-server-row > svg,
+.ts-app.ts-design-ide .ts-channel-row > svg {
+  display: none;
+}
+
+.ts-app.ts-design-ide .ts-server-row {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.ts-app.ts-design-ide .ts-server-row::before {
+  content: "\25BE";
+  color: var(--ide-faint);
+}
+
+.ts-app.ts-design-ide .ts-row {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.ts-app.ts-design-ide .ts-channel-row {
+  color: var(--text-muted);
+}
+
+.ts-app.ts-design-ide .ts-channel-row:has(+ .ts-tree-list .ts-self) {
+  color: var(--text);
+  background: rgba(39, 39, 42, 0.5);
+}
+
+.ts-app.ts-design-ide .ts-tree-expander span {
+  border-top-color: var(--ide-faint);
+}
+
+.ts-app.ts-design-ide .ts-tree-expander-collapsed span {
+  border-top-color: transparent;
+  border-left-color: var(--ide-faint);
+}
+
+.ts-app.ts-design-ide .ts-client-row.ts-self {
+  font-weight: 400;
+}
+
+.ts-app.ts-design-ide .ts-client-row.ts-talking {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: rgba(16, 185, 129, 0.05);
+  color: var(--text);
+}
+
+.ts-app.ts-design-ide .ts-talk-lamp-idle,
+.ts-app.ts-design-ide .ts-talk-lamp-talking {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  margin: 0 4px;
+  background: #52525b;
+  box-shadow: none;
+}
+
+.ts-app.ts-design-ide .ts-talk-lamp-talking {
+  background: var(--accent);
+}
+
+.ts-app.ts-design-ide .ts-talk-lamp-talking::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: ts-ide-ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes ts-ide-ping {
+  75%,
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* The narrow explorer must not squeeze the name away in favour of the away message */
+.ts-app.ts-design-ide .ts-client-row .ts-tree-label {
+  flex-shrink: 0;
+}
+
+.ts-app.ts-design-ide .ts-client-away-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ts-app.ts-design-ide .ts-talk-lamp-muted {
+  opacity: 0.7;
+}
+
+.ts-app.ts-design-ide .ts-tree-search {
+  font-family: var(--ide-mono);
+  border-radius: 0;
+}
+
+/* Inspector content */
+.ts-app.ts-design-ide .ts-info-panel {
+  padding: 1rem;
+}
+
+.ts-app.ts-design-ide .ts-info-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ts-app.ts-design-ide .ts-info-row {
+  color: var(--text-muted);
+}
+
+.ts-app.ts-design-ide .ts-info-connection-link {
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+/* ---------- Center: breadcrumb, voice grid, terminal ---------- */
+
+.ts-app.ts-design-ide .ts-ide-breadcrumb {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 2rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--ide-mono);
+  font-size: 12px;
+  color: var(--ide-faint);
+}
+
+.ts-app.ts-design-ide .ts-ide-breadcrumb span {
+  color: var(--text);
+}
+
+.ts-app.ts-design-ide .ts-speaking-now {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  align-content: start;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-tile {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  overflow: hidden;
+  background: var(--ide-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-tile:hover,
+.ts-app.ts-design-ide .ts-speaking-now-tile-active {
+  opacity: 1;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-tile-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 12px rgba(16, 185, 129, 0.35);
+}
+
+/* Speaking glow along the top edge */
+.ts-app.ts-design-ide .ts-speaking-now-tile-active::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.8);
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--ide-mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-name {
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-tile-active .ts-speaking-now-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-head .ts-talk-lamp-muted {
+  opacity: 0.6;
+}
+
+/* Little audio visualizer for the speaker */
+.ts-app.ts-design-ide .ts-speaking-now-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-bars i {
+  width: 4px;
+  height: 100%;
+  background: var(--accent);
+  animation: ts-ide-bar 0.8s ease-in-out infinite alternate;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-bars i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-bars i:nth-child(3) {
+  animation-delay: -0.55s;
+}
+
+@keyframes ts-ide-bar {
+  from {
+    height: 25%;
+  }
+  to {
+    height: 100%;
+  }
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-group {
+  padding: 0 0.25rem;
+  border: 1px solid var(--group-color);
+  background: color-mix(in srgb, var(--group-color) 10%, transparent);
+  color: color-mix(in srgb, var(--group-color) 75%, #fff);
+  font-family: var(--ide-mono);
+  font-size: 9px;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-tile {
+  cursor: pointer;
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-tile-selected {
+  border-color: var(--text-muted);
+  background: #1f1f23;
+  opacity: 1;
+}
+
+/* Speaking wins over selected */
+.ts-app.ts-design-ide .ts-speaking-now-tile-selected.ts-speaking-now-tile-active {
+  border-color: var(--accent);
+}
+
+.ts-app.ts-design-ide .ts-speaking-now-status {
+  margin-top: 0.375rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ide-mono);
+  font-size: 11px;
+  color: var(--ide-faint);
+}
+
+/* Terminal: fixed-height bottom pane once the voice grid is above it */
+.ts-app.ts-design-ide .ts-chat-panel:has(.ts-speaking-now) .ts-chat-messages {
+  flex: 0 0 11rem;
+}
+
+.ts-app.ts-design-ide .ts-chat-tabs {
+  order: 1;
+  gap: 1.5rem;
+  padding: 0.5rem 1rem 0;
+  background: var(--ide-panel);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.ts-app.ts-design-ide .ts-chat-messages {
+  order: 2;
+  padding: 1rem;
+  background: var(--ide-panel);
+  font-family: var(--ide-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.ts-app.ts-design-ide .ts-chat-tab {
+  padding: 0 0 0.5rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-family: var(--ide-mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ide-faint);
+}
+
+.ts-app.ts-design-ide .ts-chat-tab:hover {
+  color: var(--text);
+}
+
+.ts-app.ts-design-ide .ts-chat-tab-active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.ts-app.ts-design-ide .ts-chat-from {
+  color: #d4d4d8;
+  font-weight: 500;
+}
+
+.ts-app.ts-design-ide .ts-chat-line-self .ts-chat-from {
+  color: var(--accent);
+}
+
+.ts-app.ts-design-ide .ts-chat-line-log {
+  color: #60a5fa;
+}
+
+.ts-app.ts-design-ide .ts-chat-bubble {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Prompt-style input */
+.ts-app.ts-design-ide .ts-chat-input-row {
+  order: 3;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 1rem;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  font-family: var(--ide-mono);
+}
+
+.ts-app.ts-design-ide .ts-chat-input-row::before {
+  content: "➜ ~/channel";
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 12px;
+  color: #60a5fa;
+}
+
+.ts-app.ts-design-ide .ts-chat-input-row textarea,
+.ts-app.ts-design-ide .ts-chat-input-row input {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-family: var(--ide-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ts-app.ts-design-ide .ts-chat-input-row button,
+.ts-app.ts-design-ide .ts-dialog button:not(.ts-icon-button) {
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Client log strip at the very bottom */
+.ts-app.ts-design-ide > .ts-log {
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  font-family: var(--ide-mono);
+}
+
+/* Narrow screens: stack instead of three columns */
+@media (max-width: 900px) {
+  .ts-app.ts-design-ide > .ts-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .ts-app.ts-design-ide .ts-tree-panel {
+    grid-column: 1;
+    grid-row: 1;
+    width: auto !important;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ts-app.ts-design-ide .ts-side-panel {
+    display: none;
+  }
+
+  .ts-app.ts-design-ide .ts-chat-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ts-app.ts-design-ide .ts-talk-lamp-talking::after,
+  .ts-app.ts-design-ide .ts-speaking-now-bars i {
+    animation: none;
+  }
+}

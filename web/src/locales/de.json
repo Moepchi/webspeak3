@@ -276,6 +276,8 @@
   "design.theme.greenteaspeak.desc": "Klassisches GreenTeaSpeak-Client-Layout mit dunklen Panels und goldener Menüleiste.",
   "design.theme.pulse": "Pulse",
   "design.theme.pulse.desc": "Karten-Layout mit Breadcrumb-Leiste und farbigem Akzent.",
+  "design.theme.ide": "Command Center",
+  "design.theme.ide.desc": "Technisches, flaches Layout im IDE-Stil für Power-User.",
   "design.status.connected": "Verbunden",
   "design.custom.new": "+ Neues Design",
   "design.custom.import": "Design importieren",
