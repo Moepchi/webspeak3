@@ -2004,6 +2004,19 @@
   padding-left: 1.1rem;
 }
 
+/* Double-clicking UI controls (channels, users, tabs, menus) must not select text.
+   Chat, log and info panel stay selectable. */
+.ts-app :is(.ts-row, .ts-menubar, .ts-toolbar, .ts-chat-tabs, .gts-connection-tabs, .ts-speaking-now, button) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Safari would otherwise block typing/selecting in inputs inside those areas */
+.ts-app :is(input, textarea) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .ts-row {
   display: flex;
   align-items: center;
