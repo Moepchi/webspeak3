@@ -132,6 +132,7 @@ import {
   loadSoundsEnabled,
   loadSoundsVolume,
   playSound,
+  setSoundStyle,
   saveCustomSound,
   saveEventSoundEnabled,
   saveSoundsEnabled,
@@ -565,6 +566,7 @@ const AWAY_PRESETS_KEY = "webspeak3:away-presets";
 /** "off" hides the server banner: it loads from whatever host the server
  *  admin picked, which then sees the viewer's IP (review S12). */
 const SERVER_BANNER_KEY = "webspeak3:server-banner";
+const IDE_PIXEL_FONT_KEY = "webspeak3:ide-pixel-font";
 // Off by default: an inline chat image loads from whatever host the sender picked.
 const CHAT_IMAGES_KEY = "webspeak3:chat-images";
 const DISCONNECT_MESSAGE_KEY = "webspeak3:disconnect-message";
@@ -5589,12 +5591,16 @@ function DesignPanel({
   customThemes,
   onSaveCustomTheme,
   onDeleteCustomTheme,
+  idePixelFont,
+  onIdePixelFontChange,
 }: {
   designSelection: string;
   onSelectionChange: (next: string) => void;
   customThemes: CustomTheme[];
   onSaveCustomTheme: (theme: CustomTheme) => void;
   onDeleteCustomTheme: (id: string) => void;
+  idePixelFont: boolean;
+  onIdePixelFontChange: (on: boolean) => void;
 }) {
   const t = useT();
   const [editing, setEditing] = useState<CustomThemeDraft | null>(null);
@@ -5712,6 +5718,12 @@ function DesignPanel({
     <>
       <h3>{t("options.section.design")}</h3>
       <p className="ts-options-subtitle">{t("design.subtitle")}</p>
+      {resolveDesignThemeBase(designSelection, customThemes) === "ide" && (
+        <label className="ts-options-checkbox">
+          <input type="checkbox" checked={idePixelFont} onChange={(e) => onIdePixelFontChange(e.target.checked)} />
+          {t("design.idePixelFont")}
+        </label>
+      )}
       <div className="ts-design-theme-grid">
         {builtins.map((th) => (
           <button
@@ -6347,6 +6359,8 @@ function OptionsDialog({
   customThemes,
   onSaveCustomTheme,
   onDeleteCustomTheme,
+  idePixelFont,
+  onIdePixelFontChange,
   showServerBanner,
   onShowServerBannerChange,
   chatImages,
@@ -6361,6 +6375,8 @@ function OptionsDialog({
   customThemes: CustomTheme[];
   onSaveCustomTheme: (theme: CustomTheme) => void;
   onDeleteCustomTheme: (id: string) => void;
+  idePixelFont: boolean;
+  onIdePixelFontChange: (on: boolean) => void;
   showServerBanner: boolean;
   onShowServerBannerChange: (on: boolean) => void;
   chatImages: boolean;
@@ -6412,6 +6428,8 @@ function OptionsDialog({
                 customThemes={customThemes}
                 onSaveCustomTheme={onSaveCustomTheme}
                 onDeleteCustomTheme={onDeleteCustomTheme}
+                idePixelFont={idePixelFont}
+                onIdePixelFontChange={onIdePixelFontChange}
               />
             ) : active.id === "nachrichten" ? (
               <NachrichtenPanel />
@@ -6749,6 +6767,7 @@ function AppInner() {
   const [serverLicenseId, setServerLicenseId] = useState(0);
   const [serverBannerUrl, setServerBannerUrl] = useState("");
   const [showServerBanner, setShowServerBanner] = useState(() => localStorage.getItem(SERVER_BANNER_KEY) !== "off");
+  const [idePixelFont, setIdePixelFont] = useState(() => localStorage.getItem(IDE_PIXEL_FONT_KEY) !== "off");
   const [chatImages, setChatImages] = useState(() => localStorage.getItem(CHAT_IMAGES_KEY) === "on");
   const [serverWelcomeMessage, setServerWelcomeMessage] = useState("");
   const [serverEditOpen, setServerEditOpen] = useState(false);
@@ -6849,6 +6868,7 @@ function AppInner() {
   // "greenteaspeak" behavior keeps working unchanged, whether that behavior
   // came from picking the builtin directly or from a custom theme on top of it.
   const designTheme: DesignTheme = resolveDesignThemeBase(designSelection, customThemes);
+  useEffect(() => setSoundStyle(designTheme === "ide" ? "ide" : "classic"), [designTheme]);
   const handleDesignSelectionChange = (next: string) => {
     setDesignSelection(next);
     localStorage.setItem(DESIGN_SELECTION_KEY, next);
@@ -8872,6 +8892,7 @@ function AppInner() {
       return;
     }
     socketRef.current?.send(JSON.stringify({ type: "setInputMuted", muted: !inputMutedRef.current }));
+    void playSound("mute");
   };
 
   // Enable the mic automatically on page load (voice activation still gates
@@ -9002,6 +9023,7 @@ function AppInner() {
 
   const handleToggleOutputMuted = () => {
     socketRef.current?.send(JSON.stringify({ type: "setOutputMuted", muted: !outputMutedRef.current }));
+    void playSound("mute");
   };
 
   // Connects the current mic (if any) into the active recording, so a device
@@ -9963,7 +9985,9 @@ function AppInner() {
     <div
       className={`ts-app ts-theme-${theme}${designThemeClassName(designTheme)}${
         activeCustomTheme ? " ts-design-custom" : ""
-      }${demoForceMobile ? " ts-force-mobile" : ""}${novaSplash ? " ts-nova-splash" : ""}`}
+      }${demoForceMobile ? " ts-force-mobile" : ""}${novaSplash ? " ts-nova-splash" : ""}${
+        designTheme === "ide" && !idePixelFont ? " ts-ide-plain-font" : ""
+      }`}
       data-custom-theme={activeCustomTheme?.id}
       data-design-theme={designTheme}
     >
@@ -11077,6 +11101,15 @@ function AppInner() {
           customThemes={customThemes}
           onSaveCustomTheme={handleSaveCustomTheme}
           onDeleteCustomTheme={handleDeleteCustomTheme}
+          idePixelFont={idePixelFont}
+          onIdePixelFontChange={(on) => {
+            setIdePixelFont(on);
+            try {
+              localStorage.setItem(IDE_PIXEL_FONT_KEY, on ? "on" : "off");
+            } catch {
+              /* private mode: setting just doesn't persist */
+            }
+          }}
           showServerBanner={showServerBanner}
           onShowServerBannerChange={(on) => {
             setShowServerBanner(on);

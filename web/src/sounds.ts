@@ -1,6 +1,14 @@
-export type SoundEventId = "connect" | "disconnect" | "clientJoin" | "clientLeave" | "message" | "poke";
+export type SoundEventId = "connect" | "disconnect" | "clientJoin" | "clientLeave" | "message" | "poke" | "mute";
 
-export const SOUND_EVENTS: SoundEventId[] = ["connect", "disconnect", "clientJoin", "clientLeave", "message", "poke"];
+export const SOUND_EVENTS: SoundEventId[] = ["connect", "disconnect", "clientJoin", "clientLeave", "message", "poke", "mute"];
+
+/** "ide" swaps the default chimes for synthetic terminal blips (Command Center layout). */
+type SoundStyle = "classic" | "ide";
+let soundStyle: SoundStyle = "classic";
+
+export function setSoundStyle(style: SoundStyle): void {
+  soundStyle = style;
+}
 
 const ENABLED_KEY = "webspeak3:sounds-enabled";
 const VOLUME_KEY = "webspeak3:sounds-volume";
@@ -141,8 +149,8 @@ class NotificationSoundPlayer {
     const { context, destination } = this.ensure();
     if (context.state === "suspended") context.resume().catch(() => {});
     const now = context.currentTime;
-    for (const note of synthNotes(event)) {
-      this.playNote(context, destination, now + note.delay, note.freq, note.duration, volume * note.gain);
+    for (const note of soundStyle === "ide" ? ideNotes(event) : synthNotes(event)) {
+      this.playNote(context, destination, now + note.delay, volume * note.gain, note);
     }
   }
 
@@ -150,13 +158,13 @@ class NotificationSoundPlayer {
     context: AudioContext,
     destination: AudioNode,
     startTime: number,
-    freq: number,
-    duration: number,
-    peakGain: number
+    peakGain: number,
+    { freq, endFreq, duration, type = "sine" }: SynthNote
   ): void {
     const osc = context.createOscillator();
-    osc.type = "sine";
-    osc.frequency.value = freq;
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+    if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, startTime + duration);
     const gain = context.createGain();
     gain.gain.setValueAtTime(0, startTime);
     gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.02);
@@ -169,7 +177,17 @@ class NotificationSoundPlayer {
 
 /** Soft, modern two/three-note chimes - a sine-wave, quick-attack/exponential-decay
  *  shape reads as gentle rather than the harsh square/saw beeps of classic UI sounds. */
-function synthNotes(event: SoundEventId): { delay: number; freq: number; duration: number; gain: number }[] {
+interface SynthNote {
+  delay: number;
+  freq: number;
+  /** Glide to this frequency over the note's duration. */
+  endFreq?: number;
+  duration: number;
+  gain: number;
+  type?: OscillatorType;
+}
+
+function synthNotes(event: SoundEventId): SynthNote[] {
   switch (event) {
     case "connect":
       return [
@@ -195,6 +213,40 @@ function synthNotes(event: SoundEventId): { delay: number; freq: number; duratio
         { delay: 0, freq: 987.77, duration: 0.1, gain: 0.5 },
         { delay: 0.12, freq: 987.77, duration: 0.1, gain: 0.5 },
       ];
+    case "mute":
+      return [{ delay: 0, freq: 660, duration: 0.06, gain: 0.3 }];
+  }
+}
+
+/** Command Center: short, dry, synthetic blips - square/triangle clicks and
+ *  quick arpeggios instead of soft chimes. Square waves are loud, so lower gains. */
+function ideNotes(event: SoundEventId): SynthNote[] {
+  switch (event) {
+    case "connect":
+      return [
+        { delay: 0, freq: 440, duration: 0.1, gain: 0.3 },
+        { delay: 0.1, freq: 554.37, duration: 0.1, gain: 0.3 },
+        { delay: 0.2, freq: 659.25, duration: 0.14, gain: 0.3 },
+      ];
+    case "disconnect":
+      return [{ delay: 0, freq: 200, endFreq: 50, duration: 0.2, gain: 0.45, type: "triangle" }];
+    case "clientJoin":
+      return [
+        { delay: 0, freq: 800, duration: 0.07, gain: 0.18 },
+        { delay: 0.1, freq: 800, duration: 0.07, gain: 0.18 },
+      ];
+    case "clientLeave":
+      return [{ delay: 0, freq: 600, endFreq: 400, duration: 0.09, gain: 0.18 }];
+    case "message":
+      return [{ delay: 0, freq: 1200, duration: 0.04, gain: 0.12, type: "square" }];
+    case "poke":
+      return [
+        { delay: 0, freq: 1000, duration: 0.05, gain: 0.12, type: "square" },
+        { delay: 0.08, freq: 1000, duration: 0.05, gain: 0.12, type: "square" },
+        { delay: 0.16, freq: 1000, duration: 0.05, gain: 0.12, type: "square" },
+      ];
+    case "mute":
+      return [{ delay: 0, freq: 300, endFreq: 50, duration: 0.04, gain: 0.15, type: "square" }];
   }
 }
 

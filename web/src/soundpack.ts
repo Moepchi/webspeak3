@@ -23,6 +23,7 @@ const EVENT_KEYWORDS: Record<SoundEventId, string[]> = {
   clientLeave: ["userleftchannel", "userleftvisibility", "clientleftview", "userleave", "userleft", "leave"],
   message: ["textmessagereceived", "chatmessage", "newmessage", "message"],
   poke: ["gotpoked", "poke"],
+  mute: ["micmuted", "microphonemuted", "micactivated", "microphoneactivated"],
 };
 
 function normalize(filename: string): string {

@@ -5,13 +5,36 @@
    without !important. Imported right after App.css in App.tsx - the order
    matters for the zero-specificity block. */
 
+/* Pixel terminal font, self-hosted (OFL) so no visitor IP goes to Google Fonts.
+   The file only downloads once an element actually uses it. */
+@font-face {
+  font-family: "VT323";
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/vt323-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "VT323";
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/vt323-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :where(.ts-app.ts-design-ide) {
-  --ide-mono: "Fira Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+  /* VT323 has no bold cut; faux-bold smears the pixels. */
+  font-synthesis-weight: none;
+  --ide-mono: VT323, "Fira Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+  --ide-font: var(--ide-mono);
   --ide-panel: #18181b;
   --ide-faint: #71717a;
   --ide-accent-bg: rgba(16, 185, 129, 0.1);
 
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--ide-font);
+  /* VT323 has a tiny x-height and narrow glyphs: scale it up and space it out. */
+  font-size-adjust: 0.55;
+  letter-spacing: 0.05em;
   font-size: 13px;
 
   --bg: #09090b;
@@ -56,6 +79,26 @@
   outline-offset: -1px;
 }
 
+/* Terminal font everywhere, beating base rules that pick their own family */
+.ts-app.ts-design-ide:not(.ts-ide-plain-font) :is(*, *::before, *::after) {
+  font-family: var(--ide-font);
+}
+
+/* Pixel font switched off in the design options: sans UI, regular mono for the terminal bits */
+.ts-app.ts-design-ide.ts-ide-plain-font {
+  --ide-mono: "Fira Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+  --ide-font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size-adjust: none;
+  letter-spacing: normal;
+  font-synthesis-weight: auto;
+}
+
+/* Form controls reset size adjust and spacing in the UA sheet instead of inheriting them */
+.ts-app.ts-design-ide :is(button, input, select, textarea) {
+  font-size-adjust: inherit;
+  letter-spacing: inherit;
+}
+
 /* ---------- Header: menubar + toolbar + connection tabs ---------- */
 
 /* No own row for the menubar: the hamburger floats into the toolbar row */
@@ -98,9 +141,9 @@
 }
 
 .ts-app.ts-design-ide .gts-connection-tabs {
+  font-family: var(--ide-mono);
   background: var(--bg);
   border-bottom: 1px solid var(--border);
-  font-family: var(--ide-mono);
   font-size: 12px;
 }
 
@@ -144,19 +187,19 @@
 }
 
 .ts-app.ts-design-ide .ts-tree-panel {
+  font-family: var(--ide-mono);
   grid-column: 1;
   overflow-x: hidden;
   min-width: 16rem;
   padding: 0 0 0.5rem;
   border-right: 1px solid var(--border);
-  font-family: var(--ide-mono);
   font-size: 12px;
 }
 
 .ts-app.ts-design-ide .ts-side-panel {
+  font-family: var(--ide-mono);
   grid-column: 3;
   border-left: 1px solid var(--border);
-  font-family: var(--ide-mono);
   font-size: 11px;
 }
 
@@ -169,6 +212,7 @@
 /* Section headers like an IDE side bar */
 .ts-app.ts-design-ide .ts-tree-panel::before,
 .ts-app.ts-design-ide .ts-side-panel::before {
+  font-family: var(--ide-mono);
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -176,7 +220,6 @@
   padding: 0 1rem;
   margin-bottom: 0.4rem;
   border-bottom: 1px solid var(--border);
-  font-family: var(--ide-mono);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.15em;
@@ -326,15 +369,16 @@
 }
 
 .ts-app.ts-design-ide .ts-info-connection-link {
+  letter-spacing: 0.05em;
   color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
   font-size: 10px;
 }
 
 /* ---------- Center: breadcrumb, voice grid, terminal ---------- */
 
 .ts-app.ts-design-ide .ts-ide-breadcrumb {
+  font-family: var(--ide-mono);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -342,7 +386,6 @@
   height: 2rem;
   padding: 0 1rem;
   border-bottom: 1px solid var(--border);
-  font-family: var(--ide-mono);
   font-size: 12px;
   color: var(--ide-faint);
 }
@@ -397,6 +440,7 @@
 }
 
 .ts-app.ts-design-ide .ts-speaking-now-avatar {
+  font-family: var(--ide-mono);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -407,7 +451,6 @@
   border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--bg);
-  font-family: var(--ide-mono);
   font-size: 18px;
   font-weight: 600;
   color: #fff;
@@ -492,11 +535,11 @@
 }
 
 .ts-app.ts-design-ide .ts-speaking-now-group {
+  font-family: var(--ide-mono);
   padding: 0 0.25rem;
   border: 1px solid var(--group-color);
   background: color-mix(in srgb, var(--group-color) 10%, transparent);
   color: color-mix(in srgb, var(--group-color) 75%, #fff);
-  font-family: var(--ide-mono);
   font-size: 9px;
   line-height: 1.5;
   text-transform: uppercase;
@@ -518,11 +561,11 @@
 }
 
 .ts-app.ts-design-ide .ts-speaking-now-status {
+  font-family: var(--ide-mono);
   margin-top: 0.375rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--ide-mono);
   font-size: 11px;
   color: var(--ide-faint);
 }
@@ -542,22 +585,22 @@
 }
 
 .ts-app.ts-design-ide .ts-chat-messages {
+  font-family: var(--ide-mono);
   order: 2;
   padding: 1rem;
   background: var(--ide-panel);
-  font-family: var(--ide-mono);
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-muted);
 }
 
 .ts-app.ts-design-ide .ts-chat-tab {
+  font-family: var(--ide-mono);
   padding: 0 0 0.5rem;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 0;
-  font-family: var(--ide-mono);
   font-size: 11px;
   font-weight: 400;
   letter-spacing: 0.08em;
@@ -595,13 +638,13 @@
 
 /* Prompt-style input */
 .ts-app.ts-design-ide .ts-chat-input-row {
+  font-family: var(--ide-mono);
   order: 3;
   align-items: center;
   gap: 0.5rem;
   padding: 0.3rem 1rem;
   background: var(--bg);
   border-top: 1px solid var(--border);
-  font-family: var(--ide-mono);
 }
 
 .ts-app.ts-design-ide .ts-chat-input-row::before {
@@ -614,30 +657,30 @@
 
 .ts-app.ts-design-ide .ts-chat-input-row textarea,
 .ts-app.ts-design-ide .ts-chat-input-row input {
+  font-family: var(--ide-mono);
   background: transparent;
   border: none;
   box-shadow: none;
-  font-family: var(--ide-mono);
   font-size: 12px;
   color: var(--text);
 }
 
 .ts-app.ts-design-ide .ts-chat-input-row button,
 .ts-app.ts-design-ide .ts-dialog button:not(.ts-icon-button) {
+  letter-spacing: 0.05em;
   border-radius: 4px;
   border: 1px solid var(--border);
   box-shadow: none;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 /* Client log strip at the very bottom */
 .ts-app.ts-design-ide > .ts-log {
+  font-family: var(--ide-mono);
   background: var(--bg);
   border-top: 1px solid var(--border);
-  font-family: var(--ide-mono);
 }
 
 /* Narrow screens: stack instead of three columns */
