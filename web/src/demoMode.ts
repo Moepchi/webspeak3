@@ -39,7 +39,12 @@ interface DemoClient {
 const DEMO_CHANNELS: DemoChannel[] = [
   { id: 1, parent: 0, order: 0, name: "Lobby", topic: "Welcome to the WebSpeak3 demo!", codec: "Opus Voice", maxClients: null, hasPassword: false },
   { id: 2, parent: 0, order: 1, name: "Gaming", topic: "", codec: "Opus Voice", maxClients: 10, hasPassword: false },
-  { id: 3, parent: 0, order: 2, name: "AFK", topic: "", codec: "Opus Voice", maxClients: null, hasPassword: false },
+  { id: 4, parent: 2, order: 0, name: "Squad 1", topic: "", codec: "Opus Voice", maxClients: 5, hasPassword: false },
+  { id: 5, parent: 2, order: 1, name: "Squad 2", topic: "", codec: "Opus Voice", maxClients: 5, hasPassword: false },
+  { id: 6, parent: 0, order: 2, name: "Music", topic: "Requests in chat", codec: "Opus Music", maxClients: null, hasPassword: false },
+  { id: 7, parent: 0, order: 3, name: "Talk", topic: "", codec: "Opus Voice", maxClients: null, hasPassword: false },
+  { id: 8, parent: 7, order: 0, name: "Meeting Room", topic: "Password: ask an admin", codec: "Opus Voice", maxClients: 8, hasPassword: true },
+  { id: 3, parent: 0, order: 4, name: "AFK", topic: "", codec: "Opus Voice", maxClients: null, hasPassword: false },
 ];
 
 const DEMO_CHANNEL_GROUPS = [
@@ -154,6 +159,30 @@ function demoPermKey(scope: string, id1: number, id2?: number): string {
 
 const SELF_ID = 101;
 
+// Random visitors that join, wander around, chat and leave again (see scriptServerLife).
+const DEMO_VISITOR_NAMES = ["Mia", "Noah", "Lena", "Kai", "Zoe", "Finn", "Ava", "Leo", "Ivy", "Max"];
+const DEMO_COUNTRIES = ["DE", "US", "GB", "FR", "NL", "PL", "SE", "CZ", ""];
+const DEMO_CHAT_LINES = [
+  "hey all",
+  "anyone up for a round later?",
+  "brb, getting coffee",
+  "lol",
+  "can you hear me?",
+  "gg",
+  "my mic was muted, sorry",
+  "back",
+  "who's hosting tonight?",
+  "check out https://github.com/Moepchi/webspeak3",
+];
+const DEMO_PM_LINES = [
+  "hey, got a sec?",
+  "you coming to Gaming later?",
+  "thanks for the help earlier!",
+  "can you move me to Gaming?",
+];
+
+const pick = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
+
 /**
  * Drop-in stand-in for a real WebSocket. Implements the subset of the
  * WebSocket interface App.tsx actually uses (onopen/onmessage/onerror/
@@ -170,8 +199,8 @@ export class DemoSocket {
   private closed = false;
   private timers: number[] = [];
   private selfChannel = 1;
-  private selfChannelGroup = 4;
-  private selfServerGroups = new Set<number>([4]);
+  private selfChannelGroup = 1;
+  private selfServerGroups = new Set<number>([1]);
 
   constructor() {
     this.after(400, () => {
@@ -206,6 +235,8 @@ export class DemoSocket {
 
   private after(ms: number, fn: () => void) {
     const id = window.setTimeout(() => {
+      // Drop fired ids so the looping talker script doesn't grow the list forever.
+      this.timers = this.timers.filter((t) => t !== id);
       if (this.closed) return;
       fn();
     }, ms);
@@ -234,6 +265,8 @@ export class DemoSocket {
           });
           this.after(150, () => this.sendChannels(nickname));
           this.scriptServerLog(nickname);
+          this.scriptTalkers();
+          this.after(6000, () => this.scriptServerLife());
         });
         break;
       }
@@ -258,7 +291,7 @@ export class DemoSocket {
         this.after(80, () => this.emit({ type: "serverMessage", from: this.lastNickname, message: msg.message }));
         break;
       case "sendPrivateMessage": {
-        const partner = DEMO_NPCS.find((c) => c.id === msg.clientId);
+        const partner = this.npcs().find((c) => c.id === msg.clientId);
         this.after(80, () =>
           this.emit({
             type: "privateMessage",
@@ -268,10 +301,21 @@ export class DemoSocket {
             fromSelf: true,
           })
         );
+        if (partner && !partner.away) {
+          this.after(1500 + Math.random() * 2500, () =>
+            this.emit({
+              type: "privateMessage",
+              partnerId: partner.id,
+              partnerName: partner.name,
+              message: pick(["ok 👍", "haha sure", "one sec", "sounds good", "yep"]),
+              fromSelf: false,
+            })
+          );
+        }
         break;
       }
       case "sendPoke": {
-        const partner = DEMO_NPCS.find((c) => c.id === msg.clientId);
+        const partner = this.npcs().find((c) => c.id === msg.clientId);
         this.after(400, () =>
           this.emit({ type: "poke", from: partner?.name ?? "Someone", message: "(demo poke - no reply expected)" })
         );
@@ -284,7 +328,7 @@ export class DemoSocket {
           if (clientId === SELF_ID) {
             this.selfChannel = channelId;
           } else {
-            const npc = DEMO_NPCS.find((c) => c.id === clientId);
+            const npc = this.npcs().find((c) => c.id === clientId);
             if (npc) npc.channel = channelId;
           }
           this.after(120, () => this.sendChannels(this.lastNickname));
@@ -442,14 +486,14 @@ export class DemoSocket {
         this.after(300, () => this.emit({ type: "serverGroupList", entries: DEMO_SERVER_GROUPS }));
         break;
       case "setChannelGroup": {
-        const npc = DEMO_NPCS.find((c) => c.databaseId === msg.clientDbId);
+        const npc = this.npcs().find((c) => c.databaseId === msg.clientDbId);
         if (npc) npc.channelGroup = msg.channelGroupId;
         else if (msg.clientDbId === 1) this.selfChannelGroup = msg.channelGroupId;
         this.after(200, () => this.sendChannels(this.lastNickname));
         break;
       }
       case "addServerGroup": {
-        const npc = DEMO_NPCS.find((c) => c.databaseId === msg.clientDbId);
+        const npc = this.npcs().find((c) => c.databaseId === msg.clientDbId);
         if (npc) {
           if (!npc.serverGroups.includes(msg.serverGroupId)) npc.serverGroups.push(msg.serverGroupId);
         } else if (msg.clientDbId === 1) {
@@ -459,7 +503,7 @@ export class DemoSocket {
         break;
       }
       case "removeServerGroup": {
-        const npc = DEMO_NPCS.find((c) => c.databaseId === msg.clientDbId);
+        const npc = this.npcs().find((c) => c.databaseId === msg.clientDbId);
         if (npc) {
           npc.serverGroups = npc.serverGroups.filter((g) => g !== msg.serverGroupId);
         } else if (msg.clientDbId === 1) {
@@ -611,9 +655,99 @@ export class DemoSocket {
         type: "serverLog",
         kind: "clientChannelGroupAssigned",
         client: nickname,
-        group: "Guest",
+        group: "Channel Admin",
       })
     );
+  }
+
+  private visitors: DemoClient[] = [];
+  private nextVisitorId = 200;
+
+  private npcs(): DemoClient[] {
+    return [...DEMO_NPCS, ...this.visitors];
+  }
+
+  /** Random voice activity so the talking indicators (tree, speaker cards) are
+   *  visible: every unmuted client in your channel talks now and then, sometimes
+   *  over each other. Like real TS, only your own channel is audible. */
+  private scriptTalkers() {
+    const audible = this.npcs()
+      .filter(
+        (c) =>
+          c.channel === this.selfChannel &&
+          c.hasTalkPower &&
+          !c.inputMuted &&
+          c.inputHardwareEnabled &&
+          !c.away
+      )
+      .filter(() => Math.random() < 0.35)
+      .map((c) => c.id);
+    this.emit({ type: "talkers", clients: audible });
+    this.after(1200 + Math.random() * 2300, () => this.scriptTalkers());
+  }
+
+  /** One random server event every few seconds: visitors join, switch
+   *  channels and leave, people write in the channel or send you a PM. */
+  private scriptServerLife() {
+    const roll = Math.random();
+    const freeNames = DEMO_VISITOR_NAMES.filter((n) => !this.visitors.some((v) => v.name === n));
+    if (roll < 0.3 && this.visitors.length < 6 && freeNames.length > 0) {
+      const id = this.nextVisitorId++;
+      const visitor: DemoClient = {
+        id,
+        channel: pick(DEMO_CHANNELS.filter((c) => c.id !== 3 && !c.hasPassword)).id,
+        name: pick(freeNames),
+        inputMuted: Math.random() < 0.15,
+        outputMuted: Math.random() < 0.1,
+        inputHardwareEnabled: true,
+        away: false,
+        awayMessage: "",
+        isChannelCommander: false,
+        country: pick(DEMO_COUNTRIES),
+        uid: `demo-uid-visitor-${id}`,
+        databaseId: id,
+        channelGroup: 3,
+        serverGroups: [pick([3, 4, 4])],
+        hasTalkPower: true,
+      };
+      this.visitors.push(visitor);
+      this.emit({ type: "serverLog", kind: "clientJoin", client: visitor.name, channel: this.channelName(visitor.channel) });
+      this.sendChannels(this.lastNickname);
+    } else if (roll < 0.37 && this.visitors.length > 0) {
+      const visitor = pick(this.visitors);
+      this.visitors = this.visitors.filter((v) => v !== visitor);
+      this.emit({ type: "serverLog", kind: "clientLeave", client: visitor.name });
+      this.sendChannels(this.lastNickname);
+    } else if (roll < 0.72) {
+      // Anyone wanders, not just visitors - otherwise the tree looks frozen.
+      const visitor = pick(this.npcs());
+      const target = pick(DEMO_CHANNELS.filter((c) => c.id !== visitor.channel));
+      this.emit({
+        type: "serverLog",
+        kind: "clientChannelSwitch",
+        client: visitor.name,
+        fromChannel: this.channelName(visitor.channel),
+        toChannel: target.name,
+      });
+      visitor.channel = target.id;
+      visitor.away = target.id === 3;
+      this.sendChannels(this.lastNickname);
+    } else if (roll < 0.92) {
+      const here = this.npcs().filter((c) => c.channel === this.selfChannel && !c.away);
+      if (here.length > 0) this.emit({ type: "chatMessage", from: pick(here).name, message: pick(DEMO_CHAT_LINES) });
+    } else {
+      const sender = pick(this.npcs().filter((c) => !c.away));
+      if (sender) {
+        this.emit({
+          type: "privateMessage",
+          partnerId: sender.id,
+          partnerName: sender.name,
+          message: pick(DEMO_PM_LINES),
+          fromSelf: false,
+        });
+      }
+    }
+    this.after(4000 + Math.random() * 6000, () => this.scriptServerLife());
   }
 
   private sendChannels(nickname: string) {
@@ -638,10 +772,10 @@ export class DemoSocket {
     this.emit({
       type: "channels",
       channels: DEMO_CHANNELS,
-      clients: [self, ...DEMO_NPCS],
+      clients: [self, ...this.npcs()],
       ownClientId: SELF_ID,
       serverMaxClients: 32,
-      serverClientsOnline: 1 + DEMO_NPCS.length,
+      serverClientsOnline: 1 + this.npcs().length,
       serverChannelsOnline: DEMO_CHANNELS.length,
     });
   }
