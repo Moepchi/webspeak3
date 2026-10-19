@@ -54,7 +54,8 @@ export interface MicCaptureOptions {
  *
  * Uses voice activation (like TeamSpeak's own "Sprachaktivierung"): frames are
  * only sent while the input level is above `threshold`, plus a short hangover
- * so the tail of a word isn't cut off. `onActivity` reports transitions so the
+ * so the tail of a word isn't cut off. With `pushToTalk` set, only while
+ * `pttPressed` is. `onActivity` reports transitions so the
  * UI can show a local "currently transmitting" indicator.
  */
 export class MicCapture {
@@ -83,6 +84,9 @@ export class MicCapture {
   private context: AudioContext;
   threshold: number;
   hangoverSeconds: number;
+  /** Push-to-talk: send while `pttPressed` instead of voice activation. */
+  pushToTalk = false;
+  pttPressed = false;
 
   constructor(context: AudioContext, options: MicCaptureOptions) {
     this.context = context;
@@ -148,8 +152,9 @@ export class MicCapture {
 
       const now = this.context.currentTime;
       if (rms >= this.threshold) this.activeUntil = now + this.hangoverSeconds;
+      const talking = this.pushToTalk ? this.pttPressed : now < this.activeUntil;
       // Shared audio (music, a video) has its own pauses; keep sending throughout.
-      const shouldBeActive = this.extra !== null || now < this.activeUntil;
+      const shouldBeActive = this.extra !== null || talking;
       if (shouldBeActive !== this.active) {
         this.active = shouldBeActive;
         this.onActivity?.(this.active);

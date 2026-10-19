@@ -367,6 +367,13 @@ async function handleStoreSubmit(req: IncomingMessage, res: ServerResponse) {
   }
 
   const themes = await loadStoreThemes();
+  // Re-uploading an installed store theme unchanged would just duplicate it.
+  const cssKey = normalizeCss(css).replace(/\s+/g, "");
+  if (themes.some((t) => normalizeCss(t.css).replace(/\s+/g, "") === cssKey)) {
+    res.writeHead(409, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "duplicate" }));
+    return;
+  }
   if (themes.length >= STORE_MAX_THEMES) {
     res.writeHead(507, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "store_full" }));

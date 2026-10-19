@@ -1734,6 +1734,28 @@
   margin: 0 0.2rem;
 }
 
+.ts-ptt-button {
+  /* Holding it on a phone must not scroll, zoom or pop the long-press menu */
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.ts-ptt-key-listening {
+  outline: 2px solid var(--accent);
+}
+
+.ts-hotkeys-table td {
+  padding: 0.2rem 1rem 0.2rem 0;
+}
+
+.ts-hotkeys-table kbd {
+  font-family: inherit;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 .ts-icon-slider,
 .ts-icon-select {
   display: flex;

@@ -391,6 +391,8 @@ const ECHO_CANCELLATION_KEY = "webspeak3:echo-cancellation";
 const AUTO_GAIN_CONTROL_KEY = "webspeak3:auto-gain-control";
 const AEC3_ENABLED_KEY = "webspeak3:aec3-enabled";
 const VAD_HANGOVER_KEY = "webspeak3:vad-hangover";
+const PUSH_TO_TALK_KEY = "webspeak3:push-to-talk";
+const PTT_BINDING_KEY = "webspeak3:ptt-key";
 const DESIGN_THEME_KEY = "webspeak3:design-theme";
 // The user's actual pick - "standard" | "nova" | "greenteaspeak" | "custom:<id>".
 // DESIGN_THEME_KEY above keeps tracking just the resolved structural base, since a
@@ -503,6 +505,29 @@ function loadDesignSelection(): string {
 function loadBoolPref(key: string, fallback: boolean): boolean {
   const raw = localStorage.getItem(key);
   return raw === null ? fallback : raw === "1";
+}
+
+interface PttBinding {
+  code: string;
+  label: string;
+}
+
+function loadPttBinding(): PttBinding | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(PTT_BINDING_KEY) ?? "null");
+    return v && typeof v.code === "string" && typeof v.label === "string" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function keyBindingLabel(e: KeyboardEvent): string {
+  return e.key.length === 1 && e.key !== " " ? e.key.toUpperCase() : e.code;
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 }
 
 function loadNumberPref(key: string, fallback: number): number {
@@ -5289,6 +5314,10 @@ interface AudioSettings {
   onVadThresholdChange: (v: number) => void;
   vadHangover: number;
   onVadHangoverChange: (v: number) => void;
+  pushToTalk: boolean;
+  onPushToTalkChange: (on: boolean) => void;
+  pttBinding: PttBinding | null;
+  onPttBindingChange: (binding: PttBinding) => void;
   noiseSuppressionEnabled: boolean;
   onToggleNoiseSuppression: () => void;
   echoCancellationEnabled: boolean;
@@ -5298,6 +5327,88 @@ interface AudioSettings {
   aec3Enabled: boolean;
   aec3Loading: boolean;
   onToggleAec3: () => void;
+}
+
+function PttKeyButton({ binding, onChange }: { binding: PttBinding | null; onChange: (b: PttBinding) => void }) {
+  const t = useT();
+  const [listening, setListening] = useState(false);
+  useEffect(() => {
+    if (!listening) return;
+    // Capture phase on window: the next key or mouse button wins wherever the
+    // pointer is, and never reaches the dialog (Escape) or the live PTT listener.
+    const take = (e: Event, next?: PttBinding) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setListening(false);
+      if (next) onChange(next);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab") return setListening(false);
+      take(e, e.key === "Escape" ? undefined : { code: e.code, label: keyBindingLabel(e) });
+    };
+    const onMouse = (e: MouseEvent) => {
+      // Left click is how you started (and how you click away), so it can't be PTT.
+      if (e.button === 0) return setListening(false);
+      take(e, { code: `Mouse${e.button}`, label: `Mouse ${e.button + 1}` });
+      // The back/forward side buttons navigate on release; keep the page.
+      window.addEventListener("mouseup", (up) => up.preventDefault(), { capture: true, once: true });
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("mousedown", onMouse, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("mousedown", onMouse, true);
+    };
+  }, [listening, onChange]);
+  return (
+    <button className={listening ? "ts-ptt-key-listening" : undefined} onClick={() => setListening(true)}>
+      {listening ? t("recording.pttKeyPress") : (binding?.label ?? t("recording.pttKeyNone"))}
+    </button>
+  );
+}
+
+function HotkeysPanel({ audio }: { audio: AudioSettings }) {
+  const t = useT();
+  return (
+    <>
+      <h3>{t("options.section.hotkeys")}</h3>
+      <p className="ts-options-subtitle">{t("hotkeys.subtitle")}</p>
+      <fieldset className="ts-options-fieldset">
+        <legend>{t("recording.pushToTalk")}</legend>
+        <label className="ts-options-checkbox">
+          <input type="checkbox" checked={audio.pushToTalk} onChange={(e) => audio.onPushToTalkChange(e.target.checked)} />
+          {t("hotkeys.pttEnabled")}
+        </label>
+        <div className="ts-options-field-row">
+          {t("recording.pttKey")}
+          <PttKeyButton binding={audio.pttBinding} onChange={audio.onPttBindingChange} />
+        </div>
+        <p className="ts-options-hint">{t("recording.pttHint")}</p>
+      </fieldset>
+      <fieldset className="ts-options-fieldset">
+        <legend>{t("hotkeys.shortcuts")}</legend>
+        <table className="ts-hotkeys-table">
+          <tbody>
+            {(
+              [
+                ["Ctrl + S", "menu.connections.connect"],
+                ["Ctrl + D", "menu.connections.disconnectCurrent"],
+                ["Ctrl + B", "menu.favorites.add"],
+              ] as const
+            ).map(([keys, label]) => (
+              <tr key={keys}>
+                <td>
+                  <kbd>{keys}</kbd>
+                </td>
+                <td>{t(label)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="ts-options-hint">{t("hotkeys.shortcutsHint")}</p>
+      </fieldset>
+    </>
+  );
 }
 
 function MicLevelBar({ levelRef, active }: { levelRef: React.MutableRefObject<number>; active: boolean }) {
@@ -5423,15 +5534,34 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
           <fieldset className="ts-options-fieldset">
             <legend>{t("recording.activation")}</legend>
             <label className="ts-options-radio">
-              <input type="radio" name="activation" disabled readOnly />
+              <input
+                type="radio"
+                name="activation"
+                checked={audio.pushToTalk}
+                onChange={() => audio.onPushToTalkChange(true)}
+              />
               {t("recording.pushToTalk")}
             </label>
+            {audio.pushToTalk && (
+              <>
+                <div className="ts-options-field-row">
+                  {t("recording.pttKey")}
+                  <PttKeyButton binding={audio.pttBinding} onChange={audio.onPttBindingChange} />
+                </div>
+                <p className="ts-options-hint">{t("recording.pttHint")}</p>
+              </>
+            )}
             <label className="ts-options-radio">
               <input type="radio" name="activation" disabled readOnly />
               {t("recording.continuous")}
             </label>
             <label className="ts-options-radio">
-              <input type="radio" name="activation" checked readOnly />
+              <input
+                type="radio"
+                name="activation"
+                checked={!audio.pushToTalk}
+                onChange={() => audio.onPushToTalkChange(false)}
+              />
               {t("recording.voiceActivation")}
             </label>
             <div className="ts-options-level-wrap">
@@ -5838,7 +5968,7 @@ function DesignStorePanel({
     () => localStorage.getItem(STORE_ADMIN_TOKEN_KEY) ?? ""
   );
   const [publishing, setPublishing] = useState(false);
-  const [publishResult, setPublishResult] = useState<"ok" | "pending" | "error" | null>(null);
+  const [publishResult, setPublishResult] = useState<"ok" | "pending" | "duplicate" | "error" | null>(null);
   const [ratedIds, setRatedIds] = useState<Set<string>>(new Set());
 
   const refreshThemes = () =>
@@ -5917,6 +6047,10 @@ function DesignStorePanel({
           screenshot: publishScreenshot ?? undefined,
         }),
       });
+      if (res.status === 409) {
+        setPublishResult("duplicate");
+        return;
+      }
       if (!res.ok) throw new Error(String(res.status));
       const body = (await res.json().catch(() => ({}))) as { status?: string };
       setPublishResult(body.status === "pending" ? "pending" : "ok");
@@ -6068,6 +6202,7 @@ function DesignStorePanel({
               </button>
               {publishResult === "ok" && <p className="ts-options-subtitle">{t("design.store.publish.success")}</p>}
               {publishResult === "pending" && <p className="ts-options-subtitle">{t("design.store.publish.pending")}</p>}
+              {publishResult === "duplicate" && <p className="ts-options-subtitle">{t("design.store.publish.duplicate")}</p>}
               {publishResult === "error" && <p className="ts-options-subtitle">{t("design.store.publish.error")}</p>}
             </>
           )}
@@ -6419,6 +6554,8 @@ function OptionsDialog({
               <WiedergabePanel audio={audio} />
             ) : active.id === "aufnahme" ? (
               <AufnahmePanel audio={audio} />
+            ) : active.id === "hotkeys" ? (
+              <HotkeysPanel audio={audio} />
             ) : active.id === "sounds" ? (
               <SoundsPanel />
             ) : active.id === "design" ? (
@@ -6913,6 +7050,12 @@ function AppInner() {
   const [selfActive, setSelfActive] = useState(false);
   const [vadThreshold, setVadThreshold] = useState(0.02);
   const [vadHangover, setVadHangover] = useState(() => loadNumberPref(VAD_HANGOVER_KEY, 0.3));
+  const [pushToTalk, setPushToTalk] = useState(() => loadBoolPref(PUSH_TO_TALK_KEY, false));
+  const [pttBinding, setPttBinding] = useState<PttBinding | null>(loadPttBinding);
+  const [pttPressed, setPttPressed] = useState(false);
+  // Read when a new MicCapture is created, which happens outside render.
+  const pushToTalkRef = useRef(pushToTalk);
+  const pttPressedRef = useRef(false);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDeviceId, setOutputDeviceId] = useState("");
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -7131,6 +7274,64 @@ function AppInner() {
     if (micCaptureRef.current) micCaptureRef.current.hangoverSeconds = vadHangover;
     localStorage.setItem(VAD_HANGOVER_KEY, String(vadHangover));
   }, [vadHangover]);
+
+  useEffect(() => {
+    pushToTalkRef.current = pushToTalk;
+    if (micCaptureRef.current) micCaptureRef.current.pushToTalk = pushToTalk;
+    localStorage.setItem(PUSH_TO_TALK_KEY, pushToTalk ? "1" : "0");
+  }, [pushToTalk]);
+
+  useEffect(() => {
+    pttPressedRef.current = pttPressed;
+    if (micCaptureRef.current) micCaptureRef.current.pttPressed = pttPressed;
+  }, [pttPressed]);
+
+  useEffect(() => {
+    if (pttBinding) localStorage.setItem(PTT_BINDING_KEY, JSON.stringify(pttBinding));
+  }, [pttBinding]);
+
+  // Browsers only deliver keys while this tab has focus - there's no global
+  // hotkey for websites, so PTT can't work while another program is in front.
+  useEffect(() => {
+    if (!pushToTalk || !pttBinding) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== pttBinding.code || e.defaultPrevented) return;
+      // A letter key still has to type in chat; F-keys or modifiers work anywhere.
+      if (e.key.length === 1 && isTypingTarget(e.target)) return;
+      if (!isTypingTarget(e.target)) e.preventDefault();
+      setPttPressed(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === pttBinding.code) setPttPressed(false);
+    };
+    // preventDefault: no middle-click autoscroll, no back/forward navigation
+    // from the side buttons (which fires on release).
+    const onMouseDown = (e: MouseEvent) => {
+      if (`Mouse${e.button}` !== pttBinding.code) return;
+      e.preventDefault();
+      setPttPressed(true);
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (`Mouse${e.button}` !== pttBinding.code) return;
+      e.preventDefault();
+      setPttPressed(false);
+    };
+    // The keyup goes to whatever has focus next; don't leave the mic open.
+    const release = () => setPttPressed(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("blur", release);
+      release();
+    };
+  }, [pushToTalk, pttBinding]);
 
   useEffect(() => {
     audioPlayerRef.current?.setVolume(playbackVolume);
@@ -8863,6 +9064,8 @@ function AppInner() {
       }
       micCaptureRef.current?.stop();
       micCaptureRef.current = mic;
+      mic.pushToTalk = pushToTalkRef.current;
+      mic.pttPressed = pttPressedRef.current;
       mic.setExtraAudio(tabAudioRef.current);
       setMicOn(true);
       refreshOutputDevices();
@@ -10695,18 +10898,45 @@ function AppInner() {
           >
             {micOn && !inputMuted ? "🎤" : "🔇"}
           </button>
-          <label className="ts-icon-slider" title={t("toolbar.vadSensitivity")}>
-            🎚️
-            <input
-              type="range"
-              min={0.002}
-              max={0.15}
-              step={0.002}
-              value={vadThreshold}
-              onChange={(e) => setVadThreshold(Number(e.target.value))}
-              aria-label={t("toolbar.vadSensitivity")}
-            />
-          </label>
+          {pushToTalk ? (
+            <button
+              className={`ts-icon-button ts-ptt-button${pttPressed ? " ts-mic-on" : ""}`}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setPttPressed(true);
+              }}
+              onPointerUp={() => setPttPressed(false)}
+              onPointerCancel={() => setPttPressed(false)}
+              onKeyDown={(e) => {
+                if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+                  e.preventDefault();
+                  setPttPressed(true);
+                }
+              }}
+              onKeyUp={(e) => {
+                if (e.key === " " || e.key === "Enter") setPttPressed(false);
+              }}
+              onContextMenu={(e) => e.preventDefault()}
+              title={t("toolbar.pushToTalk")}
+              aria-label={t("toolbar.pushToTalk")}
+              aria-pressed={pttPressed}
+            >
+              🗣️
+            </button>
+          ) : (
+            <label className="ts-icon-slider" title={t("toolbar.vadSensitivity")}>
+              🎚️
+              <input
+                type="range"
+                min={0.002}
+                max={0.15}
+                step={0.002}
+                value={vadThreshold}
+                onChange={(e) => setVadThreshold(Number(e.target.value))}
+                aria-label={t("toolbar.vadSensitivity")}
+              />
+            </label>
+          )}
           <button
             className={`ts-icon-button${publishState === "live" ? " ts-mic-on" : ""}`}
             onClick={handleStreamButton}
@@ -11148,6 +11378,10 @@ function AppInner() {
             onVadThresholdChange: setVadThreshold,
             vadHangover,
             onVadHangoverChange: setVadHangover,
+            pushToTalk,
+            onPushToTalkChange: setPushToTalk,
+            pttBinding,
+            onPttBindingChange: setPttBinding,
             noiseSuppressionEnabled,
             onToggleNoiseSuppression: handleToggleNoiseSuppression,
             echoCancellationEnabled,
