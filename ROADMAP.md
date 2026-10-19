@@ -77,7 +77,7 @@ best practices and GreenTeaSpeak's native selection colours. Still to do:
 
 ## Feedback
 
-Please use [GitHub Issues](https://github.com/Moepchi/webspeak3/issues) for
+Please use [GitHub Issues](https://github.com/WebSpeak3/webspeak3/issues) for
 reproducible bugs and feature requests. Include the browser and version,
 operating system, deployment method, and whether the issue affects voice,
 microphone access, or only the interface.

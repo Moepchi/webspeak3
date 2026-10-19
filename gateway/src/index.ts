@@ -191,7 +191,7 @@ const FEEDBACK_ALLOWED_ORIGIN = process.env.FEEDBACK_ALLOWED_ORIGIN ?? "*";
 // A token with "Issues: write" access on the target repo. Without it,
 // feedback is still accepted and logged, just never turned into an issue.
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO ?? "Moepchi/webspeak3";
+const GITHUB_REPO = process.env.GITHUB_REPO ?? "WebSpeak3/webspeak3";
 const FEEDBACK_CATEGORIES = new Set(["bug", "idea", "report", "other"]);
 const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
 

@@ -9,7 +9,7 @@
   <a href="Dockerfile"><img src="https://img.shields.io/badge/docker-build%20passing-2496ED?logo=docker&logoColor=white" alt="Docker Build"></a>
   <a href="gateway/package.json"><img src="https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white" alt="Node Version"></a>
   <a href="connector/Cargo.toml"><img src="https://img.shields.io/badge/rust-2021-000000?logo=rust&logoColor=white" alt="Rust Version"></a>
-  <a href="https://github.com/Moepchi/webspeak3/releases"><img src="https://img.shields.io/github/v/release/Moepchi/webspeak3?include_prereleases&label=release" alt="Latest Release"></a>
+  <a href="https://github.com/WebSpeak3/webspeak3/releases"><img src="https://img.shields.io/github/v/release/WebSpeak3/webspeak3?include_prereleases&label=release" alt="Latest Release"></a>
   <img src="https://img.shields.io/badge/status-public%20beta-f0b429" alt="Project Status">
 </p>
 
@@ -24,7 +24,7 @@
   <a href="#-quick-start">🚀 Quick Start</a> ·
   <a href="#-installation">📖 Installation</a> ·
   <a href="ROADMAP.md">🗺️ Roadmap</a> ·
-  <a href="https://github.com/Moepchi/webspeak3/issues">🐛 Report Bug</a>
+  <a href="https://github.com/WebSpeak3/webspeak3/issues">🐛 Report Bug</a>
 </p>
 
 > The [live demo](https://demo.webspeak3.de) runs entirely in your browser with simulated data — no real TeamSpeak server involved. It's there to show the UI, not the real connection.
@@ -147,7 +147,7 @@ scope, known limitations, and the next milestones.
 Clone the repo (the Rust connector depends on a git submodule, so pull it in too):
 
 ```bash
-git clone --recurse-submodules https://github.com/Moepchi/webspeak3.git
+git clone --recurse-submodules https://github.com/WebSpeak3/webspeak3.git
 cd webspeak3
 ```
 
@@ -187,7 +187,7 @@ The **Design Store** (browse/upload community themes) points at the maintainer's
 
 #### Environment variables
 
-All optional; add them under `environment:` in your compose override next to `PORT`. These are the common ones - the full list (logging, feedback form, Design Store details, build-time variables) is on the wiki's [Configuration & Environment Variables](https://github.com/Moepchi/webspeak3/wiki/Configuration-and-Environment-Variables) page.
+All optional; add them under `environment:` in your compose override next to `PORT`. These are the common ones - the full list (logging, feedback form, Design Store details, build-time variables) is on the wiki's [Configuration & Environment Variables](https://github.com/WebSpeak3/webspeak3/wiki/Configuration-and-Environment-Variables) page.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -234,7 +234,7 @@ All optional; add them under `environment:` in your compose override next to `PO
 The Rust connector depends on the `tsclientlib` crate, vendored as a git submodule — make sure to pull it in too:
 
 ```bash
-git clone --recurse-submodules https://github.com/Moepchi/webspeak3.git
+git clone --recurse-submodules https://github.com/WebSpeak3/webspeak3.git
 cd webspeak3
 ```
 
@@ -347,11 +347,11 @@ The vast majority of this project's code was written by [Claude Code](https://cl
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=moepchi%2Fwebspeak3&type=date&legend=bottom-right">
+<a href="https://www.star-history.com/?repos=webspeak3%2Fwebspeak3&type=date&legend=bottom-right">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=moepchi/webspeak3&type=date&theme=dark&legend=bottom-right" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=moepchi/webspeak3&type=date&legend=bottom-right" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=moepchi/webspeak3&type=date&legend=bottom-right" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=webspeak3/webspeak3&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=webspeak3/webspeak3&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=webspeak3/webspeak3&type=date&legend=bottom-right" />
  </picture>
 </a>
 

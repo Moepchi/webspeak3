@@ -7071,7 +7071,7 @@ function AppInner() {
     loadBoolPref(AUTO_GAIN_CONTROL_KEY, true)
   );
   // Off by default: a heavier, opt-in alternative/supplement to native AEC for
-  // speaker+mic (no headset) setups (github.com/Moepchi/webspeak3 issue #2).
+  // speaker+mic (no headset) setups (github.com/WebSpeak3/webspeak3 issue #2).
   const [aec3Enabled, setAec3Enabled] = useState(() => loadBoolPref(AEC3_ENABLED_KEY, false));
   const [aec3Loading, setAec3Loading] = useState(false);
   const aec3Ref = useRef<Aec3Instance | null>(null);
@@ -10197,7 +10197,7 @@ function AppInner() {
       {DEMO_MODE && (
         <div className="ts-demo-banner">
           Demo mode — simulated data only, no real TeamSpeak server involved.{" "}
-          <a href="https://github.com/Moepchi/webspeak3" target="_blank" rel="noreferrer">
+          <a href="https://github.com/WebSpeak3/webspeak3" target="_blank" rel="noreferrer">
             Get WebSpeak3
           </a>
           <button className="ts-demo-mobile-toggle" onClick={() => setDemoForceMobile((v) => !v)}>
@@ -10694,7 +10694,7 @@ function AppInner() {
               </a>
               <a
                 className="ts-menu-item"
-                href="https://github.com/Moepchi/webspeak3"
+                href="https://github.com/WebSpeak3/webspeak3"
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => setHelpMenuOpen(false)}
@@ -10704,7 +10704,7 @@ function AppInner() {
               </a>
               <a
                 className="ts-menu-item"
-                href="https://github.com/Moepchi/webspeak3/releases"
+                href="https://github.com/WebSpeak3/webspeak3/releases"
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => setHelpMenuOpen(false)}

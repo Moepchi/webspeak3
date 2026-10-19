@@ -1,7 +1,7 @@
 // Lazy loader for Google WebRTC's AEC3 (compiled to WASM via
 // @ennuicastr/webrtcaec3.js), an opt-in, stronger alternative to the browser's
 // native echo cancellation for speaker+mic (no headset) setups where native
-// AEC often isn't enough (github.com/Moepchi/webspeak3 issue #2). Loaded as a
+// AEC often isn't enough (github.com/WebSpeak3/webspeak3 issue #2). Loaded as a
 // plain <script> tag rather than bundled: the module's own glue code resolves
 // its .wasm file next to its own <script src>, by a name it decides itself -
 // see scripts/sync-aec3-assets.mjs for how that file gets there.

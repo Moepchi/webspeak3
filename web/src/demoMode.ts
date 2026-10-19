@@ -172,7 +172,7 @@ const DEMO_CHAT_LINES = [
   "my mic was muted, sorry",
   "back",
   "who's hosting tonight?",
-  "check out https://github.com/Moepchi/webspeak3",
+  "check out https://github.com/WebSpeak3/webspeak3",
 ];
 const DEMO_PM_LINES = [
   "hey, got a sec?",
