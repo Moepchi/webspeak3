@@ -10,6 +10,7 @@ import { Ts3Connection, type ServerType, type Ts3ConnectOptions } from "./ts3/co
 import { handleStore } from "./store.js";
 import { logFeedback, logConnectionEvent } from "./activity-log.js";
 import { clientIp, createRateLimiter } from "./net.js";
+import "./telemetry.js";
 
 const SERVER_TYPES = new Set<ServerType>(["teamspeak", "teaspeak", "auto"]);
 

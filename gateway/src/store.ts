@@ -136,7 +136,7 @@ async function saveStoreThemes(themes: StoreTheme[]): Promise<void> {
   await rename(tmp, STORE_DATA_FILE);
 }
 
-function isAdminRequest(req: IncomingMessage): boolean {
+export function isAdminRequest(req: IncomingMessage): boolean {
   const authHeader = req.headers.authorization ?? "";
   return authHeader.startsWith("Bearer ") && isValidStoreAdminToken(authHeader.slice("Bearer ".length));
 }

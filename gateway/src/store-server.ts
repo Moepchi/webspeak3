@@ -6,6 +6,7 @@
 // and the reverse proxy routes /api/store/* here.
 import { createServer } from "node:http";
 import { handleStore } from "./store.js";
+import { handlePing } from "./ping.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -20,6 +21,16 @@ createServer((req, res) => {
   if (pathname === "/api/store/admin" || pathname === "/api/store/themes" || pathname.startsWith("/api/store/themes/")) {
     handleStore(req, res, pathname).catch((err) => {
       console.error("[store] Request failed:", err);
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "internal" }));
+      }
+    });
+    return;
+  }
+  if (pathname === "/api/ping" || pathname === "/api/ping/stats") {
+    handlePing(req, res, pathname).catch((err) => {
+      console.error("[ping] Request failed:", err);
       if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "internal" }));

@@ -90,6 +90,10 @@ COPY --from=connector-builder /src/connector/target/*/release/ts-connector /app/
 COPY --from=web-builder /src/web/dist /app/web/dist
 
 ENV PORT=8080
+# Release tag, set by .github/workflows/docker-publish.yml. Only used for the
+# anonymous usage ping (gateway/src/telemetry.ts).
+ARG WEBSPEAK3_VERSION=unknown
+ENV WEBSPEAK3_VERSION=$WEBSPEAK3_VERSION
 ENV WEB_DIST=/app/web/dist
 ENV CONNECTOR_BIN=/app/connector-bin/ts-connector
 EXPOSE 8080
