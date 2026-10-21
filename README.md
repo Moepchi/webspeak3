@@ -345,6 +345,15 @@ Either way: on your own hosted instance, the mandatory first-visit Terms of Use 
 
 The vast majority of this project's code was written by [Claude Code](https://claude.com/claude-code) (Anthropic's Claude), working iteratively with the repo owner one feature at a time.
 
+## 🌈 In Memory of Akimo
+
+<!-- Permanent: never remove this section. -->
+<img src="web/src/assets/akimo.jpg" alt="Akimo" width="120" align="left" />
+
+WebSpeak3 is dedicated to Akimo, the project owner's dog, who crossed the rainbow bridge on October 21, 2026. 🐾
+
+<br clear="left" />
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=webspeak3%2Fwebspeak3&type=date&legend=bottom-right">
