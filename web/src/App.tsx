@@ -148,6 +148,7 @@ import {
 } from "./themes/greenteaspeak";
 import { BARE_URL_REGEX, renderBbcode, wrapUrls } from "./lib/bbcode";
 import { parseChannelName, spacerDisplayName } from "./lib/spacer";
+import akimoPhoto from "./assets/akimo.jpg";
 import {
   applyParkedGatewayEvent,
   emptyParkedState,
@@ -1917,6 +1918,43 @@ function ConnectDialog({
 // restart warning). Deliberately no backdrop-click-to-close - the point is
 // the user actually reads it before the connection drops, not that it's
 // invisible-easy to swipe away like a cookie banner.
+// In memory of Akimo, the project owner's dog (†21.10.2026). Permanent:
+// never remove or hide this, no matter what else changes in the dialog.
+function AboutDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  return (
+    <div className="ts-dialog-backdrop" onClick={onClose}>
+      <div className="ts-dialog ts-about-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="ts-dialog-titlebar">
+          <span>{t("menu.help.about")}</span>
+        </div>
+        <div className="ts-dialog-body">
+          <p>{t("about.text")}</p>
+          <p>
+            <a href="https://webspeak3.de" target="_blank" rel="noreferrer">webspeak3.de</a>
+            {" · "}
+            <a href="https://github.com/WebSpeak3/webspeak3" target="_blank" rel="noreferrer">GitHub</a>
+          </p>
+          <figure className="ts-about-memorial">
+            <img src={akimoPhoto} alt="Akimo" width={120} height={120} />
+            <figcaption>
+              <strong>{t("about.memorial.title")}</strong>
+              <span>{t("about.memorial.text")}</span>
+            </figcaption>
+          </figure>
+        </div>
+        <div className="ts-dialog-buttons">
+          <div className="ts-dialog-buttons-right">
+            <button type="button" onClick={onClose}>
+              {t("about.close")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RestartNoticeDialog({ message, onAck }: { message: string; onAck: () => void }) {
   const t = useT();
   return (
@@ -6860,6 +6898,7 @@ function AppInner() {
   // Terms of use, own-hosted instance only (see IS_OWN_HOSTED_INSTANCE): shown
   // mandatorily on first visit, reopenable any time from the menu afterwards.
   const [tosOpen, setTosOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [tosMandatory, setTosMandatory] = useState(false);
   useEffect(() => {
     if (IS_OWN_HOSTED_INSTANCE && !hasAcceptedToS()) {
@@ -10682,16 +10721,16 @@ function AppInner() {
           </button>
           {helpMenuOpen && (
             <div className="ts-menu" ref={focusFirstItem} onKeyDown={handleMenuKeyDown}>
-              <a
+              <button
                 className="ts-menu-item"
-                href="https://webspeak3.de"
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => setHelpMenuOpen(false)}
+                onClick={() => {
+                  setAboutOpen(true);
+                  setHelpMenuOpen(false);
+                }}
               >
                 <span className="ts-menu-item-icon">ℹ️</span>
                 <span className="ts-menu-item-label">{t("menu.help.about")}</span>
-              </a>
+              </button>
               <a
                 className="ts-menu-item"
                 href="https://github.com/WebSpeak3/webspeak3"
@@ -11082,6 +11121,8 @@ function AppInner() {
       )}
 
       {restartNotice && <RestartNoticeDialog message={restartNotice} onAck={() => setRestartNotice(null)} />}
+
+      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
 
       {tosOpen && (
         <ToSDialog

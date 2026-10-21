@@ -685,5 +685,9 @@
   "log.fileTransferInvalidAddress": "File transfer failed (invalid address)",
   "sounds.importFailed": "Could not read this soundpack - is it a valid .ts3soundpack/ZIP file?",
   "tabs.connections": "Server connections",
-  "shortcut.ctrl": "Ctrl"
+  "shortcut.ctrl": "Ctrl",
+  "about.text": "WebSpeak3 is a TeamSpeak client for the browser, open source and with nothing to install.",
+  "about.memorial.title": "In memory of Akimo",
+  "about.memorial.text": "Crossed the rainbow bridge on October 21, 2026. 🌈🐾",
+  "about.close": "Close"
 }

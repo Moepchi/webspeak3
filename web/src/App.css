@@ -2675,6 +2675,33 @@
   width: 520px;
 }
 
+.ts-about-dialog {
+  width: 440px;
+}
+
+.ts-about-memorial {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.ts-about-memorial img {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.ts-about-memorial figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .ts-client-log-dialog {
   width: 760px;
 }

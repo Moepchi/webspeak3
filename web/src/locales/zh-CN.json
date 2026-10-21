@@ -684,5 +684,9 @@
   "log.fileTransferInvalidAddress": "文件传输失败（地址无效）",
   "sounds.importFailed": "无法读取此音效包——它是有效的 .ts3soundpack/ZIP 文件吗？",
   "tabs.connections": "服务器连接",
-  "shortcut.ctrl": "Ctrl"
+  "shortcut.ctrl": "Ctrl",
+  "about.text": "WebSpeak3 是一款浏览器 TeamSpeak 客户端，开源且无需安装。",
+  "about.memorial.title": "纪念 Akimo",
+  "about.memorial.text": "于 2026 年 10 月 21 日走过彩虹桥。🌈🐾",
+  "about.close": "关闭"
 }

@@ -685,5 +685,9 @@
   "log.fileTransferInvalidAddress": "Přenos souboru selhal (neplatná adresa)",
   "sounds.importFailed": "Balíček zvuků se nepodařilo načíst – je to platný soubor .ts3soundpack/ZIP?",
   "tabs.connections": "Připojení k serverům",
-  "shortcut.ctrl": "Ctrl"
+  "shortcut.ctrl": "Ctrl",
+  "about.text": "WebSpeak3 je TeamSpeak klient pro prohlížeč, open source a bez instalace.",
+  "about.memorial.title": "Na památku Akima",
+  "about.memorial.text": "Odešel přes duhový most 21. 10. 2026. 🌈🐾",
+  "about.close": "Zavřít"
 }
