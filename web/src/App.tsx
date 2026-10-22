@@ -188,6 +188,14 @@ const FEEDBACK_URL = import.meta.env.DEV
     ? `${import.meta.env.VITE_GATEWAY_URL.replace(/\/$/, "").replace(/^ws(s?):\/\//, "http$1://")}/api/feedback`
     : `${window.location.protocol}//${window.location.host}/api/feedback`;
 
+// News ticker: the instance's own gateway says whether it's on and adds its
+// own messages (gateway/src/news.ts); the central feed is fetched directly,
+// like the store. The demo has no gateway and only shows the central feed.
+const NEWS_CONFIG_URL = DEMO_MODE ? null : FEEDBACK_URL.replace(/\/api\/feedback$/, "/api/news");
+const NEWS_FEED_URL = import.meta.env.DEV
+  ? "http://localhost:8080/api/store/news"
+  : import.meta.env.VITE_NEWS_URL || "https://gateway.webspeak3.de/api/store/news";
+
 // Unlike GATEWAY_URL/FEEDBACK_URL above, the design store is NOT per-instance:
 // it's a single, centrally curated catalog run on the maintainer's own VPS
 // (see gateway/src/store.ts), so every build - official and self-hosted
@@ -2580,6 +2588,101 @@ function FeedbackFab({ onOpen, stacked }: { onOpen: () => void; stacked: boolean
 }
 
 /** Small donation pill, pinned to the bottom right corner. */
+type NewsItem =
+  | { id: string; kind: "text"; text: string; url?: string }
+  | { id: string; kind: "release"; version: string; url: string }
+  | { id: string; kind: "theme"; name: string; author: string };
+
+const NEWS_DISMISSED_STORAGE_KEY = "webspeak3.newsTicker.dismissed";
+
+// Like the scrolling news line at the bottom of the native TS3 client.
+// Dismissing hides the current set of items until a new one shows up.
+function NewsTicker() {
+  const t = useT();
+  const [items, setItems] = useState<NewsItem[]>([]);
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(NEWS_DISMISSED_STORAGE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  useEffect(() => {
+    const getJson = async (url: string) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    };
+    const load = async () => {
+      // A gateway older than the ticker answers 404: treat it as the default.
+      const config = (NEWS_CONFIG_URL ? await getJson(NEWS_CONFIG_URL).catch(() => null) : null) ?? {
+        enabled: true,
+        central: true,
+        items: [],
+      };
+      if (!config.enabled) return setItems([]);
+      const central = config.central ? ((await getJson(NEWS_FEED_URL).catch(() => null))?.items ?? []) : [];
+      setItems([...config.items, ...central]);
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 15 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const key = items.map((i) => i.id).join(",");
+  if (!items.length || key === dismissed) return null;
+
+  const label = (item: NewsItem) =>
+    item.kind === "release"
+      ? t("news.release", { version: item.version })
+      : item.kind === "theme"
+        ? t("news.theme", { name: item.name, author: item.author })
+        : item.text;
+  const entries = items.map((item) => {
+    const url = item.kind === "theme" ? undefined : item.url;
+    return (
+      <span key={item.id} className="ts-news-item">
+        {url ? (
+          <a href={url} target="_blank" rel="noopener noreferrer">
+            {label(item)}
+          </a>
+        ) : (
+          label(item)
+        )}
+      </span>
+    );
+  });
+
+  return (
+    <div className="ts-news-ticker">
+      <span className="ts-news-label">{t("news.label")}</span>
+      <div className="ts-news-track">
+        {/* Rendered twice so the -50% scroll loops seamlessly. */}
+        <div className="ts-news-scroll" style={{ animationDuration: `${Math.max(20, items.length * 12)}s` }}>
+          {entries}
+          <span aria-hidden="true">{entries}</span>
+        </div>
+      </div>
+      <button
+        className="ts-news-close"
+        title={t("dialog.close")}
+        aria-label={t("dialog.close")}
+        onClick={() => {
+          setDismissed(key);
+          try {
+            localStorage.setItem(NEWS_DISMISSED_STORAGE_KEY, key);
+          } catch {
+            // ignore
+          }
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function DonateFab() {
   const t = useT();
   if (!DONATE_URL) return null;
@@ -12323,6 +12426,7 @@ function AppInner() {
           );
         })}
       </div>
+      <NewsTicker />
     </div>
   );
 }

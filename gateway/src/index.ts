@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Ts3Connection, type ServerType, type Ts3ConnectOptions } from "./ts3/connection.js";
 import { handleStore } from "./store.js";
+import { handleNewsConfig } from "./news.js";
 import { logFeedback, logConnectionEvent } from "./activity-log.js";
 import { clientIp, createRateLimiter } from "./net.js";
 import "./telemetry.js";
@@ -477,6 +478,10 @@ const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
       const requestUrl = new URL(req.url ?? "/", "http://localhost");
       if (requestUrl.pathname === "/api/feedback") {
         await handleFeedback(req, res);
+        return;
+      }
+      if (requestUrl.pathname === "/api/news") {
+        handleNewsConfig(res);
         return;
       }
       if (requestUrl.pathname === "/api/broadcast") {

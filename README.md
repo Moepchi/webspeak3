@@ -210,8 +210,13 @@ All optional; add them under `environment:` in your compose override next to `PO
 | `CONNECT_RATE_LIMIT` | `30` | Server connects per client IP per minute. Each one starts a new TeamSpeak session, so this stops anyone from flooding a server through your gateway. `0` disables it. |
 | `TRUST_PROXY` | off | Only when the gateway is reachable **solely** through a proxy/tunnel, so per-IP limits see the real client instead of the proxy: `cloudflare` (Cloudflare Tunnel or proxy) uses `CF-Connecting-IP`; `1` (your own nginx/Caddy/Traefik) uses the last `X-Forwarded-For` entry, the one your proxy appended. Don't set it on a directly exposed gateway - clients could then fake their IP. |
 | `TELEMETRY` | on | Set to `0` to turn off the anonymous usage ping (see below). |
+| `NEWS_TICKER` | on | Set to `0` to hide the news ticker at the bottom of the client. |
+| `NEWS_TICKER_CENTRAL` | on | Set to `0` to drop the official WebSpeak3 news (releases, new store designs, announcements) and only show your own messages. |
+| `NEWS_TICKER_MESSAGES` | – | Your own ticker messages, separated by `\|`, e.g. `Maintenance tonight at 10pm \| Welcome!` |
 
 > **Anonymous usage ping:** when the gateway starts and then once a day, it sends a random instance ID (made up on first start, stored in `instance-id` in the working directory, used for nothing else) and its version number to `gateway.webspeak3.de`. That's the only way to tell whether anyone self-hosts WebSpeak3 at all, and how many instances still run an old version, e.g. after a security fix. Nothing else is sent: no hostnames, no TeamSpeak servers, no users, no settings. The receiving side doesn't store IP addresses. The startup log says when it's on. Turn it off with `TELEMETRY=0`.
+
+> **News ticker:** like the native TS3 client, a small scrolling line at the bottom shows news. Your users' browsers load the official news straight from `gateway.webspeak3.de`, the same way the Design Store works. Your own messages come from `NEWS_TICKER_MESSAGES`. Users can hide the ticker with ✕ until something new comes in.
 
 > **Trust model:** the gateway speaks the TeamSpeak protocol on the user's behalf, so whoever runs it necessarily handles their identity key, server/channel passwords and privilege keys (they're kept out of process listings, but the operator can still see them). Only use gateways you trust, and serve them over HTTPS/WSS (`TLS_CERT`/`TLS_KEY` or a TLS-terminating proxy) - plain HTTP exposes all of that on the wire. File uploads are limited to 24 MiB, downloads to 25 MiB.
 

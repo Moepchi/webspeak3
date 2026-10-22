@@ -147,6 +147,11 @@ function isPublic(theme: StoreTheme): boolean {
   return theme.status === "approved" && isSafeThemeCss(theme.css);
 }
 
+/** Newest public design, for the news ticker (news.ts). */
+export async function latestPublicTheme(): Promise<StoreTheme | undefined> {
+  return (await loadStoreThemes()).filter(isPublic).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
 // Same in-memory-per-IP approach as FEEDBACK_RATE_LIMIT in index.ts; kept as a
 // separate map since the two endpoints are independent.
 const STORE_RATE_LIMIT = 5;

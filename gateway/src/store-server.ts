@@ -7,6 +7,7 @@
 import { createServer } from "node:http";
 import { handleStore } from "./store.js";
 import { handlePing } from "./ping.js";
+import { handleNewsFeed } from "./news.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -21,6 +22,16 @@ createServer((req, res) => {
   if (pathname === "/api/store/admin" || pathname === "/api/store/themes" || pathname.startsWith("/api/store/themes/")) {
     handleStore(req, res, pathname).catch((err) => {
       console.error("[store] Request failed:", err);
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "internal" }));
+      }
+    });
+    return;
+  }
+  if (pathname === "/api/store/news" || pathname === "/api/store/news/admin") {
+    handleNewsFeed(req, res, pathname).catch((err) => {
+      console.error("[news] Request failed:", err);
       if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "internal" }));
