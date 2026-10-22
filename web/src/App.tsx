@@ -2599,11 +2599,52 @@ function DonateFab() {
 
 type FeedbackCategory = "bug" | "idea" | "other" | "report";
 
-function FeedbackDialog({ onClose }: { onClose: () => void }) {
+/** Best-effort "Chrome 141 · Windows" from the UA, prefilled into bug reports
+ *  so users don't have to know it themselves - they can still correct it. */
+function detectBrowserAndOs(): string {
+  const ua = navigator.userAgent;
+  const pick = (re: RegExp, name: string) => {
+    const m = re.exec(ua);
+    return m ? `${name} ${m[1]}` : null;
+  };
+  const browser =
+    pick(/Edg\/(\d+)/, "Edge") ??
+    pick(/OPR\/(\d+)/, "Opera") ??
+    pick(/Firefox\/(\d+)/, "Firefox") ??
+    pick(/Chrome\/(\d+)/, "Chrome") ??
+    pick(/Version\/([\d.]+).*Safari/, "Safari") ??
+    "?";
+  const os = /iPhone|iPad/.test(ua)
+    ? "iOS"
+    : /Android/.test(ua)
+      ? "Android"
+      : /Windows/.test(ua)
+        ? "Windows"
+        : /Mac OS X/.test(ua)
+          ? "macOS"
+          : /Linux/.test(ua)
+            ? "Linux"
+            : "?";
+  return `${browser} · ${os}`;
+}
+
+function FeedbackDialog({ onClose, audioState }: { onClose: () => void; audioState: string }) {
   const t = useT();
   const backdrop = useBackdropDismiss(onClose);
   const [category, setCategory] = useState<FeedbackCategory>("bug");
   const [message, setMessage] = useState("");
+  // Bug-only extras, appended to the message so neither the gateway nor the
+  // private storage needs a schema change.
+  const [environment, setEnvironment] = useState(detectBrowserAndOs);
+  const [bugServer, setBugServer] = useState("");
+  const [steps, setSteps] = useState("");
+  const diagnostics = [
+    `Page: ${window.location.host}`,
+    `User agent: ${navigator.userAgent}`,
+    `Language: ${navigator.language}`,
+    `Audio: ${audioState}`,
+    `Output device switching: ${"setSinkId" in HTMLMediaElement.prototype ? "yes" : "no"}`,
+  ].join("\n");
   const [email, setEmail] = useState("");
   // Bugs always get filed as a GitHub issue - the checkbox is forced on and
   // locked while "bug" is selected (see the select's onChange below), so the
@@ -2626,7 +2667,19 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           category,
-          message: trimmed,
+          message:
+            category === "bug"
+              ? [
+                  trimmed,
+                  "",
+                  "---",
+                  `**Browser / OS:** ${environment.trim() || "?"}`,
+                  ...(bugServer.trim() ? [`**Server:** ${bugServer.trim()}`] : []),
+                  ...(steps.trim() ? [`**Steps:** ${steps.trim()}`] : []),
+                  "",
+                  diagnostics,
+                ].join("\n")
+              : trimmed,
           email: email.trim() || undefined,
           publishAsIssue,
           website,
@@ -2715,6 +2768,31 @@ function FeedbackDialog({ onClose }: { onClose: () => void }) {
                   onChange={(e) => setMessage(e.target.value)}
                 />
               </label>
+              {category === "bug" && (
+                <>
+                  <label className="ts-dialog-field">
+                    {t("feedback.dialog.bug.environment")}
+                    <input type="text" value={environment} onChange={(e) => setEnvironment(e.target.value)} />
+                  </label>
+                  <label className="ts-dialog-field">
+                    {t("feedback.dialog.bug.server")}
+                    <input type="text" value={bugServer} onChange={(e) => setBugServer(e.target.value)} />
+                  </label>
+                  <label className="ts-dialog-field">
+                    {t("feedback.dialog.bug.steps")}
+                    <textarea
+                      rows={3}
+                      value={steps}
+                      placeholder={t("feedback.dialog.bug.stepsPlaceholder")}
+                      onChange={(e) => setSteps(e.target.value)}
+                    />
+                  </label>
+                  <details className="ts-feedback-hint">
+                    <summary>{t("feedback.dialog.bug.diagnostics")}</summary>
+                    <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{diagnostics}</pre>
+                  </details>
+                </>
+              )}
               <label className="ts-dialog-field">
                 {t("feedback.dialog.email")}
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -11101,7 +11179,7 @@ function AppInner() {
 
       <DonateFab />
 
-      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
+      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} audioState={audioContextRef.current?.state ?? "not started"} />}
 
       {favoritesDialogMode && (
         <FavoritesDialog
