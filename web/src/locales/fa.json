@@ -57,7 +57,7 @@
   "feedback.dialog.publishAsIssueHint": "اگر تیک نزنی، بازخوردت خصوصی می‌ماند و فقط برای مدیر پروژه قابل مشاهده است.",
   "feedback.dialog.publishAsIssueHintBug": "گزارش اشکال‌ها همیشه به‌صورت Issue عمومی در گیت‌هاب منتشر می‌شوند.",
   "feedback.dialog.bug.environment": "مرورگر و سیستم‌عامل",
-  "feedback.dialog.bug.server": "سرور TeamSpeak (اختیاری)",
+  "feedback.dialog.bug.server": "سرور TeamSpeak (اختیاری – خصوصی می‌ماند و هرگز منتشر نمی‌شود)",
   "feedback.dialog.bug.steps": "درست قبل از آن چه کاری کردید؟ (اختیاری)",
   "feedback.dialog.bug.stepsPlaceholder": "مثلاً ورود به کانال، تغییر دستگاه خروجی… آیا بارگذاری مجدد صفحه کمک کرد؟",
   "feedback.dialog.bug.diagnostics": "جزئیات فنی ارسال‌شده",

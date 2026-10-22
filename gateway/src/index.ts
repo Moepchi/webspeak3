@@ -365,7 +365,7 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
     }
   }
 
-  let body: { category?: unknown; message?: unknown; email?: unknown; publishAsIssue?: unknown; website?: unknown };
+  let body: { category?: unknown; message?: unknown; email?: unknown; server?: unknown; publishAsIssue?: unknown; website?: unknown };
   try {
     body = JSON.parse(raw || "{}");
   } catch {
@@ -388,6 +388,9 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
   const message =
     typeof body.message === "string" ? body.message.trim().slice(0, FEEDBACK_MESSAGE_MAX_LENGTH) : "";
   const email = typeof body.email === "string" ? body.email.trim().slice(0, 200) || undefined : undefined;
+  // Like the e-mail: private log only, never in the public issue - it may
+  // name someone else's server.
+  const server = typeof body.server === "string" ? body.server.trim().slice(0, 200) : "";
   const publishAsIssue = body.publishAsIssue === true;
 
   if (!message) {
@@ -396,7 +399,12 @@ async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  await logFeedback({ at: new Date().toISOString(), category, message, email });
+  await logFeedback({
+    at: new Date().toISOString(),
+    category,
+    message: server ? `${message}\n**Server:** ${server}` : message,
+    email,
+  });
 
   let githubIssueUrl: string | undefined;
   if (publishAsIssue) {

@@ -57,7 +57,7 @@
   "feedback.dialog.publishAsIssueHint": "Leave unchecked to keep your feedback private, visible only to the maintainer.",
   "feedback.dialog.publishAsIssueHintBug": "Bug reports are always published as a public GitHub issue.",
   "feedback.dialog.bug.environment": "Browser & operating system",
-  "feedback.dialog.bug.server": "TeamSpeak server (optional)",
+  "feedback.dialog.bug.server": "TeamSpeak server (optional – stays private, never published)",
   "feedback.dialog.bug.steps": "What did you do right before? (optional)",
   "feedback.dialog.bug.stepsPlaceholder": "e.g. joined a channel, switched output device… Did reloading the page help?",
   "feedback.dialog.bug.diagnostics": "Technical details sent along",
