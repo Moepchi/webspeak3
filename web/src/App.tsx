@@ -2658,7 +2658,14 @@ function NewsTicker() {
     <div className="ts-news-ticker">
       <span className="ts-news-label">{t("news.label")}</span>
       <div className="ts-news-track">
-        <div className="ts-news-scroll" style={{ animationDuration: `${Math.max(20, items.length * 12)}s` }}>
+        {/* Duration from the distance travelled (track + text), so the speed is
+            the same ~60 px/s on every screen width. */}
+        <div
+          className="ts-news-scroll"
+          ref={(el) => {
+            if (el) el.style.animationDuration = `${el.scrollWidth / 60}s`;
+          }}
+        >
           {entries}
         </div>
       </div>
