@@ -2630,6 +2630,9 @@
 
 .ts-news-scroll {
   display: inline-block;
+  /* Starts just off the right edge and runs until fully off the left one,
+     so every message is on screen exactly once per pass. */
+  padding-left: 100%;
   animation: ts-news-scroll linear infinite;
 }
 
@@ -2659,12 +2662,13 @@
     transform: translateX(0);
   }
   to {
-    transform: translateX(-50%);
+    transform: translateX(-100%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ts-news-scroll {
+    padding-left: 0;
     animation: none;
   }
 }

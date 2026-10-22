@@ -2658,10 +2658,8 @@ function NewsTicker() {
     <div className="ts-news-ticker">
       <span className="ts-news-label">{t("news.label")}</span>
       <div className="ts-news-track">
-        {/* Rendered twice so the -50% scroll loops seamlessly. */}
         <div className="ts-news-scroll" style={{ animationDuration: `${Math.max(20, items.length * 12)}s` }}>
           {entries}
-          <span aria-hidden="true">{entries}</span>
         </div>
       </div>
       <button
