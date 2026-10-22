@@ -370,6 +370,12 @@ export class AudioPlayer {
     document.body.appendChild(this.element);
   }
 
+  /** Mobile browsers ignore `autoplay` for audible media, so the hidden
+   *  element stays paused (silent) until play() runs inside a user gesture. */
+  unlock(): void {
+    if (this.element.paused) this.element.play().catch(() => {});
+  }
+
   playFrame(base64Pcm: string): void {
     const int16 = base64ToInt16(base64Pcm);
     const frames = int16.length / 2;

@@ -7710,16 +7710,22 @@ function AppInner() {
   // Browsers keep an AudioContext created without a user gesture (auto-mic
   // on page load, a reconnect) "suspended" - silent - until one happens. The
   // mic permission prompt used to be the only thing resuming it, so with the
-  // mic denied or absent you'd never hear anyone. Any click/keypress does it.
+  // mic denied or absent you'd never hear anyone. Any click/keypress does it,
+  // and also starts the player's hidden <audio> element (see unlock()).
   useEffect(() => {
     const resume = () => {
       const ctx = audioContextRef.current;
       if (ctx?.state === "suspended") ctx.resume().catch(() => {});
+      audioPlayerRef.current?.unlock();
     };
+    // pointerup too: on touch screens pointerdown doesn't count as a user
+    // gesture, so resume()/play() from it alone are refused on phones.
     window.addEventListener("pointerdown", resume, true);
+    window.addEventListener("pointerup", resume, true);
     window.addEventListener("keydown", resume, true);
     return () => {
       window.removeEventListener("pointerdown", resume, true);
+      window.removeEventListener("pointerup", resume, true);
       window.removeEventListener("keydown", resume, true);
     };
   }, []);
@@ -9554,7 +9560,9 @@ function AppInner() {
   };
 
   const handlePlayTestTone = () => {
-    ensureAudioContext();
+    const ctx = ensureAudioContext();
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    audioPlayerRef.current?.unlock();
     audioPlayerRef.current?.playTestTone();
   };
 
