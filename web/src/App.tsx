@@ -7079,7 +7079,8 @@ function AppInner() {
   // Terms of use, own-hosted instance only (see IS_OWN_HOSTED_INSTANCE): shown
   // mandatorily on first visit, reopenable any time from the menu afterwards.
   const [tosOpen, setTosOpen] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
+  // client.webspeak3.de/#about opens the About dialog directly (shareable link).
+  const [aboutOpen, setAboutOpen] = useState(() => window.location.hash === "#about");
   const [tosMandatory, setTosMandatory] = useState(false);
   useEffect(() => {
     if (IS_OWN_HOSTED_INSTANCE && !hasAcceptedToS()) {
@@ -11303,7 +11304,14 @@ function AppInner() {
 
       {restartNotice && <RestartNoticeDialog message={restartNotice} onAck={() => setRestartNotice(null)} />}
 
-      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
+      {aboutOpen && (
+        <AboutDialog
+          onClose={() => {
+            setAboutOpen(false);
+            if (window.location.hash === "#about") window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          }}
+        />
+      )}
 
       {tosOpen && (
         <ToSDialog
