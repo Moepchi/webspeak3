@@ -347,12 +347,15 @@ type SinkableContext = AudioContext & { setSinkId?: (id: string) => Promise<void
  * `AudioContext.setSinkId` (Chrome 110+) only retargets the context itself,
  * while `HTMLMediaElement.setSinkId` (Chrome, and Firefox 130+) only works on
  * a media element. Routing through the element lets `setOutputDevice` use
- * whichever one the browser actually supports.
+ * whichever one the browser actually supports. Browsers without
+ * `HTMLMediaElement.setSinkId` (mobile ones) play straight to the context.
  */
 export class AudioPlayer {
   private nextTime = 0;
-  private destination: MediaStreamAudioDestinationNode;
-  private element: SinkableElement;
+  // null where media elements can't switch devices (Android Chrome/Firefox):
+  // there the detour buys nothing and its <audio> element stays silent.
+  private destination: MediaStreamAudioDestinationNode | null = null;
+  private element: SinkableElement | null = null;
   private gain: GainNode;
   private context: AudioContext;
   private aecTap: ScriptProcessorNode | null = null;
@@ -360,8 +363,12 @@ export class AudioPlayer {
 
   constructor(context: AudioContext) {
     this.context = context;
-    this.destination = context.createMediaStreamDestination();
     this.gain = context.createGain();
+    if (!("setSinkId" in HTMLMediaElement.prototype)) {
+      this.gain.connect(context.destination);
+      return;
+    }
+    this.destination = context.createMediaStreamDestination();
     this.gain.connect(this.destination);
     this.element = document.createElement("audio") as SinkableElement;
     this.element.autoplay = true;
@@ -373,7 +380,7 @@ export class AudioPlayer {
   /** Mobile browsers ignore `autoplay` for audible media, so the hidden
    *  element stays paused (silent) until play() runs inside a user gesture. */
   unlock(): void {
-    if (this.element.paused) this.element.play().catch(() => {});
+    if (this.element?.paused) this.element.play().catch(() => {});
   }
 
   playFrame(base64Pcm: string): void {
@@ -467,7 +474,7 @@ export class AudioPlayer {
 
   /** Routes playback to a specific device (empty string = system default). */
   async setOutputDevice(deviceId: string): Promise<void> {
-    if (typeof this.element.setSinkId === "function") {
+    if (typeof this.element?.setSinkId === "function") {
       await this.element.setSinkId(deviceId);
       return;
     }
@@ -480,9 +487,11 @@ export class AudioPlayer {
 
   dispose(): void {
     this.detachAecRenderTap();
+    this.gain.disconnect();
+    if (!this.element) return;
     this.element.pause();
     this.element.srcObject = null;
     this.element.remove();
-    this.destination.stream.getTracks().forEach((t) => t.stop());
+    this.destination?.stream.getTracks().forEach((t) => t.stop());
   }
 }
