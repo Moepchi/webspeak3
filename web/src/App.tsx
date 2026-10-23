@@ -688,6 +688,37 @@ function loadWhisperSettings(): WhisperSettings {
   }
 }
 
+const APP_SETTINGS_KEY = "webspeak3:app-settings";
+
+/** Options -> Anwendung. Read on use, so the socket handlers need no refs. */
+interface AppSettings {
+  micOnServerSwitch: boolean;
+  reconnectAfterSleep: boolean;
+  middleClickQuickAccess: boolean;
+  updateFavoriteNickname: boolean;
+  autoOpenChannelChat: boolean;
+  mutedTalkingSound: boolean;
+  neverShowPokeDialog: boolean;
+}
+
+const DEFAULT_APP_SETTINGS: AppSettings = {
+  micOnServerSwitch: true,
+  reconnectAfterSleep: true,
+  middleClickQuickAccess: true,
+  updateFavoriteNickname: false,
+  autoOpenChannelChat: false,
+  mutedTalkingSound: false,
+  neverShowPokeDialog: false,
+};
+
+function loadAppSettings(): AppSettings {
+  try {
+    return { ...DEFAULT_APP_SETTINGS, ...JSON.parse(localStorage.getItem(APP_SETTINGS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULT_APP_SETTINGS;
+  }
+}
+
 const SECURITY_SETTINGS_KEY = "webspeak3:security-settings";
 const CHANNEL_PASSWORDS_KEY = "webspeak3:channel-passwords";
 
@@ -1536,6 +1567,9 @@ function ChannelTree({
               onSwitchChannel(channel.id);
             }}
             onContextMenu={(e) => onChannelContextMenu(e, channel.id, channel.name)}
+            onAuxClick={(e) => {
+              if (e.button === 1 && loadAppSettings().middleClickQuickAccess) onSwitchChannel(channel.id);
+            }}
             tabIndex={isTabStop ? 0 : -1}
             onFocus={(e) => {
               if (e.target === e.currentTarget && !isSelected) onSelectItem({ type: "channel", id: channel.id });
@@ -1641,6 +1675,10 @@ function ChannelTree({
                       c.id === ownClientId ? undefined : () => onOpenPrivateChat(c.id, c.name)
                     }
                     onContextMenu={(e) => onClientContextMenu(e, c.id, c.name, c.id === ownClientId)}
+                    onAuxClick={(e) => {
+                      if (e.button === 1 && c.id !== ownClientId && loadAppSettings().middleClickQuickAccess)
+                        onOpenPrivateChat(c.id, c.name);
+                    }}
                     tabIndex={clientSelected ? 0 : -1}
                     onFocus={(e) => {
                       if (e.target === e.currentTarget && !clientSelected) onSelectItem({ type: "client", id: c.id });
@@ -6289,36 +6327,90 @@ function AnwendungPanel({
 }) {
   const t = useT();
   const { langPref, setLangPref } = useLanguage();
+  const [settings, setSettings] = useState(loadAppSettings);
+  const check = (key: keyof AppSettings) => (
+    <label className="ts-options-checkbox">
+      <input
+        type="checkbox"
+        checked={settings[key]}
+        onChange={(e) => {
+          const next = { ...settings, [key]: e.target.checked };
+          setSettings(next);
+          localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
+        }}
+      />
+      {t(`app.${key}`)}
+    </label>
+  );
   return (
     <>
       <h3>{t("app.title")}</h3>
       <p className="ts-options-subtitle">{t("app.subtitle")}</p>
-      <label className="ts-options-field">
-        {t("app.language")}
-        <select value={langPref} onChange={(e) => setLangPref(e.target.value as LangPref)}>
-          <option value="auto">{t("app.language.auto")}</option>
-          <option value="de">{t("app.language.de")}</option>
-          <option value="en">{t("app.language.en")}</option>
-          <option value="zh-CN">{t("app.language.zh-CN")}</option>
-          <option value="fa">{t("app.language.fa")}</option>
-          <option value="cs-CZ">{t("app.language.cs-CZ")}</option>
-        </select>
-      </label>
-      <p className="ts-options-hint">
-        <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
-          {t("app.language.helpTranslate")}
-        </a>
-      </p>
-      <label className="ts-options-checkbox">
-        <input type="checkbox" checked={showServerBanner} onChange={(e) => onShowServerBannerChange(e.target.checked)} />
-        {t("app.serverBanner")}
-      </label>
-      <p className="ts-options-hint">{t("app.serverBanner.hint")}</p>
-      <label className="ts-options-checkbox">
-        <input type="checkbox" checked={chatImages} onChange={(e) => onChatImagesChange(e.target.checked)} />
-        {t("app.chatImages")}
-      </label>
-      <p className="ts-options-hint">{t("app.chatImages.hint")}</p>
+      <div className="ts-options-columns">
+        <div className="ts-options-fields">
+          <fieldset className="ts-options-fieldset">
+            <legend>{t("app.group.server")}</legend>
+            {check("micOnServerSwitch")}
+            {check("reconnectAfterSleep")}
+            {check("middleClickQuickAccess")}
+            {check("updateFavoriteNickname")}
+          </fieldset>
+          <fieldset className="ts-options-fieldset">
+            <legend>{t("app.group.misc")}</legend>
+            {check("autoOpenChannelChat")}
+            {/* ponytail: greyed until we know what the web permission editor should hide when off */}
+            <label className="ts-options-checkbox ts-options-disabled" title={t("design.notAvailable")}>
+              <input type="checkbox" checked disabled />
+              {t("app.advancedPermissions")}
+            </label>
+            {check("mutedTalkingSound")}
+            {check("neverShowPokeDialog")}
+          </fieldset>
+          <fieldset className="ts-options-fieldset">
+            <legend>{t("app.group.subscribe")}</legend>
+            <label className="ts-options-radio">
+              <input type="radio" name="ts-app-subscribe" checked readOnly />
+              {t("app.subscribe.all")}
+            </label>
+            {/* The connector always subscribes everything; "current only" needs connector work. */}
+            <label className="ts-options-radio ts-options-disabled" title={t("design.notAvailable")}>
+              <input type="radio" name="ts-app-subscribe" disabled />
+              {t("app.subscribe.current")}
+            </label>
+          </fieldset>
+        </div>
+        <div className="ts-options-fields">
+          <label className="ts-options-field">
+            {t("app.language")}
+            <select value={langPref} onChange={(e) => setLangPref(e.target.value as LangPref)}>
+              <option value="auto">{t("app.language.auto")}</option>
+              <option value="de">{t("app.language.de")}</option>
+              <option value="en">{t("app.language.en")}</option>
+              <option value="zh-CN">{t("app.language.zh-CN")}</option>
+              <option value="fa">{t("app.language.fa")}</option>
+              <option value="cs-CZ">{t("app.language.cs-CZ")}</option>
+            </select>
+          </label>
+          <p className="ts-options-hint">
+            <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
+              {t("app.language.helpTranslate")}
+            </a>
+          </p>
+          <fieldset className="ts-options-fieldset">
+            <legend>{t("app.group.privacy")}</legend>
+            <label className="ts-options-checkbox">
+              <input type="checkbox" checked={showServerBanner} onChange={(e) => onShowServerBannerChange(e.target.checked)} />
+              {t("app.serverBanner")}
+            </label>
+            <p className="ts-options-hint">{t("app.serverBanner.hint")}</p>
+            <label className="ts-options-checkbox">
+              <input type="checkbox" checked={chatImages} onChange={(e) => onChatImagesChange(e.target.checked)} />
+              {t("app.chatImages")}
+            </label>
+            <p className="ts-options-hint">{t("app.chatImages.hint")}</p>
+          </fieldset>
+        </div>
+      </div>
     </>
   );
 }
@@ -9305,7 +9397,8 @@ function AppInner() {
     // parkActiveSession() above stopped the mic when leaving the previous tab -
     // restore it here if it was on for the tab we're switching back to, so
     // re-entering a tab doesn't silently leave the user unable to transmit.
-    if (parked.micWasOn) void startMic();
+    // "Mikrofon beim Wechseln des Servers automatisch aktivieren" turns it on either way.
+    if (parked.micWasOn || (parked.connected && loadAppSettings().micOnServerSwitch)) void startMic();
   };
 
   const removeSession = (id: string, opts?: { skipSocketClose?: boolean }) => {
@@ -9545,7 +9638,10 @@ function AppInner() {
             const newOwn = newClients.find(isOwn)?.channel;
             // One sound per kind per update; ServerQuery churn is noisy, never notify for those.
             const keys = new Set<string>();
-            if (oldOwn != null && newOwn != null && oldOwn !== newOwn) keys.add("YOU_SWITCHED_CHANNEL");
+            if (oldOwn != null && newOwn != null && oldOwn !== newOwn) {
+              keys.add("YOU_SWITCHED_CHANNEL");
+              if (loadAppSettings().autoOpenChannelChat) setActiveTab("channel");
+            }
             for (const c of newClients) {
               if (isOwn(c) || c.isQuery) continue;
               const before = prevById.get(c.id);
@@ -9701,9 +9797,11 @@ function AppInner() {
           break;
         }
         case "poke": {
-          const id = ++pokeIdRef.current;
-          setPokes((prev) => [...prev, { id, from: data.from, message: data.message }]);
-          setTimeout(() => setPokes((prev) => prev.filter((p) => p.id !== id)), 10000);
+          if (!loadAppSettings().neverShowPokeDialog) {
+            const id = ++pokeIdRef.current;
+            setPokes((prev) => [...prev, { id, from: data.from, message: data.message }]);
+            setTimeout(() => setPokes((prev) => prev.filter((p) => p.id !== id)), 10000);
+          }
           void notify("OTHER_RECEIVED_POKE", { clientName: data.from });
           break;
         }
@@ -10257,6 +10355,7 @@ function AppInner() {
     const onVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
       requestWakeLock();
+      if (!loadAppSettings().reconnectAfterSleep) return;
       for (const id of sessionsRef.current.keys()) {
         reconnectSessionRef.current(id);
       }
@@ -10264,6 +10363,7 @@ function AppInner() {
 
     // Back online: retry now instead of waiting out a backoff of up to 30 s.
     const onOnline = () => {
+      if (!loadAppSettings().reconnectAfterSleep) return;
       reconnectAttemptsRef.current.clear();
       for (const id of sessionsRef.current.keys()) reconnectSessionRef.current(id);
     };
@@ -11089,6 +11189,8 @@ function AppInner() {
 
   const handleSetNickname = (newNickname: string) => {
     socketRef.current?.send(JSON.stringify({ type: "setNickname", nickname: newNickname }));
+    if (loadAppSettings().updateFavoriteNickname && activeFavoriteId)
+      saveFavorites(favorites.map((f) => (f.id === activeFavoriteId ? { ...f, nickname: newNickname } : f)));
   };
 
   const handleServerQueryLogin = () => {
@@ -12041,6 +12143,11 @@ function AppInner() {
     () => setSessionSoundPack(favorites.find((f) => f.id === activeFavoriteId)?.soundPack),
     [favorites, activeFavoriteId]
   );
+  // "Akustischen Hinweis abspielen, wenn das Mikrofon gemutet ist": once per talk start.
+  const talkingWhileMuted = Boolean(selfActive && inputMuted);
+  useEffect(() => {
+    if (talkingWhileMuted && loadAppSettings().mutedTalkingSound) void notify("SPECIAL_TALKING_WHILE_MUTED");
+  }, [talkingWhileMuted]);
   const selfTalkingSeenRef = useRef(false);
   useEffect(() => {
     // Skip the initial render so opening the client doesn't click.

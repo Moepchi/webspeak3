@@ -138,6 +138,7 @@ const BUILTIN_SCRIPTS: Record<string, SoundEventId> = {
   SPECIAL_MIC_CLICK_SELF_ON: "micClickOn",
   SPECIAL_MIC_CLICK_SELF_OFF: "micClickOff",
   SPECIAL_WHISPER_NOTIFY: "whisper",
+  SPECIAL_TALKING_WHILE_MUTED: "mute",
 };
 
 export const BUILTIN_PACK = "builtin";
