@@ -6393,8 +6393,6 @@ function DownloadsPanel() {
   );
 }
 
-const CHAT_MAX_LINES_OPTIONS = [100, 200, 500, 1000, 2000];
-const CHAT_RESTORE_OPTIONS = [10, 50, 100, 500];
 const CHAT_FONTS = [
   "Arial",
   "Verdana",
@@ -6420,13 +6418,19 @@ function ChatPanel() {
         <input type="checkbox" checked={chat[key] > 0} onChange={(e) => set({ [key]: e.target.checked ? 100 : 0 })} />
         {t(`chatSettings.${key}`)}
       </label>
-      <select value={chat[key] || 100} disabled={chat[key] === 0} onChange={(e) => set({ [key]: Number(e.target.value) })}>
-        {CHAT_RESTORE_OPTIONS.map((n) => (
-          <option key={n} value={n}>
-            {t("chatSettings.lastLines", { count: String(n) })}
-          </option>
-        ))}
-      </select>
+      <span>
+        {t("chatSettings.last")}{" "}
+        <input
+          type="number"
+          min={1}
+          max={1000}
+          className="ts-download-number"
+          value={chat[key] || 100}
+          disabled={chat[key] === 0}
+          onChange={(e) => set({ [key]: Math.min(1000, Math.max(1, Number(e.target.value) || 1)) })}
+        />{" "}
+        {t("chatSettings.linesUnit")}
+      </span>
     </div>
   );
   return (
@@ -6438,13 +6442,16 @@ function ChatPanel() {
           <legend>{t("chatSettings.window")}</legend>
           <label className="ts-options-field">
             {t("chatSettings.maxLines")}
-            <select value={chat.maxLines} onChange={(e) => set({ maxLines: Number(e.target.value) })}>
-              {CHAT_MAX_LINES_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {t("chatSettings.lines", { count: String(n) })}
-                </option>
-              ))}
-            </select>
+            <span>
+              <input
+                type="number"
+                min={10}
+                className="ts-download-number"
+                value={chat.maxLines}
+                onChange={(e) => set({ maxLines: Math.max(10, Number(e.target.value) || 10) })}
+              />{" "}
+              {t("chatSettings.linesUnit")}
+            </span>
           </label>
           <div className="ts-chat-font-row">
             {t("chatSettings.font")}

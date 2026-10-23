@@ -776,7 +776,6 @@
   "chatSettings.subtitle": "聊天设置",
   "chatSettings.window": "聊天窗口",
   "chatSettings.maxLines": "最大行数：",
-  "chatSettings.lines": "{count} 行",
   "chatSettings.font": "字体：",
   "chatSettings.fontDefault": "默认",
   "chatSettings.fontReset": "重置字体",
@@ -789,9 +788,10 @@
   "chatSettings.restore": "加载记录",
   "chatSettings.restoreChannelLines": "加载频道聊天记录",
   "chatSettings.restorePrivateLines": "加载私聊记录",
-  "chatSettings.lastLines": "最近 {count} 行",
   "chatSettings.notify": "新消息提示",
   "chatSettings.notifyServer": "服务器",
   "chatSettings.notifyChannel": "频道",
-  "chatSettings.notifyPrivate": "私聊"
+  "chatSettings.notifyPrivate": "私聊",
+  "chatSettings.linesUnit": "行",
+  "chatSettings.last": "最近"
 }

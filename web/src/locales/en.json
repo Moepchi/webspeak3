@@ -777,7 +777,6 @@
   "chatSettings.subtitle": "Chat settings",
   "chatSettings.window": "Chat window",
   "chatSettings.maxLines": "Maximum number of lines:",
-  "chatSettings.lines": "{count} lines",
   "chatSettings.font": "Font:",
   "chatSettings.fontDefault": "Default",
   "chatSettings.fontReset": "Reset font",
@@ -790,9 +789,10 @@
   "chatSettings.restore": "Reload logs",
   "chatSettings.restoreChannelLines": "Reload channel chat logs",
   "chatSettings.restorePrivateLines": "Reload private chat logs",
-  "chatSettings.lastLines": "last {count} lines",
   "chatSettings.notify": "Notify on incoming messages",
   "chatSettings.notifyServer": "Server",
   "chatSettings.notifyChannel": "Channel",
-  "chatSettings.notifyPrivate": "Private"
+  "chatSettings.notifyPrivate": "Private",
+  "chatSettings.linesUnit": "lines",
+  "chatSettings.last": "last"
 }

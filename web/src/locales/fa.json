@@ -776,7 +776,6 @@
   "chatSettings.subtitle": "تنظیمات چت",
   "chatSettings.window": "پنجره چت",
   "chatSettings.maxLines": "حداکثر تعداد خطوط:",
-  "chatSettings.lines": "{count} خط",
   "chatSettings.font": "قلم:",
   "chatSettings.fontDefault": "پیش‌فرض",
   "chatSettings.fontReset": "بازنشانی قلم",
@@ -789,9 +788,10 @@
   "chatSettings.restore": "بارگذاری گزارش‌ها",
   "chatSettings.restoreChannelLines": "بارگذاری گزارش چت کانال",
   "chatSettings.restorePrivateLines": "بارگذاری گزارش چت خصوصی",
-  "chatSettings.lastLines": "{count} خط آخر",
   "chatSettings.notify": "اعلان برای پیام‌های ورودی",
   "chatSettings.notifyServer": "سرور",
   "chatSettings.notifyChannel": "کانال",
-  "chatSettings.notifyPrivate": "خصوصی"
+  "chatSettings.notifyPrivate": "خصوصی",
+  "chatSettings.linesUnit": "خط",
+  "chatSettings.last": "آخرین"
 }

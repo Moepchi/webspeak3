@@ -777,7 +777,6 @@
   "chatSettings.subtitle": "Nastavení chatu",
   "chatSettings.window": "Okno chatu",
   "chatSettings.maxLines": "Maximální počet řádků:",
-  "chatSettings.lines": "{count} řádků",
   "chatSettings.font": "Písmo:",
   "chatSettings.fontDefault": "Výchozí",
   "chatSettings.fontReset": "Obnovit písmo",
@@ -790,9 +789,10 @@
   "chatSettings.restore": "Načíst protokoly",
   "chatSettings.restoreChannelLines": "Načíst protokoly chatu kanálu",
   "chatSettings.restorePrivateLines": "Načíst protokoly soukromých chatů",
-  "chatSettings.lastLines": "posledních {count} řádků",
   "chatSettings.notify": "Upozornění na příchozí zprávy",
   "chatSettings.notifyServer": "Server",
   "chatSettings.notifyChannel": "Kanál",
-  "chatSettings.notifyPrivate": "Soukromé"
+  "chatSettings.notifyPrivate": "Soukromé",
+  "chatSettings.linesUnit": "řádků",
+  "chatSettings.last": "posledních"
 }
