@@ -397,7 +397,6 @@
   "app.middleClickQuickAccess": "Mittleren Mousebutton als Schnellzugriff im Baum benutzen",
   "app.updateFavoriteNickname": "Automatisch Nicknamen in Favoriten aktualisieren",
   "app.autoOpenChannelChat": "Channel Chats automatisch öffnen",
-  "app.advancedPermissions": "Fortgeschrittenes Rechtesystem",
   "app.mutedTalkingSound": "Akustischen Hinweis abspielen, wenn das Mikrofon gemutet ist",
   "app.neverShowPokeDialog": "Anstupsen Dialog nie zeigen",
   "app.subscribe.all": "Alle Channel abonnieren",

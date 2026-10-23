@@ -6358,11 +6358,6 @@ function AnwendungPanel({
           <fieldset className="ts-options-fieldset">
             <legend>{t("app.group.misc")}</legend>
             {check("autoOpenChannelChat")}
-            {/* ponytail: greyed until we know what the web permission editor should hide when off */}
-            <label className="ts-options-checkbox ts-options-disabled" title={t("design.notAvailable")}>
-              <input type="checkbox" checked disabled />
-              {t("app.advancedPermissions")}
-            </label>
             {check("mutedTalkingSound")}
             {check("neverShowPokeDialog")}
           </fieldset>
