@@ -1010,6 +1010,10 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
         await connection?.downloadFile(msg.channelId, msg.path);
         break;
       }
+      case "setTransferLimit": {
+        connection?.setTransferLimit(msg.up, msg.down);
+        break;
+      }
       case "uploadFile": {
         await connection?.uploadFile(msg.channelId, msg.path, msg.dataBase64);
         break;

@@ -152,6 +152,19 @@ import {
 } from "./iconpack";
 import { StillImg } from "./lib/still";
 import {
+  DEFAULT_DOWNLOAD_SETTINGS,
+  canPickFolder,
+  clearDownloadDir,
+  loadDownloadDir,
+  loadDownloadSettings,
+  pickDownloadDir,
+  resolveSaveTarget,
+  saveDownloadSettings,
+  writeToTarget,
+  type DownloadSettings,
+  type SaveTarget,
+} from "./downloads";
+import {
   GREENTEASPEAK_THEME_ID,
   GreenteaSpeakChrome,
   isGreenteaSpeakTheme,
@@ -688,6 +701,10 @@ const DisplayPrefsContext = createContext<{
   saveIconPacks: (packs: IconPack[]) => void;
   whisper: WhisperSettings;
   setWhisper: (next: WhisperSettings) => void;
+  downloads: DownloadSettings;
+  setDownloads: (next: DownloadSettings) => void;
+  downloadDir: FileSystemDirectoryHandle | null;
+  setDownloadDir: (dir: FileSystemDirectoryHandle | null) => void;
 }>({
   tree: DEFAULT_TREE_OPTIONS,
   setTree: () => {},
@@ -697,6 +714,10 @@ const DisplayPrefsContext = createContext<{
   saveIconPacks: () => {},
   whisper: DEFAULT_WHISPER_SETTINGS,
   setWhisper: () => {},
+  downloads: DEFAULT_DOWNLOAD_SETTINGS,
+  setDownloads: () => {},
+  downloadDir: null,
+  setDownloadDir: () => {},
 });
 const DISCONNECT_MESSAGE_KEY = "webspeak3:disconnect-message";
 const COLLECTED_URLS_KEY = "webspeak3:collected-urls";
@@ -985,10 +1006,82 @@ function formatRate(bytesPerSec: number): string {
  *  into an actual browser download, without ever round-tripping through the
  *  gateway's HTTP surface - it's all-in-memory via a Blob + object URL. */
 function triggerBrowserDownload(filename: string, base64Data: string): void {
+  downloadBlob(base64Blob(base64Data), filename);
+}
+
+function base64Blob(base64Data: string): Blob {
   const binary = atob(base64Data);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  downloadBlob(new Blob([bytes]), filename);
+  return new Blob([bytes]);
+}
+
+/** One entry of the file transfer window (Options -> Download queue/limits). */
+interface Transfer {
+  id: number;
+  dir: "up" | "down";
+  cid: number;
+  path: string;
+  name: string;
+  size: number;
+  done: number;
+  status: "queued" | "running" | "done" | "error";
+  /** Downloads: picked at click time. */
+  target?: SaveTarget;
+  /** Uploads. */
+  file?: File;
+}
+
+function FileTransfersWindow({
+  transfers,
+  onClearFinished,
+  onClose,
+}: {
+  transfers: Transfer[];
+  onClearFinished: () => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="ts-dialog ts-transfers-window" role="dialog" aria-label={t("transfers.title")}>
+      <div className="ts-dialog-titlebar">
+        <span>{t("transfers.title")}</span>
+        <button onClick={onClose} title={t("dialog.close")} aria-label={t("dialog.close")}>
+          ✕
+        </button>
+      </div>
+      <div className="ts-dialog-body">
+        {transfers.length === 0 ? (
+          <p className="ts-options-placeholder">{t("transfers.empty")}</p>
+        ) : (
+          <table className="ts-transfers-table">
+            <tbody>
+              {transfers.map((x) => (
+                <tr key={x.id} className={`ts-transfer-${x.status}`}>
+                  <td title={t(`transfers.${x.dir}`)}>{x.dir === "down" ? "⬇" : "⬆"}</td>
+                  <td className="ts-transfers-name" title={x.path}>
+                    {x.name}
+                  </td>
+                  <td>
+                    <progress value={x.done} max={x.size || 1} />
+                  </td>
+                  <td>
+                    {formatBytes(x.done)} / {formatBytes(x.size)}
+                  </td>
+                  <td>{t(`transfers.status.${x.status}`)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <div className="ts-dialog-buttons">
+        <div className="ts-dialog-buttons-right">
+          <button onClick={onClearFinished}>{t("transfers.clearFinished")}</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -6174,6 +6267,107 @@ function WhisperPanel({ onOpenWhisperLists }: { onOpenWhisperLists: () => void }
   );
 }
 
+function DownloadsPanel() {
+  const t = useT();
+  const { downloads, setDownloads, downloadDir, setDownloadDir } = useContext(DisplayPrefsContext);
+  const set = (patch: Partial<DownloadSettings>) => setDownloads({ ...downloads, ...patch });
+  const limitRow = (key: "uploadLimit" | "downloadLimit") => (
+    <fieldset className="ts-options-fieldset">
+      <legend>{t(`downloadSettings.${key}`)}</legend>
+      <label className="ts-options-radio">
+        <input type="radio" checked={downloads[key] === 0} onChange={() => set({ [key]: 0 })} />
+        {t("downloadSettings.unlimited")}
+      </label>
+      <label className="ts-options-radio">
+        <input type="radio" checked={downloads[key] > 0} onChange={() => set({ [key]: 5 })} />
+        {t("downloadSettings.limitedTo")}
+        <input
+          type="number"
+          min={1}
+          className="ts-download-number"
+          value={downloads[key] || 5}
+          disabled={downloads[key] === 0}
+          onChange={(e) => set({ [key]: Math.max(1, Number(e.target.value) || 1) })}
+        />
+        KiB/s
+      </label>
+    </fieldset>
+  );
+  const countRow = (key: "maxUploads" | "maxDownloads") => (
+    <fieldset className="ts-options-fieldset">
+      <legend>{t(`downloadSettings.${key}`)}</legend>
+      <label className="ts-options-field">
+        {t("downloadSettings.limitedTo")}
+        <input
+          type="number"
+          min={1}
+          className="ts-download-number"
+          value={downloads[key]}
+          onChange={(e) => set({ [key]: Math.max(1, Number(e.target.value) || 1) })}
+        />
+      </label>
+    </fieldset>
+  );
+  return (
+    <>
+      <h3>{t("options.section.downloads")}</h3>
+      <p className="ts-options-subtitle">{t("downloadSettings.subtitle")}</p>
+      <div className="ts-options-fields">
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("downloadSettings.directory")}</legend>
+          <div className="ts-download-dir">
+            {t("downloadSettings.directoryLabel")} <strong>{downloadDir?.name ?? t("downloadSettings.browserDefault")}</strong>
+            <button
+              disabled={!canPickFolder}
+              onClick={() => void pickDownloadDir().then((dir) => dir && setDownloadDir(dir))}
+            >
+              {t("downloadSettings.change")}
+            </button>
+            {downloadDir && (
+              <button onClick={() => void clearDownloadDir().then(() => setDownloadDir(null))}>
+                {t("downloadSettings.reset")}
+              </button>
+            )}
+          </div>
+          <label className="ts-options-radio">
+            <input type="radio" checked={downloads.saveMode === "dir"} onChange={() => set({ saveMode: "dir" })} />
+            {t("downloadSettings.alwaysDir")}
+          </label>
+          <label className="ts-options-radio">
+            <input
+              type="radio"
+              disabled={!canPickFolder}
+              checked={downloads.saveMode === "ask"}
+              onChange={() => set({ saveMode: "ask" })}
+            />
+            {t("downloadSettings.askEachTime")}
+          </label>
+          {!canPickFolder && <p className="ts-options-hint">{t("downloadSettings.unsupported")}</p>}
+        </fieldset>
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("downloadSettings.interface")}</legend>
+          {(["showWindowOnStart", "closeWindowWhenDone", "popupWhenDone"] as const).map((key) => (
+            <label key={key} className="ts-options-checkbox">
+              <input type="checkbox" checked={downloads[key]} onChange={(e) => set({ [key]: e.target.checked })} />
+              {t(`downloadSettings.${key}`)}
+            </label>
+          ))}
+        </fieldset>
+        <div className="ts-design-native">
+          <div className="ts-design-col">
+            {limitRow("uploadLimit")}
+            {countRow("maxUploads")}
+          </div>
+          <div className="ts-design-col">
+            {limitRow("downloadLimit")}
+            {countRow("maxDownloads")}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function DesignPanel({
   designSelection,
   onSelectionChange,
@@ -7203,6 +7397,8 @@ function OptionsDialog({
               <NachrichtenPanel />
             ) : active.id === "whispern" ? (
               <WhisperPanel onOpenWhisperLists={onOpenWhisperLists} />
+            ) : active.id === "downloads" ? (
+              <DownloadsPanel />
             ) : (
               <>
                 <h3>{t(`options.section.${active.id}`)}</h3>
@@ -7684,6 +7880,13 @@ function AppInner() {
   const [iconPacks, setIconPacks] = useState(loadIconPacks);
   const [iconPackId, setIconPackId] = useState(loadSelectedIconPack);
   const [whisperSettings, setWhisperSettings] = useState(loadWhisperSettings);
+  const [downloadSettings, setDownloadSettings] = useState(loadDownloadSettings);
+  const downloadSettingsRef = useRef(downloadSettings);
+  downloadSettingsRef.current = downloadSettings;
+  const [downloadDir, setDownloadDir] = useState<FileSystemDirectoryHandle | null>(null);
+  useEffect(() => {
+    void loadDownloadDir().then(setDownloadDir);
+  }, []);
   const whisperSettingsRef = useRef(whisperSettings);
   whisperSettingsRef.current = whisperSettings;
   const displayPrefs = useMemo(
@@ -7708,8 +7911,15 @@ function AppInner() {
         setWhisperSettings(next);
         localStorage.setItem(WHISPER_SETTINGS_KEY, JSON.stringify(next));
       },
+      downloads: downloadSettings,
+      setDownloads: (next: DownloadSettings) => {
+        setDownloadSettings(next);
+        saveDownloadSettings(next);
+      },
+      downloadDir,
+      setDownloadDir,
     }),
-    [treeOptions, iconPacks, iconPackId, whisperSettings]
+    [treeOptions, iconPacks, iconPackId, whisperSettings, downloadSettings, downloadDir]
   );
   const iconPackStyle = iconPackCss(iconPacks.find((p) => p.id === iconPackId));
   const [micOn, setMicOn] = useState(false);
@@ -8513,6 +8723,11 @@ function AppInner() {
         const pieces = downloadChunks.get(key);
         if (!pieces) return;
         pieces.push(data.data);
+        const transfer = findTransfer("down", data.cid, data.path);
+        if (transfer) {
+          transfer.done = data.offset + (data.data.length * 3) / 4;
+          commitTransfers();
+        }
         if (!data.done) return;
         downloadChunks.delete(key);
         data = { type: "fileDownloadData", cid: data.cid, path: data.path, data: pieces.join("") };
@@ -8821,8 +9036,15 @@ function AppInner() {
           }));
           break;
         }
-        case "error":
+        case "error": {
           logClient("error", "Connection", data.message);
+          // ponytail: connector errors carry no transfer id, so the oldest running
+          // transfer of that kind takes the blame. Add an id when that misfires.
+          const msg = String(data.message);
+          const kind = /^download/i.test(msg) ? "down" : /^upload/i.test(msg) ? "up" : /^file transfer/i.test(msg) ? "any" : null;
+          const failed =
+            kind && transfersRef.current.find((x) => x.status === "running" && (kind === "any" || x.dir === kind));
+          if (failed) finishTransfer(failed, false);
           if (hasConnectedRef.current) {
             appendLog({ text: data.message, kind: "error" });
           } else {
@@ -8831,6 +9053,7 @@ function AppInner() {
             updateTabMeta(sessionId, { connecting: false, connected: false });
           }
           break;
+        }
         case "clientConnectionInfo":
           setClientConnectionInfo({
             clientId: data.clientId,
@@ -8912,14 +9135,26 @@ function AppInner() {
             setServerIconImages((prev) => ({ ...prev, [data.path]: data.data }));
           } else {
             const filename = data.path.split("/").filter(Boolean).pop() ?? "download";
-            triggerBrowserDownload(filename, data.data);
+            const transfer = findTransfer("down", data.cid, data.path);
+            if (!transfer) {
+              triggerBrowserDownload(filename, data.data);
+              break;
+            }
+            const blob = base64Blob(data.data);
+            void writeToTarget(transfer.target ?? null, blob).then((saved) => {
+              if (!saved) downloadBlob(blob, filename);
+              finishTransfer(transfer, true);
+            });
           }
           break;
         }
-        case "fileUploadDone":
+        case "fileUploadDone": {
+          const transfer = findTransfer("up", data.cid, data.path);
+          if (transfer) finishTransfer(transfer, true);
           if (data.cid === 0) handleServerIconsRefresh();
           else handleFileBrowserRefresh();
           break;
+        }
         case "permList":
           setPermissionsEditorEntries(data.entries);
           break;
@@ -10803,15 +11038,92 @@ function AppInner() {
     window.setTimeout(handleFileBrowserRefresh, 300);
   };
 
-  const handleFileBrowserDownload = (entry: FileListEntry) => {
+  // Options -> Download: queue, limits and the transfer window. transfersRef is
+  // the source of truth because socket handlers keep old closures; the state
+  // copy only drives re-renders.
+  const transfersRef = useRef<Transfer[]>([]);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [transfersOpen, setTransfersOpen] = useState(false);
+  const [transferToast, setTransferToast] = useState<{ name: string } | null>(null);
+  const nextTransferIdRef = useRef(1);
+  const commitTransfers = () => setTransfers([...transfersRef.current]);
+
+  const enqueueTransfer = (x: Omit<Transfer, "id" | "done" | "status">) => {
+    transfersRef.current.push({ ...x, id: nextTransferIdRef.current++, done: 0, status: "queued" });
+    if (downloadSettings.showWindowOnStart) setTransfersOpen(true);
+    commitTransfers();
+  };
+
+  const findTransfer = (dir: Transfer["dir"], cid: number, path: string) =>
+    transfersRef.current.find((x) => x.status === "running" && x.dir === dir && x.cid === cid && x.path === path);
+
+  const finishTransfer = (x: Transfer, ok: boolean) => {
+    x.status = ok ? "done" : "error";
+    if (ok) x.done = x.size;
+    const settings = downloadSettingsRef.current;
+    if (ok && settings.popupWhenDone) setTransferToast({ name: x.name });
+    if (settings.closeWindowWhenDone && transfersRef.current.every((y) => y.status === "done")) setTransfersOpen(false);
+    commitTransfers();
+  };
+
+  // Start queued transfers while under the "Gleichzeitige Uploads/Downloads" caps.
+  useEffect(() => {
+    let started = false;
+    for (const dir of ["down", "up"] as const) {
+      const max = dir === "down" ? downloadSettings.maxDownloads : downloadSettings.maxUploads;
+      let running = transfersRef.current.filter((x) => x.dir === dir && x.status === "running").length;
+      for (const x of transfersRef.current) {
+        if (running >= max) break;
+        if (x.dir !== dir || x.status !== "queued") continue;
+        x.status = "running";
+        running++;
+        started = true;
+        if (dir === "down")
+          socketRef.current?.send(JSON.stringify({ type: "downloadFile", channelId: x.cid, path: x.path }));
+        else void sendUpload(x.cid, x.path, x.file!, x);
+      }
+    }
+    if (started) commitTransfers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transfers, downloadSettings.maxDownloads, downloadSettings.maxUploads]);
+
+  useEffect(() => {
+    if (!transferToast) return;
+    const id = window.setTimeout(() => setTransferToast(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [transferToast]);
+
+  // Bandwidth caps are enforced by the connector; resend for every new connection.
+  const sentTransferLimitRef = useRef<{ socket: WebSocket | DemoSocket | null; payload: string }>({
+    socket: null,
+    payload: "",
+  });
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!connected || !socket) return;
+    const payload = JSON.stringify({
+      type: "setTransferLimit",
+      up: downloadSettings.uploadLimit * 1024,
+      down: downloadSettings.downloadLimit * 1024,
+    });
+    const sent = sentTransferLimitRef.current;
+    if (sent.socket === socket && sent.payload === payload) return;
+    socket.send(payload);
+    sentTransferLimitRef.current = { socket, payload };
+  }, [connected, activeSessionId, downloadSettings.uploadLimit, downloadSettings.downloadLimit]);
+
+  const handleFileBrowserDownload = async (entry: FileListEntry) => {
     if (!fileBrowserTarget) return;
-    socketRef.current?.send(
-      JSON.stringify({
-        type: "downloadFile",
-        channelId: fileBrowserTarget.channelId,
-        path: ftJoinPath(fileBrowserPath, entry.name),
-      })
-    );
+    const target = await resolveSaveTarget(downloadSettings, downloadDir, entry.name);
+    if (target === "cancelled") return;
+    enqueueTransfer({
+      dir: "down",
+      cid: fileBrowserTarget.channelId,
+      path: ftJoinPath(fileBrowserPath, entry.name),
+      name: entry.name,
+      size: entry.size,
+      target,
+    });
   };
 
   // The connector refuses anything bigger. Gateways without "chunkedUpload"
@@ -10825,13 +11137,20 @@ function AppInner() {
   const handleFileBrowserUpload = (file: File) => {
     if (!fileBrowserTarget) return;
     if (rejectOversizedUpload(file)) return;
-    void sendUpload(fileBrowserTarget.channelId, ftJoinPath(fileBrowserPath, file.name), file);
+    enqueueTransfer({
+      dir: "up",
+      cid: fileBrowserTarget.channelId,
+      path: ftJoinPath(fileBrowserPath, file.name),
+      name: file.name,
+      size: file.size,
+      file,
+    });
   };
 
   // Small pieces keep the gateway from holding a whole file (several times
   // over) in memory. 192 KiB is a multiple of 3, so each piece base64-encodes
   // on its own without padding.
-  const sendUpload = async (channelId: number, path: string, file: File) => {
+  const sendUpload = async (channelId: number, path: string, file: File, transfer?: Transfer) => {
     const socket = socketRef.current;
     if (!gatewayFeatures.has("chunkedUpload")) {
       socket?.send(JSON.stringify({ type: "uploadFile", channelId, path, dataBase64: await readBase64(file) }));
@@ -10842,6 +11161,10 @@ function AppInner() {
     for (let offset = 0; offset === 0 || offset < file.size; offset += chunkBytes) {
       const data = await readBase64(file.slice(offset, offset + chunkBytes));
       socket?.send(JSON.stringify({ type: "uploadFileChunk", channelId, path, offset, total: file.size, data }));
+      if (transfer) {
+        transfer.done = Math.min(file.size, offset + chunkBytes);
+        commitTransfers();
+      }
     }
   };
 
@@ -11336,6 +11659,16 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🧑‍🤝‍🧑</span>
                 <span className="ts-menu-item-label">{t("menu.extras.inviteFriend")}</span>
+              </button>
+              <button
+                className="ts-menu-item"
+                onClick={() => {
+                  setTransfersOpen(true);
+                  setExtrasMenuOpen(false);
+                }}
+              >
+                <span className="ts-menu-item-icon">⇅</span>
+                <span className="ts-menu-item-label">{t("menu.extras.fileTransfers")}</span>
               </button>
               <div className="ts-menu-separator" />
               <button
@@ -11881,6 +12214,21 @@ function AppInner() {
         />
       )}
 
+      {transfersOpen && (
+        <FileTransfersWindow
+          transfers={transfers}
+          onClearFinished={() => {
+            transfersRef.current = transfersRef.current.filter((x) => x.status === "queued" || x.status === "running");
+            commitTransfers();
+          }}
+          onClose={() => setTransfersOpen(false)}
+        />
+      )}
+      {transferToast && (
+        <div className="ts-transfer-toast" role="status">
+          {t("transfers.finished", { name: transferToast.name })}
+        </div>
+      )}
       {restartNotice && <RestartNoticeDialog message={restartNotice} onAck={() => setRestartNotice(null)} />}
 
       {aboutOpen && (

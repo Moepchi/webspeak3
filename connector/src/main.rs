@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -44,6 +45,22 @@ const MAX_UPLOAD_BYTES: u64 = 24 << 20;
 /// line per file made the Node gateway hold several copies of it at once and
 /// run out of heap (2026-10-11).
 const TRANSFER_CHUNK_BYTES: usize = 192 << 10;
+// File transfer bandwidth caps in bytes/s (0 = unlimited), set via the
+// "ftlimit <up> <down>" stdin command. Read by the spawned transfer tasks.
+static FT_LIMIT_UP: AtomicU64 = AtomicU64::new(0);
+static FT_LIMIT_DOWN: AtomicU64 = AtomicU64::new(0);
+
+/// Sleeps long enough that `bytes` took at least bytes/limit seconds.
+async fn ft_pace(limit: &AtomicU64, bytes: usize, started: std::time::Instant) {
+	let limit = limit.load(Ordering::Relaxed);
+	if limit == 0 {
+		return;
+	}
+	let target = Duration::from_secs_f64(bytes as f64 / limit as f64);
+	if let Some(rest) = target.checked_sub(started.elapsed()) {
+		tokio::time::sleep(rest).await;
+	}
+}
 /// Half-received chunked uploads per connection - each can hold up to
 /// MAX_UPLOAD_BYTES until it completes.
 const MAX_PARTIAL_UPLOADS: usize = 4;
@@ -1445,6 +1462,10 @@ async fn run(args: Args) -> Result<()> {
 						let (mode, ids) = rest.split_once(';').unwrap_or((rest, ""));
 						whisper_block_default = mode.trim() == "block";
 						whisper_exceptions = ids.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+					} else if let Some(rest) = l.strip_prefix("ftlimit ") {
+						let mut it = rest.split_whitespace().map(|v| v.parse::<u64>().unwrap_or(0));
+						FT_LIMIT_UP.store(it.next().unwrap_or(0), Ordering::Relaxed);
+						FT_LIMIT_DOWN.store(it.next().unwrap_or(0), Ordering::Relaxed);
 					} else if l == "unwhisper" {
 						whisper_channels.clear();
 						whisper_clients.clear();
@@ -3096,6 +3117,7 @@ async fn run(args: Args) -> Result<()> {
 								// Fill the whole chunk (or hit EOF) so every piece but the
 								// last is exactly TRANSFER_CHUNK_BYTES - see its comment.
 								let mut filled = 0;
+								let started = std::time::Instant::now();
 								let read = loop {
 									match stream.read(&mut buf[filled..]).await {
 										Ok(0) => break Ok(()),
@@ -3121,6 +3143,7 @@ async fn run(args: Args) -> Result<()> {
 								let done = filled < buf.len();
 								let data = base64::engine::general_purpose::STANDARD.encode(&buf[..filled]);
 								emit(&Event::FileDownloadChunk { cid, path: path.clone(), offset, data, done });
+								ft_pace(&FT_LIMIT_DOWN, filled, started).await;
 								if done {
 									return;
 								}
@@ -3135,10 +3158,15 @@ async fn run(args: Args) -> Result<()> {
 						let mut stream = result.stream;
 						tokio::spawn(async move {
 							let slice = if seek < data.len() { &data[seek..] } else { &[][..] };
-							match stream.write_all(slice).await {
-								Ok(_) => emit(&Event::FileUploadDone { cid, path }),
-								Err(e) => emit(&Event::Error { message: format!("Upload failed: {e}") }),
+							for piece in slice.chunks(TRANSFER_CHUNK_BYTES) {
+								let started = std::time::Instant::now();
+								if let Err(e) = stream.write_all(piece).await {
+									emit(&Event::Error { message: format!("Upload failed: {e}") });
+									return;
+								}
+								ft_pace(&FT_LIMIT_UP, piece.len(), started).await;
 							}
+							emit(&Event::FileUploadDone { cid, path });
 						});
 					}
 				}

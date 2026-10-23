@@ -967,6 +967,12 @@ export class Ts3Connection {
     this.writeLine(`whisperpolicy ${block ? "block" : "allow"};${ids.join(",")}`);
   }
 
+  /** File transfer bandwidth caps in bytes/s, 0 = unlimited. */
+  setTransferLimit(up: unknown, down: unknown): void {
+    const rate = (v: unknown) => Math.max(0, Math.floor(Number(v) || 0));
+    this.writeLine(`ftlimit ${rate(up)} ${rate(down)}`);
+  }
+
   /** Empty channelIds/clientIds clears whisper mode, returning outgoing
    *  voice to the normal current-channel broadcast. */
   async setWhisperTargets(channelIds: number[], clientIds: number[]): Promise<void> {

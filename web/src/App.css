@@ -4679,3 +4679,61 @@
 .ts-stream-request-block {
   opacity: 0.65;
 }
+
+/* Options -> Download, file transfer window */
+.ts-download-dir {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.ts-download-number {
+  width: 5em;
+  margin: 0 4px;
+}
+.ts-transfers-window {
+  position: fixed;
+  right: 16px;
+  bottom: 48px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: 50vh;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+}
+.ts-transfers-window .ts-dialog-body {
+  overflow: auto;
+}
+.ts-transfers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.ts-transfers-table td {
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+.ts-transfers-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ts-transfers-table progress {
+  width: 100px;
+}
+.ts-transfer-error td {
+  color: var(--log-error);
+}
+.ts-transfer-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1200;
+  padding: 8px 12px;
+  background: var(--bg-toolbar-1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
