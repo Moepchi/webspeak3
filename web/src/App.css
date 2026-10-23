@@ -4737,3 +4737,25 @@
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
+
+/* Options -> Chat */
+.ts-chat-line-logged {
+  opacity: 0.6;
+}
+.ts-chat-font-row,
+.ts-chat-restore-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.ts-chat-restore-row .ts-options-checkbox {
+  flex: 1;
+}
+.ts-chat-font-preview {
+  margin-top: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+}

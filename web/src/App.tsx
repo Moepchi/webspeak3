@@ -165,6 +165,15 @@ import {
   type SaveTarget,
 } from "./downloads";
 import {
+  DEFAULT_CHAT_SETTINGS,
+  appendChatLog,
+  capLines,
+  loadChatSettings,
+  readChatLog,
+  saveChatSettings,
+  type ChatSettings,
+} from "./chatlog";
+import {
   GREENTEASPEAK_THEME_ID,
   GreenteaSpeakChrome,
   isGreenteaSpeakTheme,
@@ -705,6 +714,8 @@ const DisplayPrefsContext = createContext<{
   setDownloads: (next: DownloadSettings) => void;
   downloadDir: FileSystemDirectoryHandle | null;
   setDownloadDir: (dir: FileSystemDirectoryHandle | null) => void;
+  chat: ChatSettings;
+  setChat: (next: ChatSettings) => void;
 }>({
   tree: DEFAULT_TREE_OPTIONS,
   setTree: () => {},
@@ -718,6 +729,8 @@ const DisplayPrefsContext = createContext<{
   setDownloads: () => {},
   downloadDir: null,
   setDownloadDir: () => {},
+  chat: DEFAULT_CHAT_SETTINGS,
+  setChat: () => {},
 });
 const DISCONNECT_MESSAGE_KEY = "webspeak3:disconnect-message";
 const COLLECTED_URLS_KEY = "webspeak3:collected-urls";
@@ -1863,11 +1876,14 @@ interface ChatEntry {
   /** Set for server-log notifications (join/leave/switch/etc.) so they render
    *  without a "from:" prefix, like the native client's server tab. */
   isLog?: boolean;
+  /** Restored from the chat log (Options -> Chat), shown dimmed. */
+  fromLog?: boolean;
 }
 
 interface PmMessage {
   fromSelf: boolean;
   message: string;
+  fromLog?: boolean;
 }
 
 interface PmThread {
@@ -1878,6 +1894,15 @@ interface PmThread {
 }
 
 type ActiveTab = "channel" | "server" | number;
+
+/** Private chat logs are keyed by the partner's identity, falling back to the nickname. */
+function pmLogKind(uid: string | undefined, name: string): string {
+  return `pm:${uid || name}`;
+}
+
+function loggedPmMessages(server: string, kind: string, lines: number): PmMessage[] {
+  return readChatLog(server, kind, lines).map((l) => ({ fromSelf: !!l.self, message: l.message, fromLog: true }));
+}
 
 interface PokeNotice {
   id: number;
@@ -6368,6 +6393,123 @@ function DownloadsPanel() {
   );
 }
 
+const CHAT_MAX_LINES_OPTIONS = [100, 200, 500, 1000, 2000];
+const CHAT_RESTORE_OPTIONS = [10, 50, 100, 500];
+const CHAT_FONTS = [
+  "Arial",
+  "Verdana",
+  "Tahoma",
+  "Segoe UI",
+  "Trebuchet MS",
+  "Georgia",
+  "Times New Roman",
+  "Courier New",
+  "Consolas",
+  "sans-serif",
+  "serif",
+  "monospace",
+];
+
+function ChatPanel() {
+  const t = useT();
+  const { chat, setChat } = useContext(DisplayPrefsContext);
+  const set = (patch: Partial<ChatSettings>) => setChat({ ...chat, ...patch });
+  const restoreRow = (key: "restoreChannelLines" | "restorePrivateLines") => (
+    <div className="ts-chat-restore-row">
+      <label className="ts-options-checkbox">
+        <input type="checkbox" checked={chat[key] > 0} onChange={(e) => set({ [key]: e.target.checked ? 100 : 0 })} />
+        {t(`chatSettings.${key}`)}
+      </label>
+      <select value={chat[key] || 100} disabled={chat[key] === 0} onChange={(e) => set({ [key]: Number(e.target.value) })}>
+        {CHAT_RESTORE_OPTIONS.map((n) => (
+          <option key={n} value={n}>
+            {t("chatSettings.lastLines", { count: String(n) })}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+  return (
+    <>
+      <h3>{t("options.section.chat")}</h3>
+      <p className="ts-options-subtitle">{t("chatSettings.subtitle")}</p>
+      <div className="ts-options-fields">
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("chatSettings.window")}</legend>
+          <label className="ts-options-field">
+            {t("chatSettings.maxLines")}
+            <select value={chat.maxLines} onChange={(e) => set({ maxLines: Number(e.target.value) })}>
+              {CHAT_MAX_LINES_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {t("chatSettings.lines", { count: String(n) })}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="ts-chat-font-row">
+            {t("chatSettings.font")}
+            <select value={chat.fontFamily} onChange={(e) => set({ fontFamily: e.target.value })}>
+              <option value="">{t("chatSettings.fontDefault")}</option>
+              {CHAT_FONTS.map((f) => (
+                <option key={f} value={f} style={{ fontFamily: f }}>
+                  {f}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={8}
+              max={32}
+              className="ts-download-number"
+              placeholder={t("chatSettings.fontDefault")}
+              value={chat.fontSize || ""}
+              onChange={(e) => set({ fontSize: Math.min(32, Math.max(0, Number(e.target.value) || 0)) })}
+            />
+            px
+            <button
+              title={t("chatSettings.fontReset")}
+              aria-label={t("chatSettings.fontReset")}
+              onClick={() => set({ fontFamily: "", fontSize: 0 })}
+            >
+              ↻
+            </button>
+          </div>
+          <div
+            className="ts-chat-font-preview"
+            style={{ fontFamily: chat.fontFamily || undefined, fontSize: chat.fontSize ? `${chat.fontSize}px` : undefined }}
+          >
+            {t("chatSettings.fontPreview")}
+          </div>
+        </fieldset>
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("chatSettings.autoLog")}</legend>
+          {(["logChannel", "logPrivate", "logServer"] as const).map((key) => (
+            <label key={key} className="ts-options-checkbox">
+              <input type="checkbox" checked={chat[key]} onChange={(e) => set({ [key]: e.target.checked })} />
+              {t(`chatSettings.${key}`)}
+            </label>
+          ))}
+          <p className="ts-options-hint">{t("chatSettings.logHint")}</p>
+        </fieldset>
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("chatSettings.restore")}</legend>
+          {restoreRow("restoreChannelLines")}
+          {restoreRow("restorePrivateLines")}
+        </fieldset>
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("chatSettings.notify")}</legend>
+          {(["notifyServer", "notifyChannel", "notifyPrivate"] as const).map((key) => (
+            <label key={key} className="ts-options-checkbox">
+              <input type="checkbox" checked={chat[key]} onChange={(e) => set({ [key]: e.target.checked })} />
+              {t(`chatSettings.${key}`)}
+            </label>
+          ))}
+        </fieldset>
+      </div>
+    </>
+  );
+}
+
 function DesignPanel({
   designSelection,
   onSelectionChange,
@@ -7399,6 +7541,8 @@ function OptionsDialog({
               <WhisperPanel onOpenWhisperLists={onOpenWhisperLists} />
             ) : active.id === "downloads" ? (
               <DownloadsPanel />
+            ) : active.id === "chat" ? (
+              <ChatPanel />
             ) : (
               <>
                 <h3>{t(`options.section.${active.id}`)}</h3>
@@ -7884,6 +8028,11 @@ function AppInner() {
   const downloadSettingsRef = useRef(downloadSettings);
   downloadSettingsRef.current = downloadSettings;
   const [downloadDir, setDownloadDir] = useState<FileSystemDirectoryHandle | null>(null);
+  const [chatSettings, setChatSettings] = useState(loadChatSettings);
+  const chatSettingsRef = useRef(chatSettings);
+  chatSettingsRef.current = chatSettings;
+  // "Hinweis für eingehende Nachrichten" for the two fixed tabs (private chats have their own flag).
+  const [chatUnread, setChatUnread] = useState({ channel: false, server: false });
   useEffect(() => {
     void loadDownloadDir().then(setDownloadDir);
   }, []);
@@ -7918,8 +8067,13 @@ function AppInner() {
       },
       downloadDir,
       setDownloadDir,
+      chat: chatSettings,
+      setChat: (next: ChatSettings) => {
+        setChatSettings(next);
+        saveChatSettings(next);
+      },
     }),
-    [treeOptions, iconPacks, iconPackId, whisperSettings, downloadSettings, downloadDir]
+    [treeOptions, iconPacks, iconPackId, whisperSettings, downloadSettings, downloadDir, chatSettings]
   );
   const iconPackStyle = iconPackCss(iconPacks.find((p) => p.id === iconPackId));
   const [micOn, setMicOn] = useState(false);
@@ -8282,6 +8436,8 @@ function AppInner() {
 
   useEffect(() => {
     activeTabRef.current = activeTab;
+    if (activeTab === "channel" || activeTab === "server")
+      setChatUnread((prev) => (prev[activeTab] ? { ...prev, [activeTab]: false } : prev));
     if (typeof activeTab === "number") {
       setPmThreads((prev) => {
         const thread = prev[activeTab];
@@ -8529,6 +8685,7 @@ function AppInner() {
     setChat([]);
     setServerChat([]);
     setPmThreads({});
+    setChatUnread({ channel: false, server: false });
     setPokes([]);
     setActiveTab("channel");
     talkersRef.current = new Set();
@@ -8767,6 +8924,18 @@ function AppInner() {
           void playSound("disconnect");
           return;
         }
+        // Background tabs get logged too (Options -> Chat).
+        const chatPrefs = chatSettingsRef.current;
+        if (data.type === "chatMessage" && chatPrefs.logChannel)
+          appendChatLog(connectHost, "channel", { from: data.from, message: data.message, self: data.from === connectNickname });
+        else if (data.type === "serverMessage" && chatPrefs.logServer)
+          appendChatLog(connectHost, "server", { from: data.from, message: data.message, self: data.from === connectNickname });
+        else if (data.type === "privateMessage" && chatPrefs.logPrivate)
+          appendChatLog(
+            connectHost,
+            pmLogKind(rec.parked.clients.find((c) => c.id === data.partnerId)?.uid, data.partnerName),
+            { from: data.partnerName, message: data.message, self: data.fromSelf }
+          );
         const result = applyParkedGatewayEvent(rec.parked, data, {
           connectNickname,
           chatTab: rec.parked.chatTab,
@@ -8795,6 +8964,13 @@ function AppInner() {
           setConnecting(false);
           setConnectError(null);
           setConnected(true);
+          setChat(
+            readChatLog(connectHost, "channel", chatSettingsRef.current.restoreChannelLines).map((l) => ({
+              from: l.from,
+              message: l.message,
+              fromLog: true,
+            }))
+          );
           updateTabMeta(sessionId, {
             label: String(data.serverName || connectHost),
             connected: true,
@@ -8822,7 +8998,7 @@ function AppInner() {
           setServerBannerUrl(data.serverBannerUrl);
           setServerWelcomeMessage(data.welcomeMessage);
           setSelected({ type: "server" });
-          setServerChat((prev) => [...prev, { from: "Server", message: data.welcomeMessage }]);
+          setServerChat((prev) => capLines([...prev, { from: "Server", message: data.welcomeMessage }], chatSettingsRef.current.maxLines));
           previousClientsRef.current = null;
           void playSound("connect");
           break;
@@ -8861,25 +9037,36 @@ function AppInner() {
           break;
         }
         case "chatMessage":
+        case "serverMessage": {
           if (isSenderIgnored(data.from)) break;
-          setChat((prev) => [...prev, { from: data.from, message: data.message }]);
+          const tab = data.type === "chatMessage" ? "channel" : "server";
+          const settings = chatSettingsRef.current;
+          const fromSelf = data.from === connectNickname || data.from === ownNameRef.current;
+          const entry = { from: data.from, message: data.message };
+          (tab === "channel" ? setChat : setServerChat)((prev) => capLines([...prev, entry], settings.maxLines));
+          if (tab === "channel" ? settings.logChannel : settings.logServer)
+            appendChatLog(connectHost, tab, { ...entry, self: fromSelf });
+          if (!fromSelf && activeTabRef.current !== tab && (tab === "channel" ? settings.notifyChannel : settings.notifyServer))
+            setChatUnread((prev) => ({ ...prev, [tab]: true }));
           recordUrlsFromMessage(data.message, data.from);
-          if (data.from !== connectNickname && data.from !== ownNameRef.current) void playSound("message");
+          if (!fromSelf) void playSound("message");
           break;
-        case "serverMessage":
-          if (isSenderIgnored(data.from)) break;
-          setServerChat((prev) => [...prev, { from: data.from, message: data.message }]);
-          recordUrlsFromMessage(data.message, data.from);
-          if (data.from !== connectNickname && data.from !== ownNameRef.current) void playSound("message");
-          break;
-        case "privateMessage":
+        }
+        case "privateMessage": {
           if (!data.fromSelf && isSenderIgnored(data.partnerName)) break;
+          const settings = chatSettingsRef.current;
+          const logKind = pmLogKind(
+            previousClientsRef.current?.find((c) => c.id === data.partnerId)?.uid,
+            data.partnerName
+          );
+          // Read before appending this message, so a new thread's history doesn't contain it twice.
+          const history = loggedPmMessages(connectHost, logKind, settings.restorePrivateLines);
           setPmThreads((prev) => {
             const existing = prev[data.partnerId];
             const thread: PmThread = existing ?? {
               partnerId: data.partnerId,
               partnerName: data.partnerName,
-              messages: [],
+              messages: history,
               unread: false,
             };
             return {
@@ -8887,14 +9074,22 @@ function AppInner() {
               [data.partnerId]: {
                 ...thread,
                 partnerName: data.partnerName,
-                messages: [...thread.messages, { fromSelf: data.fromSelf, message: data.message }],
-                unread: thread.unread || (!data.fromSelf && activeTabRef.current !== data.partnerId),
+                messages: capLines(
+                  [...thread.messages, { fromSelf: data.fromSelf, message: data.message }],
+                  settings.maxLines
+                ),
+                unread:
+                  thread.unread ||
+                  (settings.notifyPrivate && !data.fromSelf && activeTabRef.current !== data.partnerId),
               },
             };
           });
+          if (settings.logPrivate)
+            appendChatLog(connectHost, logKind, { from: data.partnerName, message: data.message, self: data.fromSelf });
           recordUrlsFromMessage(data.message, data.fromSelf ? connectNickname : data.partnerName);
           if (!data.fromSelf) void playSound("message");
           break;
+        }
         case "audioOut":
           // Audio only for the active session tab.
           if (!outputMutedRef.current) audioPlayerRef.current?.playFrame(data.pcm);
@@ -9000,7 +9195,7 @@ function AppInner() {
               message = t("serverLog.permissionError", { action: data.action });
               break;
           }
-          setServerChat((prev) => [...prev, { from: "", message, isLog: true }]);
+          setServerChat((prev) => capLines([...prev, { from: "", message, isLog: true }], chatSettingsRef.current.maxLines));
           break;
         }
         case "disconnected": {
@@ -10411,9 +10606,14 @@ function AppInner() {
   };
 
   const handleOpenPrivateChat = (clientId: number, clientName: string) => {
+    const history = loggedPmMessages(
+      host,
+      pmLogKind(clients.find((c) => c.id === clientId)?.uid, clientName),
+      chatSettings.restorePrivateLines
+    );
     setPmThreads((prev) => ({
       ...prev,
-      [clientId]: prev[clientId] ?? { partnerId: clientId, partnerName: clientName, messages: [], unread: false },
+      [clientId]: prev[clientId] ?? { partnerId: clientId, partnerName: clientName, messages: history, unread: false },
     }));
     setActiveTab(clientId);
   };
@@ -13252,12 +13452,20 @@ function AppInner() {
               onContextMenu={handleClientContextMenu}
             />
           )}
-          <div className="ts-chat-messages">
+          <div
+            className="ts-chat-messages"
+            style={{
+              fontFamily: chatSettings.fontFamily || undefined,
+              fontSize: chatSettings.fontSize ? `${chatSettings.fontSize}px` : undefined,
+            }}
+          >
             {activeTab === "channel"
               ? chat.map((entry, i) => (
                   <div
                     key={i}
-                    className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
+                    className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}${
+                      entry.fromLog ? " ts-chat-line-logged" : ""
+                    }`}
                   >
                     <span className="ts-chat-from">{entry.from}:</span>{" "}
                     <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages, stillImages: !treeOptions.animateImages })}</span>
@@ -13280,7 +13488,12 @@ function AppInner() {
                     )
                   )
                 : pmThreads[activeTab]?.messages.map((entry, i) => (
-                    <div key={i} className={`ts-chat-line${entry.fromSelf ? " ts-chat-line-self" : ""}`}>
+                    <div
+                      key={i}
+                      className={`ts-chat-line${entry.fromSelf ? " ts-chat-line-self" : ""}${
+                        entry.fromLog ? " ts-chat-line-logged" : ""
+                      }`}
+                    >
                       <span className="ts-chat-from">
                         {entry.fromSelf ? t("chat.you") : pmThreads[activeTab].partnerName}:
                       </span>{" "}
@@ -13291,13 +13504,17 @@ function AppInner() {
           </div>
           <div className="ts-chat-tabs">
             <button
-              className={`ts-chat-tab${activeTab === "server" ? " ts-chat-tab-active" : ""}`}
+              className={`ts-chat-tab${activeTab === "server" ? " ts-chat-tab-active" : ""}${
+                chatUnread.server ? " ts-chat-tab-unread" : ""
+              }`}
               onClick={() => setActiveTab("server")}
             >
               {t("chat.server")}
             </button>
             <button
-              className={`ts-chat-tab${activeTab === "channel" ? " ts-chat-tab-active" : ""}`}
+              className={`ts-chat-tab${activeTab === "channel" ? " ts-chat-tab-active" : ""}${
+                chatUnread.channel ? " ts-chat-tab-unread" : ""
+              }`}
               onClick={() => setActiveTab("channel")}
             >
               {t("chat.channel")}
