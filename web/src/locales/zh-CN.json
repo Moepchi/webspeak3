@@ -904,5 +904,17 @@
   "notify.applyToFavorites": "将此声音包用于所有收藏",
   "notify.applyToFavoritesConfirm": "将所有收藏设为此声音包?单个收藏的声音包设置将被重置。",
   "notify.whenMuted.important": "仅播放重要声音",
-  "notify.text.client": "客户端"
+  "notify.text.client": "客户端",
+  "vault.title": "主密码",
+  "vault.prompt": "你的身份和已保存的密码已加密。请输入主密码。",
+  "vault.unlock": "解锁",
+  "vault.wrong": "密码错误。",
+  "vault.forgot": "忘记密码",
+  "vault.forgotConfirm": "没有密码无法恢复数据。永久删除身份、收藏和已保存的密码并重新开始?",
+  "securitySettings.masterHint": "加密身份、收藏(含密码)和已保存的频道密码。每次重新加载后都会询问。",
+  "securitySettings.masterCurrent": "当前主密码",
+  "securitySettings.masterNew": "新主密码",
+  "securitySettings.masterRepeat": "重复",
+  "securitySettings.masterMismatch": "两次密码不一致。",
+  "securitySettings.masterNote": "请牢记:没有它,身份和已保存的密码将丢失。"
 }

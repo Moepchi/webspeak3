@@ -905,5 +905,17 @@
   "notify.applyToFavorites": "Použít tento zvukový balíček pro všechny oblíbené",
   "notify.applyToFavoritesConfirm": "Nastavit všem oblíbeným tento zvukový balíček? Vlastní balíčky jednotlivých oblíbených budou zrušeny.",
   "notify.whenMuted.important": "Přehrávat jen důležité zvuky",
-  "notify.text.client": "Klient"
+  "notify.text.client": "Klient",
+  "vault.title": "Hlavní heslo",
+  "vault.prompt": "Vaše identity a uložená hesla jsou zašifrovány. Zadejte hlavní heslo.",
+  "vault.unlock": "Odemknout",
+  "vault.wrong": "Špatné heslo.",
+  "vault.forgot": "Zapomenuté heslo",
+  "vault.forgotConfirm": "Bez hesla nelze data obnovit. Trvale smazat identity, oblíbené a uložená hesla a začít znovu?",
+  "securitySettings.masterHint": "Šifruje identity, oblíbené (s hesly) a uložená hesla kanálů. Vyžaduje se po každém načtení.",
+  "securitySettings.masterCurrent": "Současné hlavní heslo",
+  "securitySettings.masterNew": "Nové hlavní heslo",
+  "securitySettings.masterRepeat": "Zopakovat",
+  "securitySettings.masterMismatch": "Hesla se neshodují.",
+  "securitySettings.masterNote": "Dobře si ho zapamatujte: bez něj přijdete o identity a uložená hesla."
 }

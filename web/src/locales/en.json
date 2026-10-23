@@ -905,5 +905,17 @@
   "notify.applyToFavorites": "Use this sound pack for all favorites",
   "notify.applyToFavoritesConfirm": "Set all favorites to this sound pack? Sound packs set on individual favorites will be reset.",
   "notify.whenMuted.important": "Play only important sounds",
-  "notify.text.client": "Client"
+  "notify.text.client": "Client",
+  "vault.title": "Master password",
+  "vault.prompt": "Your identities and saved passwords are encrypted. Enter your master password.",
+  "vault.unlock": "Unlock",
+  "vault.wrong": "Wrong password.",
+  "vault.forgot": "Forgot password",
+  "vault.forgotConfirm": "Without the password the data can't be recovered. Permanently delete identities, favorites and saved passwords and start over?",
+  "securitySettings.masterHint": "Encrypts identities, favorites (with passwords) and saved channel passwords. Asked for after every reload.",
+  "securitySettings.masterCurrent": "Current master password",
+  "securitySettings.masterNew": "New master password",
+  "securitySettings.masterRepeat": "Repeat",
+  "securitySettings.masterMismatch": "The passwords don't match.",
+  "securitySettings.masterNote": "Remember it well: without it, identities and saved passwords are lost."
 }

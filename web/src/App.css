@@ -4872,3 +4872,30 @@
   background: var(--bg-toolbar-1);
   border: 1px solid var(--border);
 }
+
+/* Master password unlock (main.tsx) */
+.ts-vault-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  min-width: 300px;
+}
+.ts-vault-dialog h3,
+.ts-vault-dialog p {
+  margin: 0;
+}
+.ts-vault-wrong {
+  color: var(--log-error);
+}
+.ts-master-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 4px 24px;
+  max-width: 320px;
+}
+.ts-master-note {
+  margin: 0;
+  font-size: 0.9em;
+}

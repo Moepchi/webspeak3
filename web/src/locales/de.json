@@ -905,5 +905,17 @@
   "notify.applyToFavorites": "Dieses Sound Pack für alle Favoriten verwenden",
   "notify.applyToFavoritesConfirm": "Alle Favoriten auf dieses Sound Pack setzen? Eigene Sound Packs einzelner Favoriten werden dabei zurückgesetzt.",
   "notify.whenMuted.important": "Nur wichtige Sounds spielen",
-  "notify.text.client": "Client"
+  "notify.text.client": "Client",
+  "vault.title": "Master Passwort",
+  "vault.prompt": "Deine Identitäten und gespeicherten Passwörter sind verschlüsselt. Gib dein Master Passwort ein.",
+  "vault.unlock": "Entsperren",
+  "vault.wrong": "Falsches Passwort.",
+  "vault.forgot": "Passwort vergessen",
+  "vault.forgotConfirm": "Ohne Passwort lassen sich die Daten nicht wiederherstellen. Identitäten, Favoriten und gespeicherte Passwörter endgültig löschen und neu anfangen?",
+  "securitySettings.masterHint": "Verschlüsselt Identitäten, Favoriten (mit Passwörtern) und gespeicherte Channel-Passwörter. Nach jedem Neuladen wird das Passwort abgefragt.",
+  "securitySettings.masterCurrent": "Aktuelles Master Passwort",
+  "securitySettings.masterNew": "Neues Master Passwort",
+  "securitySettings.masterRepeat": "Wiederholen",
+  "securitySettings.masterMismatch": "Die Passwörter stimmen nicht überein.",
+  "securitySettings.masterNote": "Merk es dir gut: Ohne das Passwort sind Identitäten und gespeicherte Passwörter weg."
 }

@@ -904,5 +904,17 @@
   "notify.applyToFavorites": "استفاده از این بسته صدا برای همه موارد علاقه",
   "notify.applyToFavoritesConfirm": "همه موارد علاقه روی این بسته صدا تنظیم شوند؟ بسته‌های صدای جداگانه بازنشانی می‌شوند.",
   "notify.whenMuted.important": "فقط صداهای مهم پخش شوند",
-  "notify.text.client": "کلاینت"
+  "notify.text.client": "کلاینت",
+  "vault.title": "رمز اصلی",
+  "vault.prompt": "هویت‌ها و رمزهای ذخیره‌شده شما رمزنگاری شده‌اند. رمز اصلی را وارد کنید.",
+  "vault.unlock": "باز کردن",
+  "vault.wrong": "رمز اشتباه است.",
+  "vault.forgot": "رمز را فراموش کرده‌ام",
+  "vault.forgotConfirm": "بدون رمز، داده‌ها قابل بازیابی نیستند. هویت‌ها، موارد علاقه و رمزهای ذخیره‌شده برای همیشه حذف شوند و از نو شروع کنید؟",
+  "securitySettings.masterHint": "هویت‌ها، موارد علاقه (با رمزها) و رمزهای ذخیره‌شده کانال را رمزنگاری می‌کند. پس از هر بارگذاری پرسیده می‌شود.",
+  "securitySettings.masterCurrent": "رمز اصلی فعلی",
+  "securitySettings.masterNew": "رمز اصلی جدید",
+  "securitySettings.masterRepeat": "تکرار",
+  "securitySettings.masterMismatch": "رمزها یکسان نیستند.",
+  "securitySettings.masterNote": "آن را به خاطر بسپارید: بدون آن، هویت‌ها و رمزهای ذخیره‌شده از دست می‌روند."
 }
