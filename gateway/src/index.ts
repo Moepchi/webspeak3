@@ -882,6 +882,10 @@ wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
         await connection?.setNickname(msg.nickname);
         break;
       }
+      case "setWhisperPolicy": {
+        connection?.setWhisperPolicy(msg.block === true, Array.isArray(msg.exceptions) ? msg.exceptions : []);
+        break;
+      }
       case "setWhisperTargets": {
         await connection?.setWhisperTargets(msg.channelIds ?? [], msg.clientIds ?? []);
         break;

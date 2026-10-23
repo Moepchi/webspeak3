@@ -26,6 +26,7 @@ const EVENT_KEYWORDS: Record<SoundEventId, string[]> = {
   mute: ["micmuted", "microphonemuted", "micactivated", "microphoneactivated"],
   micClickOn: ["micclickon"],
   micClickOff: ["micclickoff"],
+  whisper: ["whisperreceived", "whisper"],
 };
 
 function normalize(filename: string): string {

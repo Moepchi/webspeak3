@@ -153,6 +153,7 @@ export type Ts3ConnectionEvent =
   | { type: "poke"; from: string; message: string }
   | { type: "audioOut"; pcm: string }
   | { type: "talkers"; clients: number[] }
+  | { type: "whisperReceived"; clientId: number }
   | { type: "disconnected"; reason: string }
   | { type: "reconnecting"; reason: string }
   | { type: "reconnected" }
@@ -363,6 +364,7 @@ export class Ts3Connection {
           | { type: "poke"; from: string; message: string }
           | { type: "audioOut"; pcm: string }
           | { type: "talkers"; clients: number[] }
+          | { type: "whisperReceived"; clientId: number }
           | { type: "disconnected"; reason: string }
           | { type: "reconnecting"; reason: string }
           | { type: "reconnected" }
@@ -957,6 +959,12 @@ export class Ts3Connection {
   async setNickname(nickname: string): Promise<void> {
     const sanitized = nickname.replace(/[\r\n]+/g, " ").trim();
     if (sanitized) this.writeLine(`nickname ${sanitized}`);
+  }
+
+  /** Incoming whispers: allowed or blocked by default; `exceptions` (client ids) get the opposite. */
+  setWhisperPolicy(block: boolean, exceptions: unknown[]): void {
+    const ids = exceptions.map(Number).filter(Number.isInteger);
+    this.writeLine(`whisperpolicy ${block ? "block" : "allow"};${ids.join(",")}`);
   }
 
   /** Empty channelIds/clientIds clears whisper mode, returning outgoing

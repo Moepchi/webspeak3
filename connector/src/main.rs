@@ -301,6 +301,12 @@ enum Event {
 	/// Ids of clients currently detected as talking.
 	#[serde(rename = "talkers")]
 	Talkers { clients: Vec<u16> },
+	/// Someone started whispering to us and the whisper settings let it through.
+	#[serde(rename = "whisperReceived")]
+	WhisperReceived {
+		#[serde(rename = "clientId")]
+		client_id: u16,
+	},
 	#[serde(rename = "disconnected")]
 	Disconnected { reason: String },
 	/// Lost the server (timeout, server restart); tsclientlib is reconnecting
@@ -1069,6 +1075,10 @@ async fn run(args: Args) -> Result<()> {
 	// stdin command, cleared via "unwhisper".
 	let mut whisper_channels: Vec<u64> = Vec::new();
 	let mut whisper_clients: Vec<u16> = Vec::new();
+	// Incoming whispers, set via "whisperpolicy allow|block;<client ids>": the
+	// ids are exceptions to the mode. Blocked whispers are dropped undecoded.
+	let mut whisper_block_default = false;
+	let mut whisper_exceptions: HashSet<u16> = HashSet::new();
 	// Set by "clientconninfo"/"serverconninfo" while waiting for the server's
 	// reply to land in book state (it arrives async as a later BookEvents
 	// batch, not as a direct command result) - checked and emitted below.
@@ -1431,6 +1441,10 @@ async fn run(args: Args) -> Result<()> {
 						let clients_part = parts.next().unwrap_or("");
 						whisper_channels = channels_part.split(',').filter_map(|s| s.trim().parse().ok()).collect();
 						whisper_clients = clients_part.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+					} else if let Some(rest) = l.strip_prefix("whisperpolicy ") {
+						let (mode, ids) = rest.split_once(';').unwrap_or((rest, ""));
+						whisper_block_default = mode.trim() == "block";
+						whisper_exceptions = ids.split(',').filter_map(|s| s.trim().parse().ok()).collect();
 					} else if l == "unwhisper" {
 						whisper_channels.clear();
 						whisper_clients.clear();
@@ -2656,11 +2670,15 @@ async fn run(args: Args) -> Result<()> {
 					emit(&snapshot(con.get_state()?));
 				}
 				Some(Ok(StreamItem::Audio(packet))) => {
-					let from = match packet.data().data() {
-						AudioData::S2C { from, .. } => Some(ClientId(*from)),
-						AudioData::S2CWhisper { from, .. } => Some(ClientId(*from)),
-						_ => None,
+					let (from, whisper) = match packet.data().data() {
+						AudioData::S2C { from, .. } => (Some(ClientId(*from)), false),
+						AudioData::S2CWhisper { from, .. } => (Some(ClientId(*from)), true),
+						_ => (None, false),
 					};
+					// A whisper gets through when its sender isn't an exception to a
+					// blocking mode, or is one to an allowing mode.
+					let from =
+						from.filter(|f| !whisper || whisper_block_default == whisper_exceptions.contains(&f.0));
 					if let Some(from) = from {
 						if let Ok(Some(new_talker)) = audio_handler.handle_packet(from, packet) {
 							if let (Some(&volume), Some(queue)) = (
@@ -2671,6 +2689,9 @@ async fn run(args: Args) -> Result<()> {
 							}
 							if talking.insert(new_talker.0) {
 								emit(&Event::Talkers { clients: talking.iter().copied().collect() });
+								if whisper {
+									emit(&Event::WhisperReceived { client_id: new_talker.0 });
+								}
 							}
 						}
 					}

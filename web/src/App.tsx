@@ -618,6 +618,28 @@ const SERVER_BANNER_KEY = "webspeak3:server-banner";
 const IDE_PIXEL_FONT_KEY = "webspeak3:ide-pixel-font";
 // Off by default: an inline chat image loads from whatever host the sender picked.
 const CHAT_IMAGES_KEY = "webspeak3:chat-images";
+const WHISPER_SETTINGS_KEY = "webspeak3:whisper-settings";
+
+/** Options -> Whispern (TS3's "Whispereinstellungen"). */
+interface WhisperSettings {
+  /** allow/block: what applies to contacts without their own whisper setting. */
+  mode: "allow" | "block" | "blockAll";
+  sound: boolean;
+  openHistory: boolean;
+  /** Incoming entries leave the whisper history after this many minutes; 0 = never. */
+  clearAfterMin: number;
+}
+
+const DEFAULT_WHISPER_SETTINGS: WhisperSettings = { mode: "allow", sound: true, openHistory: true, clearAfterMin: 5 };
+
+function loadWhisperSettings(): WhisperSettings {
+  try {
+    return { ...DEFAULT_WHISPER_SETTINGS, ...JSON.parse(localStorage.getItem(WHISPER_SETTINGS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULT_WHISPER_SETTINGS;
+  }
+}
+
 const TREE_OPTIONS_KEY = "webspeak3:tree-options";
 
 /** Design tab -> "Channel Baum" and "GIF Animation" (TS3's options). */
@@ -664,6 +686,8 @@ const DisplayPrefsContext = createContext<{
   iconPackId: string;
   setIconPackId: (id: string) => void;
   saveIconPacks: (packs: IconPack[]) => void;
+  whisper: WhisperSettings;
+  setWhisper: (next: WhisperSettings) => void;
 }>({
   tree: DEFAULT_TREE_OPTIONS,
   setTree: () => {},
@@ -671,6 +695,8 @@ const DisplayPrefsContext = createContext<{
   iconPackId: "",
   setIconPackId: () => {},
   saveIconPacks: () => {},
+  whisper: DEFAULT_WHISPER_SETTINGS,
+  setWhisper: () => {},
 });
 const DISCONNECT_MESSAGE_KEY = "webspeak3:disconnect-message";
 const COLLECTED_URLS_KEY = "webspeak3:collected-urls";
@@ -708,6 +734,8 @@ interface WhisperLogEntry {
   id: number;
   timestamp: number;
   description: string;
+  /** Someone whispered to us (as opposed to our own whisper target changes). */
+  incoming?: boolean;
 }
 
 interface BanListEntry {
@@ -748,6 +776,8 @@ interface Contact {
   category: ContactCategory;
   phoneticName: string;
   ignored: boolean;
+  /** Incoming whispers from this contact; unset follows Options -> Whispern. */
+  whisper?: "allow" | "block";
 }
 
 const CONTACTS_KEY = "webspeak3:contacts";
@@ -5507,6 +5537,18 @@ function ContactsDialog({
                 onChange={(e) => updateSelected({ phoneticName: e.target.value })}
               />
             </label>
+            <label className="ts-dialog-field">
+              {t("contacts.whisperSetting")}
+              <select
+                disabled={!selected}
+                value={selected?.whisper ?? ""}
+                onChange={(e) => updateSelected({ whisper: (e.target.value || undefined) as Contact["whisper"] })}
+              >
+                <option value="">{t("contacts.whisperSetting.default")}</option>
+                <option value="allow">{t("contacts.whisperSetting.allow")}</option>
+                <option value="block">{t("contacts.whisperSetting.block")}</option>
+              </select>
+            </label>
             <div className="ts-contacts-actions">
               <button
                 disabled={!selectedOnlineClient}
@@ -6076,6 +6118,59 @@ function ActionIcon({ children }: { children: ReactNode }) {
     >
       {children}
     </svg>
+  );
+}
+
+const WHISPER_CLEAR_OPTIONS = [1, 5, 10, 30, 60, 0];
+
+function WhisperPanel({ onOpenWhisperLists }: { onOpenWhisperLists: () => void }) {
+  const t = useT();
+  const { whisper, setWhisper } = useContext(DisplayPrefsContext);
+  const set = (patch: Partial<WhisperSettings>) => setWhisper({ ...whisper, ...patch });
+  return (
+    <>
+      <h3>{t("options.section.whispern")}</h3>
+      <p className="ts-options-subtitle">{t("whisperSettings.subtitle")}</p>
+      <div className="ts-options-fields">
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("whisperSettings.rights")}</legend>
+          {(["allow", "block", "blockAll"] as const).map((mode) => (
+            <label key={mode} className="ts-options-radio">
+              <input type="radio" name="ts-whisper-mode" checked={whisper.mode === mode} onChange={() => set({ mode })} />
+              {t(`whisperSettings.mode.${mode}`)}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("whisperSettings.incoming")}</legend>
+          <label className="ts-options-checkbox">
+            <input type="checkbox" checked={whisper.sound} onChange={(e) => set({ sound: e.target.checked })} />
+            {t("whisperSettings.sound")}
+          </label>
+          <label className="ts-options-checkbox">
+            <input
+              type="checkbox"
+              checked={whisper.openHistory}
+              onChange={(e) => set({ openHistory: e.target.checked })}
+            />
+            {t("whisperSettings.openHistory")}
+          </label>
+          <label className="ts-options-field">
+            {t("whisperSettings.clearAfter")}
+            <select value={whisper.clearAfterMin} onChange={(e) => set({ clearAfterMin: Number(e.target.value) })}>
+              {WHISPER_CLEAR_OPTIONS.map((min) => (
+                <option key={min} value={min}>
+                  {min === 0 ? t("whisperSettings.never") : t("whisperSettings.minutes", { count: String(min) })}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
+        <div>
+          <button onClick={onOpenWhisperLists}>{t("menu.extras.whisperLists")}</button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -7034,6 +7129,7 @@ function OptionsDialog({
   onShowServerBannerChange,
   chatImages,
   onChatImagesChange,
+  onOpenWhisperLists,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -7050,6 +7146,7 @@ function OptionsDialog({
   onShowServerBannerChange: (on: boolean) => void;
   chatImages: boolean;
   onChatImagesChange: (on: boolean) => void;
+  onOpenWhisperLists: () => void;
 }) {
   const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
@@ -7104,6 +7201,8 @@ function OptionsDialog({
               />
             ) : active.id === "nachrichten" ? (
               <NachrichtenPanel />
+            ) : active.id === "whispern" ? (
+              <WhisperPanel onOpenWhisperLists={onOpenWhisperLists} />
             ) : (
               <>
                 <h3>{t(`options.section.${active.id}`)}</h3>
@@ -7584,6 +7683,9 @@ function AppInner() {
   const [treeOptions, setTreeOptions] = useState(loadTreeOptions);
   const [iconPacks, setIconPacks] = useState(loadIconPacks);
   const [iconPackId, setIconPackId] = useState(loadSelectedIconPack);
+  const [whisperSettings, setWhisperSettings] = useState(loadWhisperSettings);
+  const whisperSettingsRef = useRef(whisperSettings);
+  whisperSettingsRef.current = whisperSettings;
   const displayPrefs = useMemo(
     () => ({
       tree: treeOptions,
@@ -7601,8 +7703,13 @@ function AppInner() {
         saveIconPacks(packs); // throws when storage is full - before the state changes
         setIconPacks(packs);
       },
+      whisper: whisperSettings,
+      setWhisper: (next: WhisperSettings) => {
+        setWhisperSettings(next);
+        localStorage.setItem(WHISPER_SETTINGS_KEY, JSON.stringify(next));
+      },
     }),
-    [treeOptions, iconPacks, iconPackId]
+    [treeOptions, iconPacks, iconPackId, whisperSettings]
   );
   const iconPackStyle = iconPackCss(iconPacks.find((p) => p.id === iconPackId));
   const [micOn, setMicOn] = useState(false);
@@ -8589,6 +8696,21 @@ function AppInner() {
           setTalkers(next);
           break;
         }
+        case "whisperReceived": {
+          const name = previousClientsRef.current?.find((c) => c.id === data.clientId)?.name ?? `#${data.clientId}`;
+          setWhisperLog((prevLog) => [
+            ...prevLog,
+            {
+              id: ++whisperLogIdRef.current,
+              timestamp: Date.now(),
+              description: t("whisperHistory.received", { name }),
+              incoming: true,
+            },
+          ]);
+          if (whisperSettingsRef.current.sound && !outputMutedRef.current) void playSound("whisper");
+          if (whisperSettingsRef.current.openHistory) setWhisperHistoryOpen(true);
+          break;
+        }
         case "reconnecting":
           // The gateway lost the TS server and is reconnecting by itself.
           appendLog({ text: t("log.serverReconnecting"), kind: "error" });
@@ -9519,6 +9641,44 @@ function AppInner() {
     // read for the description but must not re-trigger it (renames, joins).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [whisperChannelIds, whisperClientIds, connected]);
+
+  // Tell the connector whose whispers to let through: the mode's default plus
+  // the online clients whose contact entry says otherwise. Resent whenever
+  // that changes or the socket is new (the connector forgets it on reconnect).
+  const sentWhisperPolicyRef = useRef<{ socket: WebSocket | DemoSocket | null; payload: string }>({ socket: null, payload: "" });
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!connected || !socket) return;
+    const block = whisperSettings.mode !== "allow";
+    const exceptionMode = block ? "allow" : "block";
+    const exceptions =
+      whisperSettings.mode === "blockAll"
+        ? []
+        : clients
+            .filter((c) => contacts.find((k) => k.uid === c.uid)?.whisper === exceptionMode)
+            .map((c) => c.id)
+            .sort((a, b) => a - b);
+    const payload = JSON.stringify({ type: "setWhisperPolicy", block, exceptions });
+    const sent = sentWhisperPolicyRef.current;
+    if (sent.socket === socket && sent.payload === payload) return;
+    socket.send(payload);
+    sentWhisperPolicyRef.current = { socket, payload };
+  }, [connected, clients, contacts, whisperSettings.mode]);
+
+  // "Clients in Whisper Verlauf löschen nach": drop old incoming entries.
+  useEffect(() => {
+    const minutes = whisperSettings.clearAfterMin;
+    if (!minutes) return;
+    const prune = () =>
+      setWhisperLog((prev) => {
+        const cutoff = Date.now() - minutes * 60_000;
+        const next = prev.filter((e) => !e.incoming || e.timestamp >= cutoff);
+        return next.length === prev.length ? prev : next;
+      });
+    prune();
+    const timer = setInterval(prune, 15_000);
+    return () => clearInterval(timer);
+  }, [whisperSettings.clearAfterMin]);
 
   useEffect(() => {
     if (!whisperMenuOpen) return;
@@ -11973,6 +12133,7 @@ function AppInner() {
 
       {optionsDialogOpen && (
         <OptionsDialog
+          onOpenWhisperLists={() => setWhisperListsOpen(true)}
           section={optionsSection}
           onSectionChange={setOptionsSection}
           onClose={() => setOptionsDialogOpen(false)}

@@ -7,7 +7,8 @@ export type SoundEventId =
   | "poke"
   | "mute"
   | "micClickOn"
-  | "micClickOff";
+  | "micClickOff"
+  | "whisper";
 
 export const SOUND_EVENTS: SoundEventId[] = [
   "connect",
@@ -19,6 +20,7 @@ export const SOUND_EVENTS: SoundEventId[] = [
   "mute",
   "micClickOn",
   "micClickOff",
+  "whisper",
 ];
 
 /** "ide" swaps the default chimes for synthetic terminal blips (Command Center layout). */
@@ -238,6 +240,11 @@ function synthNotes(event: SoundEventId): SynthNote[] {
       return [{ delay: 0, freq: 1400, duration: 0.03, gain: 0.15 }];
     case "micClickOff":
       return [{ delay: 0, freq: 900, duration: 0.03, gain: 0.15 }];
+    case "whisper":
+      return [
+        { delay: 0, freq: 783.99, duration: 0.12, gain: 0.2 },
+        { delay: 0.1, freq: 659.25, duration: 0.16, gain: 0.18 },
+      ];
   }
 }
 
@@ -274,6 +281,8 @@ function ideNotes(event: SoundEventId): SynthNote[] {
       return [{ delay: 0, freq: 1600, duration: 0.02, gain: 0.08, type: "square" }];
     case "micClickOff":
       return [{ delay: 0, freq: 1000, duration: 0.02, gain: 0.08, type: "square" }];
+    case "whisper":
+      return [{ delay: 0, freq: 900, endFreq: 700, duration: 0.08, gain: 0.1, type: "triangle" }];
   }
 }
 
