@@ -150,17 +150,18 @@ import {
   importSoundPack,
   isSpecialKey,
   loadSoundPacks,
-  notificationTextPosition,
+  notificationTextPositions,
   notify,
   packScript,
   runSoundScript,
   saveNotificationSettings,
   setNotificationPlaybackMuted,
   setSessionSoundPack,
+  textPositionChoices,
   type NotificationNode,
+  type NotificationOverride,
   type NotificationSettings,
   type SoundPack,
-  type TextPosition,
 } from "./notifications";
 import {
   iconPackCss,
@@ -1982,6 +1983,8 @@ interface PmMessage {
   fromSelf: boolean;
   message: string;
   fromLog?: boolean;
+  /** Notification text (Options -> Meldungen -> Text Position "Client"). */
+  isLog?: boolean;
 }
 
 interface PmThread {
@@ -6735,14 +6738,14 @@ function MeldungenPanel({
     setSettings(next);
   };
   const defaultScript = (key: string) => packScript(pack, settings.pack, key);
-  const override = (keys: string[], patch: { off?: boolean; script?: string; text?: TextPosition }) => {
+  const override = (keys: string[], patch: NotificationOverride) => {
     const overrides = { ...settings.overrides };
     for (const key of keys) {
       const merged = { ...overrides[key], ...patch };
       // Values equal to the default aren't overrides (that's what makes a row bold).
       if (!merged.off) delete merged.off;
       if (merged.script === defaultScript(key)) delete merged.script;
-      if (merged.text === "server") delete merged.text;
+      if (merged.text?.join() === "server") delete merged.text;
       if (Object.keys(merged).length) overrides[key] = merged;
       else delete overrides[key];
     }
@@ -6766,6 +6769,7 @@ function MeldungenPanel({
       const key = node.key;
       const o = settings.overrides[key];
       const script = o?.script ?? defaultScript(key);
+      const text = Array.isArray(o?.text) ? o.text : ["server"];
       return (
         <tr key={id} className={o ? "ts-notify-custom" : undefined}>
           <td style={indent}>
@@ -6792,14 +6796,25 @@ function MeldungenPanel({
           </td>
           <td>
             {!special && (
-              <select
-                value={o?.text ?? "server"}
-                onChange={(e) => override([key], { text: e.target.value as TextPosition })}
-              >
-                <option value="none">{t("notify.text.none")}</option>
-                <option value="server">{t("notify.text.server")}</option>
-                <option value="channel">{t("notify.text.channel")}</option>
-              </select>
+              <details className="ts-notify-text">
+                <summary>{text.map((p) => t(`notify.text.${p}`)).join(", ") || "—"}</summary>
+                <div className="ts-notify-text-menu">
+                  {textPositionChoices(key).map((p) => (
+                    <label key={p} className="ts-options-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={text.includes(p)}
+                        onChange={(e) =>
+                          override([key], {
+                            text: textPositionChoices(key).filter((c) => (c === p ? e.target.checked : text.includes(c))),
+                          })
+                        }
+                      />
+                      {t(`notify.text.${p}`)}
+                    </label>
+                  ))}
+                </div>
+              </details>
             )}
           </td>
         </tr>
@@ -6892,6 +6907,7 @@ function MeldungenPanel({
             onChange={(e) => save({ ...settings, whenMuted: e.target.value as NotificationSettings["whenMuted"] })}
           >
             <option value="all">{t("notify.whenMuted.all")}</option>
+            <option value="important">{t("notify.whenMuted.important")}</option>
             <option value="none">{t("notify.whenMuted.none")}</option>
           </select>
         </div>
@@ -9658,11 +9674,22 @@ function AppInner() {
           const key = SERVER_LOG_NOTIFICATIONS[data.kind as keyof typeof SERVER_LOG_NOTIFICATIONS];
           // Join/leave/switch sounds come from the channel diff above; these only place the text.
           if (!["clientJoin", "clientLeave", "clientChannelSwitch"].includes(data.kind)) void notify(key);
-          const position = notificationTextPosition(key);
-          if (position !== "none")
-            (position === "channel" ? setChat : setServerChat)((prev) =>
-              capLines([...prev, { from: "", message, isLog: true }], chatSettingsRef.current.maxLines)
-            );
+          const maxLines = chatSettingsRef.current.maxLines;
+          for (const position of notificationTextPositions(key)) {
+            if (position === "client") {
+              // Into an open private chat with that client, if there is one.
+              const client = "client" in data ? data.client : undefined;
+              setPmThreads((prev) => {
+                const thread = Object.values(prev).find((th) => th.partnerName === client);
+                if (!thread) return prev;
+                const messages = capLines([...thread.messages, { fromSelf: false, message, isLog: true }], maxLines);
+                return { ...prev, [thread.partnerId]: { ...thread, messages } };
+              });
+            } else
+              (position === "channel" ? setChat : setServerChat)((prev) =>
+                capLines([...prev, { from: "", message, isLog: true }], maxLines)
+              );
+          }
           break;
         }
         case "disconnected": {
@@ -13957,7 +13984,11 @@ function AppInner() {
             }}
           >
             {activeTab === "channel"
-              ? chat.map((entry, i) => (
+              ? chat.map((entry, i) => entry.isLog ? (
+                  <div key={i} className="ts-chat-line ts-chat-line-log">
+                    <span>{entry.message}</span>
+                  </div>
+                ) : (
                   <div
                     key={i}
                     className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}${
@@ -13984,7 +14015,11 @@ function AppInner() {
                       </div>
                     )
                   )
-                : pmThreads[activeTab]?.messages.map((entry, i) => (
+                : pmThreads[activeTab]?.messages.map((entry, i) => entry.isLog ? (
+                    <div key={i} className="ts-chat-line ts-chat-line-log">
+                      <span>{entry.message}</span>
+                    </div>
+                  ) : (
                     <div
                       key={i}
                       className={`ts-chat-line${entry.fromSelf ? " ts-chat-line-self" : ""}${

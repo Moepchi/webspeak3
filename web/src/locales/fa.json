@@ -898,10 +898,11 @@
   "notify.col.action": "رویداد",
   "notify.col.script": "اسکریپت صدا",
   "notify.col.text": "محل متن",
-  "notify.text.none": "هیچ",
   "notify.text.server": "سرور",
   "notify.text.channel": "کانال",
   "notify.resetAll": "بازنشانی همه تغییرات",
   "notify.applyToFavorites": "استفاده از این بسته صدا برای همه موارد علاقه",
-  "notify.applyToFavoritesConfirm": "همه موارد علاقه روی این بسته صدا تنظیم شوند؟ بسته‌های صدای جداگانه بازنشانی می‌شوند."
+  "notify.applyToFavoritesConfirm": "همه موارد علاقه روی این بسته صدا تنظیم شوند؟ بسته‌های صدای جداگانه بازنشانی می‌شوند.",
+  "notify.whenMuted.important": "فقط صداهای مهم پخش شوند",
+  "notify.text.client": "کلاینت"
 }

@@ -899,10 +899,11 @@
   "notify.col.action": "Akce",
   "notify.col.script": "Zvukový skript",
   "notify.col.text": "Pozice textu",
-  "notify.text.none": "Žádná",
   "notify.text.server": "Server",
   "notify.text.channel": "Kanál",
   "notify.resetAll": "Obnovit všechny změny",
   "notify.applyToFavorites": "Použít tento zvukový balíček pro všechny oblíbené",
-  "notify.applyToFavoritesConfirm": "Nastavit všem oblíbeným tento zvukový balíček? Vlastní balíčky jednotlivých oblíbených budou zrušeny."
+  "notify.applyToFavoritesConfirm": "Nastavit všem oblíbeným tento zvukový balíček? Vlastní balíčky jednotlivých oblíbených budou zrušeny.",
+  "notify.whenMuted.important": "Přehrávat jen důležité zvuky",
+  "notify.text.client": "Klient"
 }

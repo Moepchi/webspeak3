@@ -4851,3 +4851,24 @@
 .ts-notify-tree select {
   font-size: 1em;
 }
+.ts-notify-text {
+  position: relative;
+}
+.ts-notify-text > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.ts-notify-text > summary::after {
+  content: " ▾";
+  opacity: 0.6;
+}
+.ts-notify-text-menu {
+  position: absolute;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px;
+  background: var(--bg-toolbar-1);
+  border: 1px solid var(--border);
+}

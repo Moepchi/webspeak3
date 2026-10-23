@@ -151,17 +151,20 @@ export interface SoundPack {
   files: Record<string, Blob>;
 }
 
-export type TextPosition = "none" | "server" | "channel";
+/** Where an event's text line goes; several at once, like native's multiple choice.
+ *  "client" = the private chat with the client it's about. */
+export type TextPosition = "server" | "channel" | "client";
 
 export interface NotificationOverride {
   off?: boolean;
   script?: string;
-  text?: TextPosition;
+  text?: TextPosition[];
 }
 
 export interface NotificationSettings {
   pack: string;
-  whenMuted: "all" | "none";
+  /** "important": only IMPORTANT_KEYS while the output is muted. */
+  whenMuted: "all" | "important" | "none";
   overrides: Record<string, NotificationOverride>;
 }
 
@@ -269,12 +272,24 @@ export function packScript(pack: SoundPack | undefined, packId: string, key: str
   return pack?.scripts[key] ?? "";
 }
 
+/** Text positions native offers for a key: everything gets Server, events about
+ *  channels/yourself also Channel, events about another client also Client. */
+export function textPositionChoices(key: string): TextPosition[] {
+  if (key.startsWith("CLIENT_") || key === "OTHER_RECEIVED_POKE") return ["server", "channel", "client"];
+  if (/^(CHANNEL|YOU|CHAT)_/.test(key)) return ["server", "channel"];
+  return ["server"];
+}
+
+// ponytail: guessed set, native doesn't document which sounds count as "wichtig".
+const IMPORTANT_KEYS = /^(CONNECTION_|YOU_WERE_|SOUND_|OTHER_RECEIVED_POKE$|SERVER_ERROR$)/;
+
 export const isNotificationEnabled = (key: string) => isSpecialKey(key) || !settings.overrides[key]?.off;
 
-/** Where the event's text goes; "none" also when the row is unticked. */
-export function notificationTextPosition(key: string): TextPosition {
-  if (!isNotificationEnabled(key)) return "none";
-  return settings.overrides[key]?.text ?? "server";
+/** Where the event's text goes; nowhere when the row is unticked. */
+export function notificationTextPositions(key: string): TextPosition[] {
+  if (!isNotificationEnabled(key)) return [];
+  const text = settings.overrides[key]?.text;
+  return Array.isArray(text) ? text : ["server"];
 }
 
 export type NotificationVars = Record<string, string>;
@@ -298,7 +313,8 @@ export async function runSoundScript(script: string, packId: string, vars: Notif
 /** Plays the sound for a TS3 notification key, honouring the Meldungen settings. */
 export async function notify(key: string, vars?: NotificationVars): Promise<void> {
   if (!isNotificationEnabled(key)) return;
-  if (playbackMuted && settings.whenMuted === "none") return;
+  if (playbackMuted && (settings.whenMuted === "none" || (settings.whenMuted === "important" && !IMPORTANT_KEYS.test(key))))
+    return;
   const packId = sessionPack ?? settings.pack;
   const override = settings.overrides[key]?.script;
   const pack = packId.startsWith("pack:") ? (await loadSoundPacks()).find((p) => p.id === packId) : undefined;
