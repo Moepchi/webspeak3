@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { StillImg } from "./still";
 
 // TeamSpeak chat text -> React elements (never HTML strings, so message text
 // can't inject markup). Understands the TS3/TS6 BBCode tags plus the basic
@@ -44,6 +45,8 @@ interface Node {
 export interface RenderOptions {
   /** Load [img] / ![](...) inline. Off: they render as links, so no remote host sees the reader's IP. */
   images?: boolean;
+  /** GIF animation off: show only the first frame of inline images. */
+  stillImages?: boolean;
 }
 
 function emphasis(s: string): string {
@@ -263,7 +266,7 @@ function render(node: Node, key: number, opts: RenderOptions): ReactNode {
       const label = textOf(node);
       if (!href) return <span key={key}>{label}</span>;
       if (node.tag === "img" && opts.images)
-        return link(href, <img className="ts-bb-img" src={href} alt="" loading="lazy" referrerPolicy="no-referrer" />, key);
+        return link(href, <StillImg still={!!opts.stillImages} className="ts-bb-img" src={href} alt="" loading="lazy" referrerPolicy="no-referrer" />, key);
       return link(href, label, key);
     }
     default:

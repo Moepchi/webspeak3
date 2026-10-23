@@ -2295,6 +2295,15 @@
     0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
+/* Channel commander as its own lamp (Design -> "Zeige Channel Commander als Lampe"). */
+.ts-app .ts-talk-lamp-commander.ts-talk-lamp-idle {
+  background: radial-gradient(circle at 32% 28%, #ffe0a8 0%, #e8912d 45%, #8a4a0e 100%);
+}
+
+.ts-app .ts-talk-lamp-commander.ts-talk-lamp-talking {
+  box-shadow: 0 0 0 2px #e8912d, 0 0 4px rgba(232, 145, 45, 0.6);
+}
+
 .ts-talk-lamp-muted {
   border-radius: 0;
   background: transparent;
@@ -3772,6 +3781,47 @@
 .ts-design-custom-actions button {
   padding: 0.5rem 1rem;
   font-size: 13px;
+}
+
+.ts-design-native .ts-design-col {
+  flex: 1;
+  min-width: 0;
+  gap: 0.75rem;
+}
+
+.ts-design-indent {
+  padding-left: 1.4rem;
+}
+
+.ts-design-indent input[type="number"] {
+  width: 5em;
+}
+
+.ts-options-disabled {
+  opacity: 0.5;
+}
+
+.ts-design-back {
+  margin-bottom: 0.75rem;
+}
+
+.ts-design-manage-heading {
+  margin: 1.25rem 0 0.5rem;
+}
+
+.ts-design-iconpack-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+
+.ts-design-iconpack-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 12px;
 }
 
 .ts-design-custom-actions {

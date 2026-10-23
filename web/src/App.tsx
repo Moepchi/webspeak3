@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import "./App.css";
 // After App.css: its :where() base variables have the same (zero) specificity.
@@ -141,6 +141,16 @@ import {
   type SoundEventId,
 } from "./sounds";
 import { parseSoundpack } from "./soundpack";
+import {
+  iconPackCss,
+  loadIconPacks,
+  loadSelectedIconPack,
+  parseIconPack,
+  saveIconPacks,
+  saveSelectedIconPack,
+  type IconPack,
+} from "./iconpack";
+import { StillImg } from "./lib/still";
 import {
   GREENTEASPEAK_THEME_ID,
   GreenteaSpeakChrome,
@@ -608,6 +618,60 @@ const SERVER_BANNER_KEY = "webspeak3:server-banner";
 const IDE_PIXEL_FONT_KEY = "webspeak3:ide-pixel-font";
 // Off by default: an inline chat image loads from whatever host the sender picked.
 const CHAT_IMAGES_KEY = "webspeak3:chat-images";
+const TREE_OPTIONS_KEY = "webspeak3:tree-options";
+
+/** Design tab -> "Channel Baum" and "GIF Animation" (TS3's options). */
+interface TreeOptions {
+  expandMode: "all" | "own";
+  /** Channel levels to expand with expandMode "all"; 0 = every level. */
+  expandDepth: number;
+  clientsBelow: boolean;
+  flags: boolean;
+  groupIconsInMenus: boolean;
+  commanderLamp: boolean;
+  awayMessage: boolean;
+  tooltips: boolean;
+  animateAvatars: boolean;
+  animateImages: boolean;
+}
+
+const DEFAULT_TREE_OPTIONS: TreeOptions = {
+  expandMode: "all",
+  expandDepth: 0,
+  clientsBelow: false,
+  flags: true,
+  groupIconsInMenus: true,
+  commanderLamp: false,
+  awayMessage: true,
+  tooltips: true,
+  animateAvatars: true,
+  animateImages: true,
+};
+
+function loadTreeOptions(): TreeOptions {
+  try {
+    return { ...DEFAULT_TREE_OPTIONS, ...JSON.parse(localStorage.getItem(TREE_OPTIONS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULT_TREE_OPTIONS;
+  }
+}
+
+/** Display prefs read deep in the tree; a context spares threading them through every level. */
+const DisplayPrefsContext = createContext<{
+  tree: TreeOptions;
+  setTree: (next: TreeOptions) => void;
+  iconPacks: IconPack[];
+  iconPackId: string;
+  setIconPackId: (id: string) => void;
+  saveIconPacks: (packs: IconPack[]) => void;
+}>({
+  tree: DEFAULT_TREE_OPTIONS,
+  setTree: () => {},
+  iconPacks: [],
+  iconPackId: "",
+  setIconPackId: () => {},
+  saveIconPacks: () => {},
+});
 const DISCONNECT_MESSAGE_KEY = "webspeak3:disconnect-message";
 const COLLECTED_URLS_KEY = "webspeak3:collected-urls";
 
@@ -928,7 +992,7 @@ function countryFlag(code: string): string | null {
 
 function ChannelIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" data-pack-icon="channel">
       <path
         d="M1.5 3.5c0-.55.45-1 1-1h3.4l1.2 1.4h6.4c.55 0 1 .45 1 1v7.1c0 .55-.45 1-1 1h-11c-.55 0-1-.45-1-1v-8.5Z"
         fill="#e8c46a"
@@ -944,17 +1008,27 @@ function TalkLamp({
   talking,
   inputMuted,
   inputHardwareEnabled,
+  commander = false,
 }: {
   talking: boolean;
   inputMuted: boolean;
   inputHardwareEnabled: boolean;
+  /** Channel commander: drawn as its own lamp when the design option asks for it. */
+  commander?: boolean;
 }) {
   const t = useT();
+  const { tree } = useContext(DisplayPrefsContext);
   const muted = inputMuted || !inputHardwareEnabled;
+  const asCommander = commander && tree.commanderLamp;
 
   if (muted) {
     return (
-      <span className="ts-talk-lamp ts-talk-lamp-muted" title={t("tree.micMuted")} aria-hidden="true">
+      <span
+        className="ts-talk-lamp ts-talk-lamp-muted"
+        title={t("tree.micMuted")}
+        aria-hidden="true"
+        data-pack-icon={inputMuted ? "micMuted" : "hardwareMicMuted"}
+      >
         <svg width="14" height="14" viewBox="0 0 14 14" focusable="false">
           <path
             d="M7 1.4c-1.15 0-2.05.9-2.05 2.05v3.1c0 1.15.9 2.05 2.05 2.05s2.05-.9 2.05-2.05v-3.1C9.05 2.3 8.15 1.4 7 1.4Z"
@@ -983,24 +1057,36 @@ function TalkLamp({
 
   if (talking) {
     return (
-      <span className="ts-talk-lamp ts-talk-lamp-talking" title={t("tree.talking")} aria-hidden="true" />
+      <span
+        className={`ts-talk-lamp ts-talk-lamp-talking${asCommander ? " ts-talk-lamp-commander" : ""}`}
+        title={t("tree.talking")}
+        aria-hidden="true"
+        data-pack-icon={asCommander ? "commanderTalking" : "talking"}
+      />
     );
   }
 
-  return <span className="ts-talk-lamp ts-talk-lamp-idle" aria-hidden="true" />;
+  return (
+    <span
+      className={`ts-talk-lamp ts-talk-lamp-idle${asCommander ? " ts-talk-lamp-commander" : ""}`}
+      aria-hidden="true"
+      data-pack-icon={asCommander ? "commanderIdle" : "talkIdle"}
+    />
+  );
 }
 
 function ClientStatusIcons({ client }: { client: ClientInfo }) {
   const t = useT();
+  const { tree } = useContext(DisplayPrefsContext);
   // Mute is shown on the TalkLamp; keep secondary flags here.
   return (
     <span className="ts-status-icons">
-      {client.isChannelCommander && <span title={t("tree.channelCommander")}>⭐</span>}
-      {client.away && <span title={t("tree.away")}>💤</span>}
+      {client.isChannelCommander && !tree.commanderLamp && <span title={t("tree.channelCommander")}>⭐</span>}
+      {client.away && <span title={t("tree.away")} data-pack-icon="away">💤</span>}
       {!client.inputMuted && client.inputHardwareEnabled && !client.hasTalkPower && (
         <span title={t("tree.noTalkPower")}>🔒</span>
       )}
-      {client.outputMuted && <span title={t("tree.soundMuted")}>🔕</span>}
+      {client.outputMuted && <span title={t("tree.soundMuted")} data-pack-icon="soundMuted">🔕</span>}
       {client.isStreaming && <span title={t("tree.streaming")}>📺</span>}
     </span>
   );
@@ -1008,7 +1094,7 @@ function ClientStatusIcons({ client }: { client: ClientInfo }) {
 
 function ServerIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" data-pack-icon="server">
       <rect x="1.5" y="2" width="13" height="4.2" rx="0.6" fill="#7a8a99" stroke="#5c6b78" strokeWidth="0.5" />
       <rect x="1.5" y="7" width="13" height="4.2" rx="0.6" fill="#8a9aab" stroke="#5c6b78" strokeWidth="0.5" />
       <circle cx="3.5" cy="4.1" r="0.6" fill="#4caf50" />
@@ -1086,7 +1172,9 @@ function ChannelTree({
   onChannelContextMenu: (e: React.MouseEvent, channelId: number, channelName: string) => void;
 }) {
   const t = useT();
-  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
+  const { tree } = useContext(DisplayPrefsContext);
+  // Channels the user expanded/collapsed against the design tab's default.
+  const [toggled, setToggled] = useState<Set<number>>(() => new Set());
   const [dragOverChannelId, setDragOverChannelId] = useState<number | null>(null);
   // Module-level click tracking (see lastChannelClick) — refs alone are not
   // enough when Select re-renders remount nested ChannelTree instances.
@@ -1100,9 +1188,21 @@ function ChannelTree({
           .filter((g): g is GroupEntry => !!g && g.iconId !== 0)
       : [];
 
+  // "Own channel" mode keeps the own channel and the channels above it open.
+  const ownPath = new Set<number>();
+  if (tree.expandMode === "own") {
+    let id = clients.find((c) => c.id === ownClientId)?.channel;
+    while (id && !ownPath.has(id)) {
+      ownPath.add(id);
+      id = channels.find((c) => c.id === id)?.parent;
+    }
+  }
+  const collapsedByDefault = (channelId: number) =>
+    tree.expandMode === "own" ? !ownPath.has(channelId) : tree.expandDepth > 0 && level > tree.expandDepth;
+
   const toggleCollapsed = (channelId: number, event: React.SyntheticEvent) => {
     event.stopPropagation();
-    setCollapsed((prev) => {
+    setToggled((prev) => {
       const next = new Set(prev);
       if (next.has(channelId)) next.delete(channelId);
       else next.add(channelId);
@@ -1122,7 +1222,7 @@ function ChannelTree({
         const channelClients = clients.filter((c) => c.channel === channel.id);
         const hasSubChannels = channels.some((c) => c.parent === channel.id);
         const hasChildren = channelClients.length > 0 || hasSubChannels;
-        const isCollapsed = !expandAll && collapsed.has(channel.id);
+        const isCollapsed = !expandAll && collapsedByDefault(channel.id) !== toggled.has(channel.id);
         const isSelected = selected?.type === "channel" && selected.id === channel.id;
         // One Tab stop for the whole tree (arrow keys move inside it, see
         // handleTreeKeyDown): the selected row, or the first channel while
@@ -1133,6 +1233,27 @@ function ChannelTree({
               spacer.isBoxArt ? " ts-spacer-boxart" : ""
             }`
           : "";
+        const subTree = !isCollapsed && (
+          <ChannelTree
+            channels={channels}
+            clients={clients}
+            parent={channel.id}
+            ownClientId={ownClientId}
+            talkers={talkers}
+            serverGroups={serverGroups}
+            groupIconImages={groupIconImages}
+            selected={selected}
+            sessionKey={sessionKey}
+            expandAll={expandAll}
+            level={level + 1}
+            onSelectItem={onSelectItem}
+            onSwitchChannel={onSwitchChannel}
+            onOpenPrivateChat={onOpenPrivateChat}
+            onMoveClient={onMoveClient}
+            onClientContextMenu={onClientContextMenu}
+            onChannelContextMenu={onChannelContextMenu}
+          />
+        );
         return (
         <li key={channel.id} role="none">
           <div
@@ -1194,7 +1315,7 @@ function ChannelTree({
               if (!payload || payload.channelId === channel.id) return;
               onMoveClient(payload.clientId, channel.id);
             }}
-            title={t("tree.clickToJoin")}
+            title={tree.tooltips ? t("tree.clickToJoin") : undefined}
           >
             {!spacer.isSpacer && (
               <button
@@ -1232,6 +1353,7 @@ function ChannelTree({
               <span title={t("tree.passwordProtected")}>🔒</span>
             )}
           </div>
+          {tree.clientsBelow && subTree}
           {!isCollapsed && (
             <ul className="ts-tree-list" role="group">
               {channelClients.map((c) => {
@@ -1278,7 +1400,7 @@ function ChannelTree({
                       e.preventDefault();
                     }}
                     title={
-                      c.id === ownClientId
+                      c.id === ownClientId || !tree.tooltips
                         ? undefined
                         : `${t("tree.privateChatWith")} ${c.name}`
                     }
@@ -1295,6 +1417,7 @@ function ChannelTree({
                       }
                       inputMuted={c.inputMuted}
                       inputHardwareEnabled={c.inputHardwareEnabled}
+                      commander={c.isChannelCommander}
                     />
                     <span className="ts-client-status-leading">
                       <ClientStatusIcons client={c} />
@@ -1305,9 +1428,9 @@ function ChannelTree({
                       className="ts-client-avatar"
                       isSelf={c.id === ownClientId}
                     />
-                    {countryFlag(c.country) && <span title={c.country}>{countryFlag(c.country)}</span>}
+                    {tree.flags && countryFlag(c.country) && <span title={c.country}>{countryFlag(c.country)}</span>}
                     <span className="ts-tree-label">{c.name}</span>
-                    {c.away && c.awayMessage && (
+                    {tree.awayMessage && c.away && c.awayMessage && (
                       <span className="ts-client-away-message">({c.awayMessage})</span>
                     )}
                     <span className="ts-client-icons">
@@ -1344,27 +1467,7 @@ function ChannelTree({
               })}
             </ul>
           )}
-          {!isCollapsed && (
-            <ChannelTree
-              channels={channels}
-              clients={clients}
-              parent={channel.id}
-              ownClientId={ownClientId}
-              talkers={talkers}
-              serverGroups={serverGroups}
-              groupIconImages={groupIconImages}
-              selected={selected}
-              sessionKey={sessionKey}
-              expandAll={expandAll}
-              level={level + 1}
-              onSelectItem={onSelectItem}
-              onSwitchChannel={onSwitchChannel}
-              onOpenPrivateChat={onOpenPrivateChat}
-              onMoveClient={onMoveClient}
-              onClientContextMenu={onClientContextMenu}
-              onChannelContextMenu={onChannelContextMenu}
-            />
-          )}
+          {!tree.clientsBelow && subTree}
         </li>
         );
       })}
@@ -3720,6 +3823,7 @@ function GroupAssignDialog({
   onClose: () => void;
 }) {
   const t = useT();
+  const { tree } = useContext(DisplayPrefsContext);
   const backdrop = useBackdropDismiss(onClose);
   const [timedOut, setTimedOut] = useState(false);
   useEffect(() => {
@@ -3757,7 +3861,9 @@ function GroupAssignDialog({
                       className={`ts-menu-item${assigned ? " ts-group-assign-current" : ""}`}
                       onClick={() => onSelect(g.id, assigned)}
                     >
-                      <span className="ts-menu-item-icon">{assigned ? "✔️" : kind === "channel" ? "🏷️" : "🎖️"}</span>
+                      {(assigned || tree.groupIconsInMenus) && (
+                        <span className="ts-menu-item-icon">{assigned ? "✔️" : kind === "channel" ? "🏷️" : "🎖️"}</span>
+                      )}
                       <span className="ts-menu-item-label">{g.name}</span>
                       {kind === "server" && assigned && (
                         <span className="ts-group-assign-hint">{t("groupAssign.clickToRemove")}</span>
@@ -4103,12 +4209,13 @@ function AvatarTile({
   isSelf: boolean;
 }) {
   const url = clientAvatarUrl(client, images);
+  const { tree } = useContext(DisplayPrefsContext);
   return (
     <span
       className={className}
       style={{ background: url ? undefined : isSelf ? "var(--accent)" : clientAvatarColor(client.name) }}
     >
-      {url ? <img className="ts-avatar-img" src={url} alt="" /> : client.name.trim().charAt(0).toUpperCase() || "?"}
+      {url ? <StillImg still={!tree.animateAvatars} className="ts-avatar-img" src={url} alt="" /> : client.name.trim().charAt(0).toUpperCase() || "?"}
     </span>
   );
 }
@@ -5989,7 +6096,10 @@ function DesignPanel({
   const t = useT();
   const [editing, setEditing] = useState<CustomThemeDraft | null>(null);
   const [storeOpen, setStoreOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const prefs = useContext(DisplayPrefsContext);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const iconPackInputRef = useRef<HTMLInputElement | null>(null);
 
   const builtins: { id: DesignTheme; name: string; desc: string }[] = [
     { id: "standard", name: t("design.theme.standard"), desc: t("design.theme.standard.desc") },
@@ -6039,6 +6149,23 @@ function DesignPanel({
       onSelectionChange(`custom:${id}`);
     } catch {
       window.alert(t("design.custom.importError"));
+    }
+  };
+
+  const handleIconPackSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const pack = await parseIconPack(file);
+      if (!pack) {
+        window.alert(t("design.iconPack.importError"));
+        return;
+      }
+      prefs.saveIconPacks([...prefs.iconPacks, pack]);
+      prefs.setIconPackId(pack.id);
+    } catch {
+      window.alert(t("design.iconPack.importError"));
     }
   };
 
@@ -6098,16 +6225,13 @@ function DesignPanel({
     );
   }
 
-  return (
-    <>
-      <h3>{t("options.section.design")}</h3>
-      <p className="ts-options-subtitle">{t("design.subtitle")}</p>
-      {resolveDesignThemeBase(designSelection, customThemes) === "ide" && (
-        <label className="ts-options-checkbox">
-          <input type="checkbox" checked={idePixelFont} onChange={(e) => onIdePixelFontChange(e.target.checked)} />
-          {t("design.idePixelFont")}
-        </label>
-      )}
+  if (manageOpen) {
+    return (
+      <>
+        <h3>{t("design.manage.title")}</h3>
+        <button className="ts-design-back" onClick={() => setManageOpen(false)}>
+          ← {t("design.store.back")}
+        </button>
       <div className="ts-design-theme-grid">
         {builtins.map((th) => (
           <button
@@ -6192,6 +6316,164 @@ function DesignPanel({
           onChange={handleImportSelected}
         />
         <button onClick={() => setStoreOpen(true)}>{t("design.store.open")}</button>
+      </div>
+        <h4 className="ts-design-manage-heading">{t("design.iconPack")}</h4>
+        {prefs.iconPacks.length === 0 ? (
+          <p className="ts-options-hint">{t("design.iconPack.none")}</p>
+        ) : (
+          <ul className="ts-design-iconpack-list">
+            {prefs.iconPacks.map((pack) => (
+              <li key={pack.id}>
+                <span>
+                  {pack.name} ({Object.keys(pack.icons).length})
+                </span>
+                <button
+                  onClick={() => {
+                    if (!window.confirm(t("design.iconPack.deleteConfirm"))) return;
+                    prefs.saveIconPacks(prefs.iconPacks.filter((p) => p.id !== pack.id));
+                    if (prefs.iconPackId === pack.id) prefs.setIconPackId("");
+                  }}
+                >
+                  {t("design.custom.delete")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="ts-design-custom-actions">
+          <button onClick={() => iconPackInputRef.current?.click()}>{t("design.iconPack.import")}</button>
+          <input
+            ref={iconPackInputRef}
+            type="file"
+            accept=".ts3_iconpack,.zip"
+            style={{ display: "none" }}
+            onChange={handleIconPackSelected}
+          />
+        </div>
+        <p className="ts-options-hint">{t("design.iconPack.hint")}</p>
+      </>
+    );
+  }
+
+  const tree = prefs.tree;
+  const setTree = (patch: Partial<TreeOptions>) => prefs.setTree({ ...tree, ...patch });
+  const base = resolveDesignThemeBase(designSelection, customThemes);
+  const treeCheckbox = (key: keyof TreeOptions, label: string) => (
+    <label className="ts-options-checkbox">
+      <input type="checkbox" checked={tree[key] as boolean} onChange={(e) => setTree({ [key]: e.target.checked })} />
+      {label}
+    </label>
+  );
+  // ponytail: these need data the connector doesn't forward yet (client_badges, group types).
+  const unavailableCheckbox = (label: string) => (
+    <label className="ts-options-checkbox ts-options-disabled" title={t("design.notAvailable")}>
+      <input type="checkbox" disabled />
+      {label}
+    </label>
+  );
+
+  return (
+    <>
+      <h3>{t("options.section.design")}</h3>
+      <div className="ts-options-columns ts-design-native">
+        <div className="ts-options-fields ts-design-col">
+          <fieldset className="ts-options-fieldset">
+            <legend>{t("options.section.design")}</legend>
+            <label className="ts-options-field">
+              {t("design.style")}
+              <select value={base} onChange={(e) => onSelectionChange(e.target.value)}>
+                {builtins.map((th) => (
+                  <option key={th.id} value={th.id}>
+                    {th.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {base === "ide" && (
+              <label className="ts-options-checkbox">
+                <input type="checkbox" checked={idePixelFont} onChange={(e) => onIdePixelFontChange(e.target.checked)} />
+                {t("design.idePixelFont")}
+              </label>
+            )}
+            <label className="ts-options-field">
+              {t("design.theme")}
+              <select
+                value={designSelection.startsWith("custom:") ? designSelection : ""}
+                onChange={(e) => onSelectionChange(e.target.value || base)}
+              >
+                <option value="">{t("design.none")}</option>
+                {customThemes.map((theme) => (
+                  <option key={theme.id} value={`custom:${theme.id}`}>
+                    {theme.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ts-options-field">
+              {t("design.iconPack")}
+              <select value={prefs.iconPackId} onChange={(e) => prefs.setIconPackId(e.target.value)}>
+                <option value="">{t("design.theme.standard")}</option>
+                {prefs.iconPacks.map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="ts-design-custom-actions">
+              <button onClick={() => setManageOpen(true)}>{t("design.manage")}</button>
+              <button onClick={() => setStoreOpen(true)}>{t("design.store.open")}</button>
+            </div>
+          </fieldset>
+          <fieldset className="ts-options-fieldset">
+            <legend>{t("design.gif")}</legend>
+            {treeCheckbox("animateAvatars", t("design.gif.avatars"))}
+            {treeCheckbox("animateImages", t("design.gif.images"))}
+          </fieldset>
+        </div>
+        <div className="ts-options-fields ts-design-col">
+          <fieldset className="ts-options-fieldset">
+            <legend>{t("design.tree")}</legend>
+            <label className="ts-options-radio">
+              <input
+                type="radio"
+                name="ts-tree-expand"
+                checked={tree.expandMode === "all"}
+                onChange={() => setTree({ expandMode: "all" })}
+              />
+              {t("design.tree.expandAll")}
+            </label>
+            <label className="ts-options-field ts-design-indent">
+              {t("design.tree.expandDepth")}
+              <input
+                type="number"
+                min={0}
+                max={99}
+                value={tree.expandDepth}
+                disabled={tree.expandMode !== "all"}
+                onChange={(e) => setTree({ expandDepth: Math.max(0, Math.floor(Number(e.target.value)) || 0) })}
+              />
+            </label>
+            <label className="ts-options-radio">
+              <input
+                type="radio"
+                name="ts-tree-expand"
+                checked={tree.expandMode === "own"}
+                onChange={() => setTree({ expandMode: "own" })}
+              />
+              {t("design.tree.expandOwn")}
+            </label>
+            {treeCheckbox("clientsBelow", t("design.tree.clientsBelow"))}
+            {treeCheckbox("flags", t("design.tree.flags"))}
+            {unavailableCheckbox(t("design.tree.overwolf"))}
+            {unavailableCheckbox(t("design.tree.badges"))}
+            {treeCheckbox("groupIconsInMenus", t("design.tree.groupIconsInMenus"))}
+            {unavailableCheckbox(t("design.tree.hideInaccessibleGroups"))}
+            {treeCheckbox("commanderLamp", t("design.tree.commanderLamp"))}
+            {treeCheckbox("awayMessage", t("design.tree.awayMessage"))}
+            {treeCheckbox("tooltips", t("design.tree.tooltips"))}
+          </fieldset>
+        </div>
       </div>
     </>
   );
@@ -7301,6 +7583,30 @@ function AppInner() {
     el.textContent = css;
     if (!existing) document.head.appendChild(el);
   }, [activeCustomTheme?.id, activeCustomTheme?.css]);
+  const [treeOptions, setTreeOptions] = useState(loadTreeOptions);
+  const [iconPacks, setIconPacks] = useState(loadIconPacks);
+  const [iconPackId, setIconPackId] = useState(loadSelectedIconPack);
+  const displayPrefs = useMemo(
+    () => ({
+      tree: treeOptions,
+      setTree: (next: TreeOptions) => {
+        setTreeOptions(next);
+        localStorage.setItem(TREE_OPTIONS_KEY, JSON.stringify(next));
+      },
+      iconPacks,
+      iconPackId,
+      setIconPackId: (id: string) => {
+        setIconPackId(id);
+        saveSelectedIconPack(id);
+      },
+      saveIconPacks: (packs: IconPack[]) => {
+        saveIconPacks(packs); // throws when storage is full - before the state changes
+        setIconPacks(packs);
+      },
+    }),
+    [treeOptions, iconPacks, iconPackId]
+  );
+  const iconPackStyle = iconPackCss(iconPacks.find((p) => p.id === iconPackId));
   const [micOn, setMicOn] = useState(false);
   const [talkers, setTalkers] = useState<Set<number>>(new Set());
   const [selfActive, setSelfActive] = useState(false);
@@ -10515,6 +10821,7 @@ function AppInner() {
     : `${publishState === "live" ? t("publish.stop") : t("publish.start")} (${t("publish.alpha")})`;
 
   return (
+    <DisplayPrefsContext.Provider value={displayPrefs}>
     <div
       className={`ts-app ts-theme-${theme}${designThemeClassName(designTheme)}${
         activeCustomTheme ? " ts-design-custom" : ""
@@ -12439,7 +12746,7 @@ function AppInner() {
                     className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
                   >
                     <span className="ts-chat-from">{entry.from}:</span>{" "}
-                    <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages })}</span>
+                    <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages, stillImages: !treeOptions.animateImages })}</span>
                   </div>
                 ))
               : activeTab === "server"
@@ -12454,7 +12761,7 @@ function AppInner() {
                         className={`ts-chat-line${entry.from === ownClient?.name ? " ts-chat-line-self" : ""}`}
                       >
                         <span className="ts-chat-from">{entry.from}:</span>{" "}
-                        <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages })}</span>
+                        <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages, stillImages: !treeOptions.animateImages })}</span>
                       </div>
                     )
                   )
@@ -12463,7 +12770,7 @@ function AppInner() {
                       <span className="ts-chat-from">
                         {entry.fromSelf ? t("chat.you") : pmThreads[activeTab].partnerName}:
                       </span>{" "}
-                      <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages })}</span>
+                      <span className="ts-chat-bubble">{renderBbcode(entry.message, { images: chatImages, stillImages: !treeOptions.animateImages })}</span>
                     </div>
                   ))}
             <div ref={chatEndRef} />
@@ -12554,7 +12861,9 @@ function AppInner() {
         })}
       </div>
       <NewsTicker />
+      {iconPackStyle && <style>{iconPackStyle}</style>}
     </div>
+    </DisplayPrefsContext.Provider>
   );
 }
 
