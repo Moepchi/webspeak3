@@ -447,25 +447,16 @@ export class AudioPlayer {
 
   /** Plays a short sine-wave test tone through the same volume/output-device routing as voice playback. */
   playTestTone(): void {
-    this.beep(440, 0.6, 0.3);
-  }
-
-  /** Short tick when someone starts (higher) or stops (lower) talking. */
-  playMicClick(start: boolean): void {
-    this.beep(start ? 1400 : 900, 0.03, 0.15);
-  }
-
-  private beep(freq: number, duration: number, volume: number): void {
     const osc = this.context.createOscillator();
     osc.type = "sine";
-    osc.frequency.value = freq;
+    osc.frequency.value = 440;
     const toneGain = this.context.createGain();
-    toneGain.gain.value = volume;
+    toneGain.gain.value = 0.3;
     osc.connect(toneGain);
     toneGain.connect(this.gain);
     const now = this.context.currentTime;
     osc.start(now);
-    osc.stop(now + duration);
+    osc.stop(now + 0.6);
     osc.onended = () => {
       osc.disconnect();
       toneGain.disconnect();

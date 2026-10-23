@@ -667,6 +667,8 @@
   "sounds.event.message": "Message received",
   "sounds.event.poke": "Poke received",
   "sounds.event.mute": "Mute toggled",
+  "sounds.event.micClickOn": "Mic click on",
+  "sounds.event.micClickOff": "Mic click off",
   "sounds.default": "Default",
   "sounds.custom": "Custom file: {name}",
   "sounds.test": "▶ Test",

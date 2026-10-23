@@ -667,6 +667,8 @@
   "sounds.event.message": "Nachricht empfangen",
   "sounds.event.poke": "Anstupsen erhalten",
   "sounds.event.mute": "Stummschaltung umgeschaltet",
+  "sounds.event.micClickOn": "Mikro Klick an",
+  "sounds.event.micClickOff": "Mikro Klick aus",
   "sounds.default": "Standard",
   "sounds.custom": "Eigene Datei: {name}",
   "sounds.test": "▶ Testen",

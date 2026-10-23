@@ -7308,9 +7308,9 @@ function AppInner() {
   // Off by default: a heavier, opt-in alternative/supplement to native AEC for
   // speaker+mic (no headset) setups (github.com/WebSpeak3/webspeak3 issue #2).
   const [aec3Enabled, setAec3Enabled] = useState(() => loadBoolPref(AEC3_ENABLED_KEY, false));
-  // Playback options, defaults as in TS3.
+  // Playback options. The clicks themselves are sounds (micClickOn/Off).
   const [autoVolume, setAutoVolume] = useState(() => loadBoolPref(AUTO_VOLUME_KEY, true));
-  const [ownMicClicks, setOwnMicClicks] = useState(() => loadBoolPref(OWN_MIC_CLICKS_KEY, true));
+  const [ownMicClicks, setOwnMicClicks] = useState(() => loadBoolPref(OWN_MIC_CLICKS_KEY, false));
   const [otherMicClicks, setOtherMicClicks] = useState(() => loadBoolPref(OTHER_MIC_CLICKS_KEY, false));
   // Read from the socket handler, which only sees the first render's state.
   const otherMicClicksRef = useRef(otherMicClicks);
@@ -8233,8 +8233,8 @@ function AppInner() {
           const prev = talkersRef.current;
           if (otherMicClicksRef.current && !outputMutedRef.current) {
             // One click per update, even if several people start at once.
-            if ([...next].some((id) => !prev.has(id))) audioPlayerRef.current?.playMicClick(true);
-            else if ([...prev].some((id) => !next.has(id))) audioPlayerRef.current?.playMicClick(false);
+            if ([...next].some((id) => !prev.has(id))) void playSound("micClickOn");
+            else if ([...prev].some((id) => !next.has(id))) void playSound("micClickOff");
           }
           talkersRef.current = next;
           setTalkers(next);
@@ -10418,7 +10418,7 @@ function AppInner() {
       selfTalkingSeenRef.current = true;
       return;
     }
-    if (ownMicClicks && !outputMuted) audioPlayerRef.current?.playMicClick(selfTalking);
+    if (ownMicClicks && !outputMuted) void playSound(selfTalking ? "micClickOn" : "micClickOff");
   }, [selfTalking]); // eslint-disable-line react-hooks/exhaustive-deps
   const showServerQueryClients =
     activeFavoriteId != null &&

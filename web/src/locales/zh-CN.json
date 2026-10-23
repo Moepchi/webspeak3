@@ -512,6 +512,8 @@
   "sounds.event.message": "收到消息",
   "sounds.event.poke": "收到戳一戳",
   "sounds.event.mute": "切换静音",
+  "sounds.event.micClickOn": "麦克风开启提示音",
+  "sounds.event.micClickOff": "麦克风关闭提示音",
   "sounds.default": "默认",
   "sounds.custom": "自定义文件：{name}",
   "sounds.test": "▶ 测试",

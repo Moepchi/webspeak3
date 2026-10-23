@@ -667,6 +667,8 @@
   "sounds.event.message": "Přijata zpráva",
   "sounds.event.poke": "Přijato šťouchnutí",
   "sounds.event.mute": "Přepnutí ztlumení",
+  "sounds.event.micClickOn": "Kliknutí mikrofonu zap.",
+  "sounds.event.micClickOff": "Kliknutí mikrofonu vyp.",
   "sounds.default": "Výchozí",
   "sounds.custom": "Vlastní soubor: {name}",
   "sounds.test": "▶ Test",

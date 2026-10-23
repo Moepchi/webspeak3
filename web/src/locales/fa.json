@@ -666,6 +666,8 @@
   "sounds.event.message": "پیام دریافت شد",
   "sounds.event.poke": "سقلمه دریافت شد",
   "sounds.event.mute": "تغییر حالت بی‌صدا",
+  "sounds.event.micClickOn": "کلیک میکروفون روشن",
+  "sounds.event.micClickOff": "کلیک میکروفون خاموش",
   "sounds.default": "پیش‌فرض",
   "sounds.custom": "فایل سفارشی: {name}",
   "sounds.test": "▶ آزمایش",

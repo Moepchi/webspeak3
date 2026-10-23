@@ -1,6 +1,25 @@
-export type SoundEventId = "connect" | "disconnect" | "clientJoin" | "clientLeave" | "message" | "poke" | "mute";
+export type SoundEventId =
+  | "connect"
+  | "disconnect"
+  | "clientJoin"
+  | "clientLeave"
+  | "message"
+  | "poke"
+  | "mute"
+  | "micClickOn"
+  | "micClickOff";
 
-export const SOUND_EVENTS: SoundEventId[] = ["connect", "disconnect", "clientJoin", "clientLeave", "message", "poke", "mute"];
+export const SOUND_EVENTS: SoundEventId[] = [
+  "connect",
+  "disconnect",
+  "clientJoin",
+  "clientLeave",
+  "message",
+  "poke",
+  "mute",
+  "micClickOn",
+  "micClickOff",
+];
 
 /** "ide" swaps the default chimes for synthetic terminal blips (Command Center layout). */
 type SoundStyle = "classic" | "ide";
@@ -215,6 +234,10 @@ function synthNotes(event: SoundEventId): SynthNote[] {
       ];
     case "mute":
       return [{ delay: 0, freq: 660, duration: 0.06, gain: 0.3 }];
+    case "micClickOn":
+      return [{ delay: 0, freq: 1400, duration: 0.03, gain: 0.15 }];
+    case "micClickOff":
+      return [{ delay: 0, freq: 900, duration: 0.03, gain: 0.15 }];
   }
 }
 
@@ -247,6 +270,10 @@ function ideNotes(event: SoundEventId): SynthNote[] {
       ];
     case "mute":
       return [{ delay: 0, freq: 300, endFreq: 50, duration: 0.04, gain: 0.15, type: "square" }];
+    case "micClickOn":
+      return [{ delay: 0, freq: 1600, duration: 0.02, gain: 0.08, type: "square" }];
+    case "micClickOff":
+      return [{ delay: 0, freq: 1000, duration: 0.02, gain: 0.08, type: "square" }];
   }
 }
 

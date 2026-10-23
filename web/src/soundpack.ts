@@ -24,6 +24,8 @@ const EVENT_KEYWORDS: Record<SoundEventId, string[]> = {
   message: ["textmessagereceived", "chatmessage", "newmessage", "message"],
   poke: ["gotpoked", "poke"],
   mute: ["micmuted", "microphonemuted", "micactivated", "microphoneactivated"],
+  micClickOn: ["micclickon"],
+  micClickOff: ["micclickoff"],
 };
 
 function normalize(filename: string): string {
