@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import "./App.css";
 // After App.css: its :where() base variables have the same (zero) specificity.
@@ -141,6 +141,27 @@ import {
   type SoundEventId,
 } from "./sounds";
 import { parseSoundpack } from "./soundpack";
+import {
+  BUILTIN_PACK,
+  NO_SOUNDS_PACK,
+  NOTIFICATION_TREE,
+  deleteSoundPack,
+  getNotificationSettings,
+  importSoundPack,
+  isSpecialKey,
+  loadSoundPacks,
+  notificationTextPosition,
+  notify,
+  packScript,
+  runSoundScript,
+  saveNotificationSettings,
+  setNotificationPlaybackMuted,
+  setSessionSoundPack,
+  type NotificationNode,
+  type NotificationSettings,
+  type SoundPack,
+  type TextPosition,
+} from "./notifications";
 import {
   iconPackCss,
   loadIconPacks,
@@ -592,6 +613,8 @@ interface Favorite {
   defaultChannelPassword: string;
   /** When true, ServerQuery clients appear in the channel tree. Default: false. */
   showServerQueryClients: boolean;
+  /** Overrides Options -> Meldungen's sound pack for this server; unset = that one. */
+  soundPack?: string;
 }
 
 function normalizeFavorite(raw: Partial<Favorite> & Pick<Favorite, "id">): Favorite {
@@ -605,6 +628,7 @@ function normalizeFavorite(raw: Partial<Favorite> & Pick<Favorite, "id">): Favor
     defaultChannelPassword:
       typeof raw.defaultChannelPassword === "string" ? raw.defaultChannelPassword : "",
     showServerQueryClients: raw.showServerQueryClients === true,
+    ...(typeof raw.soundPack === "string" && raw.soundPack ? { soundPack: raw.soundPack } : {}),
   };
 }
 
@@ -1930,6 +1954,19 @@ function InfoPanel({
     </div>
   );
 }
+
+/** Gateway serverLog kind -> Options -> Meldungen key. The server doesn't say who did it, so "by other". */
+const SERVER_LOG_NOTIFICATIONS = {
+  clientJoin: "CLIENT_CONNECTION_CONNECTED_SERVER",
+  clientLeave: "CLIENT_CONNECTION_DISCONNECTED_SERVER",
+  clientChannelSwitch: "CLIENT_SWITCHED_TO_OTHER_CHANNEL_STAYS",
+  clientChannelGroupAssigned: "CLIENT_CHANNELGROUP_CHANGED_BY_USER",
+  channelCreated: "CHANNEL_CREATED_BY_OTHER",
+  channelDeleted: "CHANNEL_DELETED_BY_OTHER",
+  channelEdited: "CHANNEL_EDITED_OTHER_BY_OTHER",
+  serverEdited: "SERVER_EDITED_BY_OTHER",
+  permissionError: "SERVER_INSUFFICIENT_PERMISSIONS",
+} as const;
 
 interface ChatEntry {
   from: string;
@@ -3432,8 +3469,13 @@ function FavoritesDialog({
             </label>
             <label className="ts-dialog-field">
               {t("connect.soundPack")}
-              <select disabled defaultValue="Standard">
-                <option>Standard</option>
+              <select
+                disabled={!selected}
+                value={selected?.soundPack ?? ""}
+                onChange={(e) => updateSelected({ soundPack: e.target.value || undefined })}
+              >
+                <option value="">Standard</option>
+                <SoundPackOptions />
               </select>
             </label>
             <label className="ts-dialog-checkbox">
@@ -6648,6 +6690,226 @@ function SecurityPanel({ onOpenIdentities, onClearCache }: { onOpenIdentities: (
   );
 }
 
+function useSoundPacks(): [SoundPack[], () => void] {
+  const [packs, setPacks] = useState<SoundPack[]>([]);
+  const reload = useCallback(() => void loadSoundPacks().then(setPacks), []);
+  useEffect(reload, [reload]);
+  return [packs, reload];
+}
+
+/** WebSpeak3 Standard, Keine Sounds and the imported packs. */
+function SoundPackOptions() {
+  const t = useT();
+  const [packs] = useSoundPacks();
+  return (
+    <>
+      <option value={BUILTIN_PACK}>{t("notify.pack.builtin")}</option>
+      <option value={NO_SOUNDS_PACK}>{t("notify.pack.none")}</option>
+      {packs.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}
+        </option>
+      ))}
+    </>
+  );
+}
+
+const notificationLeaves = (node: NotificationNode): string[] =>
+  node.key ? [node.key] : (node.children ?? []).flatMap(notificationLeaves);
+
+function MeldungenPanel({ onOpenFavorites }: { onOpenFavorites: () => void }) {
+  const t = useT();
+  const [settings, setSettings] = useState<NotificationSettings>(getNotificationSettings);
+  const [packs, reloadPacks] = useSoundPacks();
+  const [open, setOpen] = useState<Set<string>>(() => new Set(["connection"]));
+  const fileRef = useRef<HTMLInputElement>(null);
+  const pack = packs.find((p) => p.id === settings.pack);
+  const save = (next: NotificationSettings) => {
+    saveNotificationSettings(next);
+    setSettings(next);
+  };
+  const defaultScript = (key: string) => packScript(pack, settings.pack, key);
+  const override = (keys: string[], patch: { off?: boolean; script?: string; text?: TextPosition }) => {
+    const overrides = { ...settings.overrides };
+    for (const key of keys) {
+      const merged = { ...overrides[key], ...patch };
+      // Values equal to the default aren't overrides (that's what makes a row bold).
+      if (!merged.off) delete merged.off;
+      if (merged.script === defaultScript(key)) delete merged.script;
+      if (merged.text === "server") delete merged.text;
+      if (Object.keys(merged).length) overrides[key] = merged;
+      else delete overrides[key];
+    }
+    save({ ...settings, overrides });
+  };
+  const handleImport = async (file: File) => {
+    try {
+      const imported = await importSoundPack(file);
+      reloadPacks();
+      save({ ...settings, pack: imported.id });
+    } catch {
+      window.alert(t("notify.importFailed"));
+    }
+  };
+
+  const renderNode = (node: NotificationNode, path: string, depth: number): React.ReactNode => {
+    const id = `${path}/${node.label}`;
+    const special = node.key ? isSpecialKey(node.key) : id === "/special";
+    const indent = { paddingLeft: 4 + depth * 16 };
+    if (node.key) {
+      const key = node.key;
+      const o = settings.overrides[key];
+      const script = o?.script ?? defaultScript(key);
+      return (
+        <tr key={id} className={o ? "ts-notify-custom" : undefined}>
+          <td style={indent}>
+            <label className="ts-notify-action">
+              {!special && (
+                <input type="checkbox" checked={!o?.off} onChange={(e) => override([key], { off: !e.target.checked })} />
+              )}
+              {t(`notify.${node.label}`)}
+            </label>
+          </td>
+          <td>
+            <span className="ts-notify-script">
+              <input
+                value={script}
+                spellCheck={false}
+                onChange={(e) => override([key], { script: e.target.value })}
+              />
+              {script && (
+                <button title={t("sounds.test")} onClick={() => void runSoundScript(script, settings.pack)}>
+                  ▶
+                </button>
+              )}
+            </span>
+          </td>
+          <td>
+            {!special && (
+              <select
+                value={o?.text ?? "server"}
+                onChange={(e) => override([key], { text: e.target.value as TextPosition })}
+              >
+                <option value="none">{t("notify.text.none")}</option>
+                <option value="server">{t("notify.text.server")}</option>
+                <option value="channel">{t("notify.text.channel")}</option>
+              </select>
+            )}
+          </td>
+        </tr>
+      );
+    }
+    const leaves = notificationLeaves(node);
+    const on = leaves.filter((k) => !settings.overrides[k]?.off).length;
+    const expanded = open.has(id);
+    const toggle = () =>
+      setOpen((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(id)) next.add(id);
+        return next;
+      });
+    return [
+      <tr key={id} className={leaves.some((k) => settings.overrides[k]) ? "ts-notify-custom" : undefined}>
+        <td style={indent} colSpan={3}>
+          <span className="ts-notify-action">
+            <button className="ts-notify-twisty" onClick={toggle}>
+              {expanded ? "▾" : "▸"}
+            </button>
+            {!special && (
+              <input
+                type="checkbox"
+                checked={on === leaves.length}
+                ref={(el) => {
+                  if (el) el.indeterminate = on > 0 && on < leaves.length;
+                }}
+                onChange={(e) => override(leaves, { off: !e.target.checked })}
+              />
+            )}
+            <span onClick={toggle}>{t(`notify.${node.label}`)}</span>
+          </span>
+        </td>
+      </tr>,
+      ...(expanded ? (node.children ?? []).map((c) => renderNode(c, id, depth + 1)) : []),
+    ];
+  };
+
+  return (
+    <>
+      <h3>{t("options.section.meldungen")}</h3>
+      <p className="ts-options-subtitle">{t("notify.subtitle")}</p>
+      <div className="ts-options-fields">
+        <div className="ts-notify-row">
+          <label htmlFor="ts-notify-pack">{t("notify.soundPack")}</label>
+          <select id="ts-notify-pack" value={settings.pack} onChange={(e) => save({ ...settings, pack: e.target.value })}>
+            <SoundPackOptions key={packs.length} />
+          </select>
+          <button title={t("notify.importPack")} onClick={() => fileRef.current?.click()}>
+            📂
+          </button>
+          {pack && (
+            <button
+              title={t("notify.deletePack")}
+              onClick={() => {
+                if (!window.confirm(t("notify.deletePackConfirm", { name: pack.name }))) return;
+                void deleteSoundPack(pack.id).then(reloadPacks);
+                save({ ...settings, pack: BUILTIN_PACK });
+              }}
+            >
+              🗑
+            </button>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".ts3_soundpack,.zip"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void handleImport(file);
+            }}
+          />
+        </div>
+        <div className="ts-notify-row">
+          <label htmlFor="ts-notify-muted">{t("notify.whenMuted")}</label>
+          <select
+            id="ts-notify-muted"
+            value={settings.whenMuted}
+            onChange={(e) => save({ ...settings, whenMuted: e.target.value as NotificationSettings["whenMuted"] })}
+          >
+            <option value="all">{t("notify.whenMuted.all")}</option>
+            <option value="none">{t("notify.whenMuted.none")}</option>
+          </select>
+        </div>
+        <p className="ts-notify-hint">
+          {t("notify.hintBefore")}
+          <a href="#" onClick={(e) => (e.preventDefault(), onOpenFavorites())}>
+            {t("notify.hintLink")}
+          </a>
+          {t("notify.hintAfter")}
+        </p>
+        <div className="ts-notify-tree">
+          <table>
+            <thead>
+              <tr>
+                <th>{t("notify.col.action")}</th>
+                <th>{t("notify.col.script")}</th>
+                <th>{t("notify.col.text")}</th>
+              </tr>
+            </thead>
+            <tbody>{NOTIFICATION_TREE.map((n) => renderNode(n, "", 0))}</tbody>
+          </table>
+        </div>
+        {Object.keys(settings.overrides).length > 0 && (
+          <div>
+            <button onClick={() => save({ ...settings, overrides: {} })}>{t("notify.resetAll")}</button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function DesignPanel({
   designSelection,
   onSelectionChange,
@@ -7606,6 +7868,7 @@ function OptionsDialog({
   onOpenWhisperLists,
   onOpenIdentities,
   onClearCache,
+  onOpenFavorites,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -7625,6 +7888,7 @@ function OptionsDialog({
   onOpenWhisperLists: () => void;
   onOpenIdentities: () => void;
   onClearCache: () => void;
+  onOpenFavorites: () => void;
 }) {
   const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
@@ -7687,6 +7951,8 @@ function OptionsDialog({
               <ChatPanel />
             ) : active.id === "sicherheit" ? (
               <SecurityPanel onOpenIdentities={onOpenIdentities} onClearCache={onClearCache} />
+            ) : active.id === "meldungen" ? (
+              <MeldungenPanel onOpenFavorites={onOpenFavorites} />
             ) : (
               <>
                 <h3>{t(`options.section.${active.id}`)}</h3>
@@ -9083,7 +9349,7 @@ function AppInner() {
           sessionsRef.current.delete(sessionId);
           sessionParamsRef.current.delete(sessionId);
           setSessionTabs((prev) => prev.filter((t) => t.id !== sessionId));
-          void playSound("disconnect");
+          void notify("CONNECTION_DISCONNECTED");
           return;
         }
         // Background tabs get logged too (Options -> Chat).
@@ -9110,9 +9376,9 @@ function AppInner() {
         });
         if (data.type === "connected") {
           connectedAtRef.current.set(sessionId, Date.now());
-          void playSound("connect");
+          void notify("CONNECTION_CONNECTED");
         }
-        else if (data.type === "poke") void playSound("poke");
+        else if (data.type === "poke") void notify("OTHER_RECEIVED_POKE");
         return;
       }
 
@@ -9162,23 +9428,38 @@ function AppInner() {
           setSelected({ type: "server" });
           setServerChat((prev) => capLines([...prev, { from: "Server", message: data.welcomeMessage }], chatSettingsRef.current.maxLines));
           previousClientsRef.current = null;
-          void playSound("connect");
+          void notify("CONNECTION_CONNECTED");
           break;
         case "channels": {
           const newClients: ClientInfo[] = data.clients;
           const prevClients = previousClientsRef.current;
           if (prevClients) {
-            const prevIds = new Set(prevClients.map((c) => c.id));
+            const ownId = typeof data.ownClientId === "number" && data.ownClientId > 0 ? data.ownClientId : null;
+            const isOwn = (c: ClientInfo) => (ownId != null ? c.id === ownId : c.name === connectNickname);
+            const prevById = new Map(prevClients.map((c) => [c.id, c]));
             const newIds = new Set(newClients.map((c) => c.id));
-            // ServerQuery churn is noisy; never play join/leave for those clients.
-            const joined = newClients.some(
-              (c) => !prevIds.has(c.id) && c.name !== connectNickname && !c.isQuery
-            );
-            const left = prevClients.some(
-              (c) => !newIds.has(c.id) && c.name !== connectNickname && !c.isQuery
-            );
-            if (joined) void playSound("clientJoin");
-            if (left) void playSound("clientLeave");
+            const oldOwn = prevClients.find(isOwn)?.channel;
+            const newOwn = newClients.find(isOwn)?.channel;
+            // One sound per kind per update; ServerQuery churn is noisy, never notify for those.
+            const keys = new Set<string>();
+            if (oldOwn != null && newOwn != null && oldOwn !== newOwn) keys.add("YOU_SWITCHED_CHANNEL");
+            for (const c of newClients) {
+              if (isOwn(c) || c.isQuery) continue;
+              const before = prevById.get(c.id);
+              if (!before) keys.add(`CLIENT_CONNECTION_CONNECTED_${c.channel === newOwn ? "CURRENT_CHANNEL" : "SERVER"}`);
+              else if (before.channel !== c.channel)
+                keys.add(
+                  c.channel === newOwn
+                    ? "CLIENT_SWITCHED_TO_CURRENT_CHANNEL_STAYS"
+                    : before.channel === oldOwn
+                      ? "CLIENT_SWITCHED_FROM_CURRENT_CHANNEL_STAYS"
+                      : "CLIENT_SWITCHED_TO_OTHER_CHANNEL_STAYS"
+                );
+            }
+            for (const c of prevClients)
+              if (!newIds.has(c.id) && !isOwn(c) && !c.isQuery)
+                keys.add(`CLIENT_CONNECTION_DISCONNECTED_${c.channel === oldOwn ? "CURRENT_CHANNEL" : "SERVER"}`);
+            for (const key of keys) void notify(key);
           }
           previousClientsRef.current = newClients;
           setChannels(data.channels);
@@ -9211,7 +9492,7 @@ function AppInner() {
           if (!fromSelf && activeTabRef.current !== tab && (tab === "channel" ? settings.notifyChannel : settings.notifyServer))
             setChatUnread((prev) => ({ ...prev, [tab]: true }));
           recordUrlsFromMessage(data.message, data.from);
-          if (!fromSelf) void playSound("message");
+          void notify(fromSelf ? "CHAT_SENT_MESSAGE" : "CHAT_RECEIVED_MESSAGE");
           break;
         }
         case "privateMessage": {
@@ -9249,7 +9530,7 @@ function AppInner() {
           if (settings.logPrivate)
             appendChatLog(connectHost, logKind, { from: data.partnerName, message: data.message, self: data.fromSelf });
           recordUrlsFromMessage(data.message, data.fromSelf ? connectNickname : data.partnerName);
-          if (!data.fromSelf) void playSound("message");
+          void notify(data.fromSelf ? "CHAT_SENT_MESSAGE" : "CHAT_RECEIVED_MESSAGE");
           break;
         }
         case "audioOut":
@@ -9261,8 +9542,8 @@ function AppInner() {
           const prev = talkersRef.current;
           if (otherMicClicksRef.current && !outputMutedRef.current) {
             // One click per update, even if several people start at once.
-            if ([...next].some((id) => !prev.has(id))) void playSound("micClickOn");
-            else if ([...prev].some((id) => !next.has(id))) void playSound("micClickOff");
+            if ([...next].some((id) => !prev.has(id))) void notify("SPECIAL_MIC_CLICK_OTHER_ON");
+            else if ([...prev].some((id) => !next.has(id))) void notify("SPECIAL_MIC_CLICK_OTHER_OFF");
           }
           talkersRef.current = next;
           setTalkers(next);
@@ -9279,13 +9560,14 @@ function AppInner() {
               incoming: true,
             },
           ]);
-          if (whisperSettingsRef.current.sound && !outputMutedRef.current) void playSound("whisper");
+          if (whisperSettingsRef.current.sound && !outputMutedRef.current) void notify("SPECIAL_WHISPER_NOTIFY");
           if (whisperSettingsRef.current.openHistory) setWhisperHistoryOpen(true);
           break;
         }
         case "reconnecting":
           // The gateway lost the TS server and is reconnecting by itself.
           appendLog({ text: t("log.serverReconnecting"), kind: "error" });
+          void notify("CONNECTION_LOST_CONNECTION");
           logClient("warning", "Connection", `Lost the server, reconnecting: ${data.reason}`);
           updateTabMeta(sessionId, { connecting: true });
           break;
@@ -9319,7 +9601,7 @@ function AppInner() {
           const id = ++pokeIdRef.current;
           setPokes((prev) => [...prev, { id, from: data.from, message: data.message }]);
           setTimeout(() => setPokes((prev) => prev.filter((p) => p.id !== id)), 10000);
-          void playSound("poke");
+          void notify("OTHER_RECEIVED_POKE", { clientName: data.from });
           break;
         }
         case "serverLog": {
@@ -9357,7 +9639,14 @@ function AppInner() {
               message = t("serverLog.permissionError", { action: data.action });
               break;
           }
-          setServerChat((prev) => capLines([...prev, { from: "", message, isLog: true }], chatSettingsRef.current.maxLines));
+          const key = SERVER_LOG_NOTIFICATIONS[data.kind as keyof typeof SERVER_LOG_NOTIFICATIONS];
+          // Join/leave/switch sounds come from the channel diff above; these only place the text.
+          if (!["clientJoin", "clientLeave", "clientChannelSwitch"].includes(data.kind)) void notify(key);
+          const position = notificationTextPosition(key);
+          if (position !== "none")
+            (position === "channel" ? setChat : setServerChat)((prev) =>
+              capLines([...prev, { from: "", message, isLog: true }], chatSettingsRef.current.maxLines)
+            );
           break;
         }
         case "disconnected": {
@@ -9367,7 +9656,7 @@ function AppInner() {
           channelPasswordCacheRef.current.clear();
           appendLog({ text: `Disconnected: ${data.reason}`, kind: "info" });
           logClient("info", "Connection", `Disconnected: ${data.reason}`);
-          if (wasConnected) void playSound("disconnect");
+          if (wasConnected) void notify("CONNECTION_DISCONNECTED");
           streamViewerRef.current?.close();
           streamViewerRef.current = null;
           setWatchedStream(null);
@@ -9965,6 +10254,7 @@ function AppInner() {
 
   const sendAway = (away: boolean, message: string) => {
     socketRef.current?.send(JSON.stringify({ type: "setAway", away, message }));
+    void notify(away ? "STATUS_SET_AWAY" : "STATUS_SET_PRESENT");
   };
 
   const handleSaveAwayTemplate = () => {
@@ -10482,7 +10772,7 @@ function AppInner() {
       return;
     }
     socketRef.current?.send(JSON.stringify({ type: "setInputMuted", muted: !inputMutedRef.current }));
-    void playSound("mute");
+    void notify(inputMutedRef.current ? "SOUND_CAPTURE_UNMUTED" : "SOUND_CAPTURE_MUTED");
   };
 
   // Enable the mic automatically on page load (voice activation still gates
@@ -10613,7 +10903,7 @@ function AppInner() {
 
   const handleToggleOutputMuted = () => {
     socketRef.current?.send(JSON.stringify({ type: "setOutputMuted", muted: !outputMutedRef.current }));
-    void playSound("mute");
+    void notify(outputMutedRef.current ? "SOUND_PLAYBACK_UNMUTED" : "SOUND_PLAYBACK_MUTED");
   };
 
   // Connects the current mic (if any) into the active recording, so a device
@@ -11443,6 +11733,7 @@ function AppInner() {
     if (ok) x.done = x.size;
     const settings = downloadSettingsRef.current;
     if (ok && settings.popupWhenDone) setTransferToast({ name: x.name });
+    void notify(ok ? "OTHER_FILETRANSFER_COMPLETE" : "OTHER_FILETRANSFER_FAILED");
     if (settings.closeWindowWhenDone && transfersRef.current.every((y) => y.status === "done")) setTransfersOpen(false);
     commitTransfers();
   };
@@ -11631,6 +11922,11 @@ function AppInner() {
   const outputMuted = ownClient?.outputMuted ?? false;
   const selfTalking = Boolean(selfActive && !inputMuted && ownClient?.hasTalkPower);
   const displayTalkers = selfTalking && ownClient ? new Set(talkers).add(ownClient.id) : talkers;
+  useEffect(() => setNotificationPlaybackMuted(outputMuted), [outputMuted]);
+  useEffect(
+    () => setSessionSoundPack(favorites.find((f) => f.id === activeFavoriteId)?.soundPack),
+    [favorites, activeFavoriteId]
+  );
   const selfTalkingSeenRef = useRef(false);
   useEffect(() => {
     // Skip the initial render so opening the client doesn't click.
@@ -11638,7 +11934,7 @@ function AppInner() {
       selfTalkingSeenRef.current = true;
       return;
     }
-    if (ownMicClicks && !outputMuted) void playSound(selfTalking ? "micClickOn" : "micClickOff");
+    if (ownMicClicks && !outputMuted) void notify(selfTalking ? "SPECIAL_MIC_CLICK_SELF_ON" : "SPECIAL_MIC_CLICK_SELF_OFF");
   }, [selfTalking]); // eslint-disable-line react-hooks/exhaustive-deps
   const showServerQueryClients =
     activeFavoriteId != null &&
@@ -12864,6 +13160,7 @@ function AppInner() {
         <OptionsDialog
           onOpenWhisperLists={() => setWhisperListsOpen(true)}
           onOpenIdentities={() => setIdentitiesOpen(true)}
+          onOpenFavorites={openManageFavorites}
           onClearCache={handleClearCache}
           section={optionsSection}
           onSectionChange={setOptionsSection}

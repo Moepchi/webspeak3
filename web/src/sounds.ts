@@ -292,6 +292,12 @@ export function setSoundsOutputDevice(deviceId: string): void {
   void player.setOutputDevice(deviceId);
 }
 
+/** A file from an imported sound pack (Options -> Meldungen). */
+export async function playSoundBlob(blob: Blob): Promise<void> {
+  if (!loadSoundsEnabled()) return;
+  await player.playBlob(blob, loadSoundsVolume()).catch(() => {});
+}
+
 export async function playSound(event: SoundEventId): Promise<void> {
   if (!loadSoundsEnabled()) return;
   if (!loadEventSoundEnabled(event)) return;

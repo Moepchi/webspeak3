@@ -4768,3 +4768,86 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* Options -> Meldungen */
+.ts-notify-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ts-notify-row > label {
+  min-width: 140px;
+}
+.ts-notify-row > select {
+  flex: 1;
+  min-width: 0;
+}
+.ts-notify-hint {
+  margin: 0;
+  font-size: 0.9em;
+}
+.ts-notify-tree {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+}
+.ts-notify-tree table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.ts-notify-tree th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-weight: normal;
+  padding: 2px 6px;
+  background: var(--bg-toolbar-1);
+  border-bottom: 1px solid var(--border);
+}
+.ts-notify-tree td {
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+.ts-notify-custom > td:first-child {
+  font-weight: bold;
+}
+.ts-notify-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ts-notify-twisty {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  min-width: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.ts-notify-script {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ts-notify-script input {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font-family: monospace;
+}
+.ts-notify-script input:focus {
+  border-color: var(--border);
+  background: var(--input-bg);
+}
+.ts-notify-script button {
+  padding: 0 4px;
+  min-width: 0;
+}
+.ts-notify-tree select {
+  font-size: 1em;
+}
