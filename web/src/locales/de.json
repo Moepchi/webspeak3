@@ -902,5 +902,7 @@
   "notify.text.none": "Keine",
   "notify.text.server": "Server",
   "notify.text.channel": "Channel",
-  "notify.resetAll": "Alle Anpassungen zurücksetzen"
+  "notify.resetAll": "Alle Anpassungen zurücksetzen",
+  "notify.applyToFavorites": "Dieses Sound Pack für alle Favoriten verwenden",
+  "notify.applyToFavoritesConfirm": "Alle Favoriten auf dieses Sound Pack setzen? Eigene Sound Packs einzelner Favoriten werden dabei zurückgesetzt."
 }

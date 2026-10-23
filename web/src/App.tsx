@@ -6717,7 +6717,13 @@ function SoundPackOptions() {
 const notificationLeaves = (node: NotificationNode): string[] =>
   node.key ? [node.key] : (node.children ?? []).flatMap(notificationLeaves);
 
-function MeldungenPanel({ onOpenFavorites }: { onOpenFavorites: () => void }) {
+function MeldungenPanel({
+  onOpenFavorites,
+  onApplyPackToFavorites,
+}: {
+  onOpenFavorites: () => void;
+  onApplyPackToFavorites: () => void;
+}) {
   const t = useT();
   const [settings, setSettings] = useState<NotificationSettings>(getNotificationSettings);
   const [packs, reloadPacks] = useSoundPacks();
@@ -6843,6 +6849,14 @@ function MeldungenPanel({ onOpenFavorites }: { onOpenFavorites: () => void }) {
           <select id="ts-notify-pack" value={settings.pack} onChange={(e) => save({ ...settings, pack: e.target.value })}>
             <SoundPackOptions key={packs.length} />
           </select>
+          <button
+            title={t("notify.applyToFavorites")}
+            onClick={() => {
+              if (window.confirm(t("notify.applyToFavoritesConfirm"))) onApplyPackToFavorites();
+            }}
+          >
+            ✔
+          </button>
           <button title={t("notify.importPack")} onClick={() => fileRef.current?.click()}>
             📂
           </button>
@@ -7869,6 +7883,7 @@ function OptionsDialog({
   onOpenIdentities,
   onClearCache,
   onOpenFavorites,
+  onApplyPackToFavorites,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -7889,6 +7904,7 @@ function OptionsDialog({
   onOpenIdentities: () => void;
   onClearCache: () => void;
   onOpenFavorites: () => void;
+  onApplyPackToFavorites: () => void;
 }) {
   const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
@@ -7952,7 +7968,7 @@ function OptionsDialog({
             ) : active.id === "sicherheit" ? (
               <SecurityPanel onOpenIdentities={onOpenIdentities} onClearCache={onClearCache} />
             ) : active.id === "meldungen" ? (
-              <MeldungenPanel onOpenFavorites={onOpenFavorites} />
+              <MeldungenPanel onOpenFavorites={onOpenFavorites} onApplyPackToFavorites={onApplyPackToFavorites} />
             ) : (
               <>
                 <h3>{t(`options.section.${active.id}`)}</h3>
@@ -13161,6 +13177,8 @@ function AppInner() {
           onOpenWhisperLists={() => setWhisperListsOpen(true)}
           onOpenIdentities={() => setIdentitiesOpen(true)}
           onOpenFavorites={openManageFavorites}
+          // Native's ✔: the chosen pack becomes every favorite's pack (drop their overrides).
+          onApplyPackToFavorites={() => saveFavorites(favorites.map(({ soundPack: _, ...f }) => f))}
           onClearCache={handleClearCache}
           section={optionsSection}
           onSectionChange={setOptionsSection}

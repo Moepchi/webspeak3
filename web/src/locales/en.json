@@ -902,5 +902,7 @@
   "notify.text.none": "None",
   "notify.text.server": "Server",
   "notify.text.channel": "Channel",
-  "notify.resetAll": "Reset all changes"
+  "notify.resetAll": "Reset all changes",
+  "notify.applyToFavorites": "Use this sound pack for all favorites",
+  "notify.applyToFavoritesConfirm": "Set all favorites to this sound pack? Sound packs set on individual favorites will be reset."
 }

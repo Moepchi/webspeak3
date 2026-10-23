@@ -901,5 +901,7 @@
   "notify.text.none": "无",
   "notify.text.server": "服务器",
   "notify.text.channel": "频道",
-  "notify.resetAll": "重置所有更改"
+  "notify.resetAll": "重置所有更改",
+  "notify.applyToFavorites": "将此声音包用于所有收藏",
+  "notify.applyToFavoritesConfirm": "将所有收藏设为此声音包?单个收藏的声音包设置将被重置。"
 }

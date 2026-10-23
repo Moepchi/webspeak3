@@ -902,5 +902,7 @@
   "notify.text.none": "Žádná",
   "notify.text.server": "Server",
   "notify.text.channel": "Kanál",
-  "notify.resetAll": "Obnovit všechny změny"
+  "notify.resetAll": "Obnovit všechny změny",
+  "notify.applyToFavorites": "Použít tento zvukový balíček pro všechny oblíbené",
+  "notify.applyToFavoritesConfirm": "Nastavit všem oblíbeným tento zvukový balíček? Vlastní balíčky jednotlivých oblíbených budou zrušeny."
 }
