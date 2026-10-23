@@ -357,6 +357,10 @@ export class AudioPlayer {
   private destination: MediaStreamAudioDestinationNode | null = null;
   private element: SinkableElement | null = null;
   private gain: GainNode;
+  // Voice frames only (not test tone, clicks or mic monitoring), so the
+  // leveler can sit between them and the volume gain.
+  private voice: GainNode;
+  private leveler: DynamicsCompressorNode;
   private context: AudioContext;
   private aecTap: ScriptProcessorNode | null = null;
   private aecSink: GainNode | null = null;
@@ -364,6 +368,18 @@ export class AudioPlayer {
   constructor(context: AudioContext) {
     this.context = context;
     this.gain = context.createGain();
+    this.voice = context.createGain();
+    // "Automatic volume leveling": evens out loud and quiet speakers. Browsers
+    // add their own makeup gain, so quiet voices come up too.
+    // ponytail: one compressor for the whole mix, not per speaker like TS3.
+    this.leveler = context.createDynamicsCompressor();
+    this.leveler.threshold.value = -30;
+    this.leveler.knee.value = 10;
+    this.leveler.ratio.value = 4;
+    this.leveler.attack.value = 0.005;
+    this.leveler.release.value = 0.3;
+    this.leveler.connect(this.gain);
+    this.voice.connect(this.gain);
     if (!("setSinkId" in HTMLMediaElement.prototype)) {
       this.gain.connect(context.destination);
       return;
@@ -398,7 +414,7 @@ export class AudioPlayer {
 
     const source = this.context.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.gain);
+    source.connect(this.voice);
 
     const now = this.context.currentTime;
     if (this.nextTime < now + 0.02) {
@@ -419,6 +435,11 @@ export class AudioPlayer {
     this.gain.gain.value = gain;
   }
 
+  setAutoVolume(enabled: boolean): void {
+    this.voice.disconnect();
+    this.voice.connect(enabled ? this.leveler : this.gain);
+  }
+
   /** The node all voice/test audio ultimately reaches - use as a mic-monitoring target so it also respects volume/output device. */
   getInputNode(): AudioNode {
     return this.gain;
@@ -426,16 +447,25 @@ export class AudioPlayer {
 
   /** Plays a short sine-wave test tone through the same volume/output-device routing as voice playback. */
   playTestTone(): void {
+    this.beep(440, 0.6, 0.3);
+  }
+
+  /** Short tick when someone starts (higher) or stops (lower) talking. */
+  playMicClick(start: boolean): void {
+    this.beep(start ? 1400 : 900, 0.03, 0.15);
+  }
+
+  private beep(freq: number, duration: number, volume: number): void {
     const osc = this.context.createOscillator();
     osc.type = "sine";
-    osc.frequency.value = 440;
+    osc.frequency.value = freq;
     const toneGain = this.context.createGain();
-    toneGain.gain.value = 0.3;
+    toneGain.gain.value = volume;
     osc.connect(toneGain);
     toneGain.connect(this.gain);
     const now = this.context.currentTime;
     osc.start(now);
-    osc.stop(now + 0.6);
+    osc.stop(now + duration);
     osc.onended = () => {
       osc.disconnect();
       toneGain.disconnect();
@@ -487,6 +517,8 @@ export class AudioPlayer {
 
   dispose(): void {
     this.detachAecRenderTap();
+    this.voice.disconnect();
+    this.leveler.disconnect();
     this.gain.disconnect();
     if (!this.element) return;
     this.element.pause();

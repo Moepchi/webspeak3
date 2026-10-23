@@ -398,6 +398,9 @@ const PLAYBACK_VOLUME_KEY = "webspeak3:playback-volume";
 const NOISE_SUPPRESSION_KEY = "webspeak3:noise-suppression";
 const ECHO_CANCELLATION_KEY = "webspeak3:echo-cancellation";
 const AUTO_GAIN_CONTROL_KEY = "webspeak3:auto-gain-control";
+const AUTO_VOLUME_KEY = "webspeak3:auto-volume";
+const OWN_MIC_CLICKS_KEY = "webspeak3:own-mic-clicks";
+const OTHER_MIC_CLICKS_KEY = "webspeak3:other-mic-clicks";
 const AEC3_ENABLED_KEY = "webspeak3:aec3-enabled";
 const VAD_HANGOVER_KEY = "webspeak3:vad-hangover";
 const PUSH_TO_TALK_KEY = "webspeak3:push-to-talk";
@@ -5525,6 +5528,12 @@ interface AudioSettings {
   onRefreshOutputDevices: () => void;
   playbackVolume: number;
   onPlaybackVolumeChange: (v: number) => void;
+  autoVolume: boolean;
+  onAutoVolumeChange: (v: boolean) => void;
+  ownMicClicks: boolean;
+  onOwnMicClicksChange: (v: boolean) => void;
+  otherMicClicks: boolean;
+  onOtherMicClicksChange: (v: boolean) => void;
   onPlayTestTone: () => void;
   inputDevices: MediaDeviceInfo[];
   inputDeviceId: string;
@@ -5711,15 +5720,15 @@ function WiedergabePanel({ audio }: { audio: AudioSettings }) {
           <fieldset className="ts-options-fieldset">
             <legend>{t("playback.options")}</legend>
             <label className="ts-options-checkbox">
-              <input type="checkbox" checked disabled readOnly />
+              <input type="checkbox" checked={audio.autoVolume} onChange={(e) => audio.onAutoVolumeChange(e.target.checked)} />
               {t("playback.autoVolume")}
             </label>
             <label className="ts-options-checkbox">
-              <input type="checkbox" checked disabled readOnly />
+              <input type="checkbox" checked={audio.ownMicClicks} onChange={(e) => audio.onOwnMicClicksChange(e.target.checked)} />
               {t("playback.ownMicClicks")}
             </label>
             <label className="ts-options-checkbox">
-              <input type="checkbox" disabled readOnly />
+              <input type="checkbox" checked={audio.otherMicClicks} onChange={(e) => audio.onOtherMicClicksChange(e.target.checked)} />
               {t("playback.otherMicClicks")}
             </label>
           </fieldset>
@@ -7299,6 +7308,13 @@ function AppInner() {
   // Off by default: a heavier, opt-in alternative/supplement to native AEC for
   // speaker+mic (no headset) setups (github.com/WebSpeak3/webspeak3 issue #2).
   const [aec3Enabled, setAec3Enabled] = useState(() => loadBoolPref(AEC3_ENABLED_KEY, false));
+  // Playback options, defaults as in TS3.
+  const [autoVolume, setAutoVolume] = useState(() => loadBoolPref(AUTO_VOLUME_KEY, true));
+  const [ownMicClicks, setOwnMicClicks] = useState(() => loadBoolPref(OWN_MIC_CLICKS_KEY, true));
+  const [otherMicClicks, setOtherMicClicks] = useState(() => loadBoolPref(OTHER_MIC_CLICKS_KEY, false));
+  // Read from the socket handler, which only sees the first render's state.
+  const otherMicClicksRef = useRef(otherMicClicks);
+  const talkersRef = useRef<Set<number>>(new Set());
   const [aec3Loading, setAec3Loading] = useState(false);
   const aec3Ref = useRef<Aec3Instance | null>(null);
   // Mirrors aec3Enabled but updates immediately, for startMic() calls made in
@@ -7565,6 +7581,20 @@ function AppInner() {
   }, [playbackVolume]);
 
   useEffect(() => {
+    audioPlayerRef.current?.setAutoVolume(autoVolume);
+    localStorage.setItem(AUTO_VOLUME_KEY, autoVolume ? "1" : "0");
+  }, [autoVolume]);
+
+  useEffect(() => {
+    localStorage.setItem(OWN_MIC_CLICKS_KEY, ownMicClicks ? "1" : "0");
+  }, [ownMicClicks]);
+
+  useEffect(() => {
+    otherMicClicksRef.current = otherMicClicks;
+    localStorage.setItem(OTHER_MIC_CLICKS_KEY, otherMicClicks ? "1" : "0");
+  }, [otherMicClicks]);
+
+  useEffect(() => {
     localStorage.setItem(NOISE_SUPPRESSION_KEY, noiseSuppressionEnabled ? "1" : "0");
   }, [noiseSuppressionEnabled]);
 
@@ -7698,6 +7728,7 @@ function AppInner() {
       // that existed at the time - a fresh one (first use, or after
       // disposeAudioIfIdle) has to be brought up to the current settings.
       player.setVolume(playbackVolume);
+      player.setAutoVolume(autoVolume);
       if (outputDeviceId) {
         player.setOutputDevice(outputDeviceId).catch((error: Error) =>
           appendLog({ text: `Output device error: ${error.message}`, kind: "error" }),
@@ -7791,7 +7822,8 @@ function AppInner() {
     setPokes(parked.pokes);
     setActiveFavoriteId(parked.favoriteId);
     setActiveTab(parked.chatTab);
-    setTalkers(new Set(parked.talkers));
+    talkersRef.current = new Set(parked.talkers);
+    setTalkers(talkersRef.current);
     setWhisperChannelIds(new Set(parked.whisperChannelIds));
     setWhisperClientIds(new Set(parked.whisperClientIds));
     setWhisperLog(parked.whisperLog);
@@ -7833,7 +7865,8 @@ function AppInner() {
     setPmThreads({});
     setPokes([]);
     setActiveTab("channel");
-    setTalkers(new Set());
+    talkersRef.current = new Set();
+    setTalkers(talkersRef.current);
     setWhisperChannelIds(new Set());
     setWhisperClientIds(new Set());
     setWhisperLog([]);
@@ -8195,9 +8228,18 @@ function AppInner() {
           // Audio only for the active session tab.
           if (!outputMutedRef.current) audioPlayerRef.current?.playFrame(data.pcm);
           break;
-        case "talkers":
-          setTalkers(new Set<number>(data.clients));
+        case "talkers": {
+          const next = new Set<number>(data.clients);
+          const prev = talkersRef.current;
+          if (otherMicClicksRef.current && !outputMutedRef.current) {
+            // One click per update, even if several people start at once.
+            if ([...next].some((id) => !prev.has(id))) audioPlayerRef.current?.playMicClick(true);
+            else if ([...prev].some((id) => !next.has(id))) audioPlayerRef.current?.playMicClick(false);
+          }
+          talkersRef.current = next;
+          setTalkers(next);
           break;
+        }
         case "reconnecting":
           // The gateway lost the TS server and is reconnecting by itself.
           appendLog({ text: t("log.serverReconnecting"), kind: "error" });
@@ -10367,10 +10409,17 @@ function AppInner() {
   const isAway = ownClient?.away ?? false;
   const inputMuted = ownClient?.inputMuted ?? false;
   const outputMuted = ownClient?.outputMuted ?? false;
-  const displayTalkers =
-    selfActive && !inputMuted && ownClient?.hasTalkPower
-      ? new Set(talkers).add(ownClient.id)
-      : talkers;
+  const selfTalking = Boolean(selfActive && !inputMuted && ownClient?.hasTalkPower);
+  const displayTalkers = selfTalking && ownClient ? new Set(talkers).add(ownClient.id) : talkers;
+  const selfTalkingSeenRef = useRef(false);
+  useEffect(() => {
+    // Skip the initial render so opening the client doesn't click.
+    if (!selfTalkingSeenRef.current) {
+      selfTalkingSeenRef.current = true;
+      return;
+    }
+    if (ownMicClicks && !outputMuted) audioPlayerRef.current?.playMicClick(selfTalking);
+  }, [selfTalking]); // eslint-disable-line react-hooks/exhaustive-deps
   const showServerQueryClients =
     activeFavoriteId != null &&
     favorites.some((f) => f.id === activeFavoriteId && f.showServerQueryClients);
@@ -11608,6 +11657,12 @@ function AppInner() {
             onRefreshOutputDevices: refreshOutputDevices,
             playbackVolume,
             onPlaybackVolumeChange: setPlaybackVolume,
+            autoVolume,
+            onAutoVolumeChange: setAutoVolume,
+            ownMicClicks,
+            onOwnMicClicksChange: setOwnMicClicks,
+            otherMicClicks,
+            onOtherMicClicksChange: setOtherMicClicks,
             onPlayTestTone: handlePlayTestTone,
             inputDevices,
             inputDeviceId,
