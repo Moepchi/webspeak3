@@ -6383,13 +6383,22 @@ function DesignPanel({
           <fieldset className="ts-options-fieldset">
             <legend>{t("options.section.design")}</legend>
             <label className="ts-options-field">
-              {t("design.style")}
-              <select value={base} onChange={(e) => onSelectionChange(e.target.value)}>
+              {t("design.theme")}
+              <select value={designSelection} onChange={(e) => onSelectionChange(e.target.value)}>
                 {builtins.map((th) => (
                   <option key={th.id} value={th.id}>
                     {th.name}
                   </option>
                 ))}
+                {customThemes.length > 0 && (
+                  <optgroup label={t("design.customThemes")}>
+                    {customThemes.map((theme) => (
+                      <option key={theme.id} value={`custom:${theme.id}`}>
+                        {theme.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </label>
             {base === "ide" && (
@@ -6398,20 +6407,6 @@ function DesignPanel({
                 {t("design.idePixelFont")}
               </label>
             )}
-            <label className="ts-options-field">
-              {t("design.theme")}
-              <select
-                value={designSelection.startsWith("custom:") ? designSelection : ""}
-                onChange={(e) => onSelectionChange(e.target.value || base)}
-              >
-                <option value="">{t("design.none")}</option>
-                {customThemes.map((theme) => (
-                  <option key={theme.id} value={`custom:${theme.id}`}>
-                    {theme.name}
-                  </option>
-                ))}
-              </select>
-            </label>
             <label className="ts-options-field">
               {t("design.iconPack")}
               <select value={prefs.iconPackId} onChange={(e) => prefs.setIconPackId(e.target.value)}>
