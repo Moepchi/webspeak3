@@ -87,6 +87,12 @@ export class MicCapture {
   /** Push-to-talk: send while `pttPressed` instead of voice activation. */
   pushToTalk = false;
   pttPressed = false;
+  /** Send all the time, no voice activation (ignored while pushToTalk). */
+  continuous = false;
+  /** Damp the mic right after a keystroke, so typing doesn't trigger
+   *  voice activation and is quieter while talking. See noteTyping(). */
+  typingAttenuation = false;
+  private typingUntil = 0;
 
   constructor(context: AudioContext, options: MicCaptureOptions) {
     this.context = context;
@@ -139,6 +145,10 @@ export class MicCapture {
         this.aec3.process(this.aec3Out, captureIn);
         input = this.aec3Out[0];
       }
+      if (this.typingAttenuation && this.context.currentTime < this.typingUntil) {
+        // Copy first: `raw` is the input buffer, not ours to change.
+        input = input.map((v) => v * 0.1);
+      }
       // Mirrors the (possibly AEC3-cancelled) signal to the output buffer, so
       // setMonitoring() below can tap what's actually being sent rather than
       // the raw pre-cancellation mic feed - a self-test through the raw feed
@@ -152,7 +162,7 @@ export class MicCapture {
 
       const now = this.context.currentTime;
       if (rms >= this.threshold) this.activeUntil = now + this.hangoverSeconds;
-      const talking = this.pushToTalk ? this.pttPressed : now < this.activeUntil;
+      const talking = this.pushToTalk ? this.pttPressed : this.continuous || now < this.activeUntil;
       // Shared audio (music, a video) has its own pauses; keep sending throughout.
       const shouldBeActive = this.extra !== null || talking;
       if (shouldBeActive !== this.active) {
@@ -199,6 +209,11 @@ export class MicCapture {
     this.merger.connect(this.processor);
     this.processor.connect(this.silence);
     this.silence.connect(this.context.destination);
+  }
+
+  /** Call on every keystroke; with typingAttenuation on, the next ~0.2 s are damped. */
+  noteTyping(): void {
+    this.typingUntil = this.context.currentTime + 0.2;
   }
 
   /** Mixes a second stream (e.g. a shared tab's audio) into what is sent, or

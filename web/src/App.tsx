@@ -404,6 +404,8 @@ const OTHER_MIC_CLICKS_KEY = "webspeak3:other-mic-clicks";
 const AEC3_ENABLED_KEY = "webspeak3:aec3-enabled";
 const VAD_HANGOVER_KEY = "webspeak3:vad-hangover";
 const PUSH_TO_TALK_KEY = "webspeak3:push-to-talk";
+const CONTINUOUS_KEY = "webspeak3:continuous-transmission";
+const TYPING_ATTENUATION_KEY = "webspeak3:typing-attenuation";
 const PTT_BINDING_KEY = "webspeak3:ptt-key";
 const DESIGN_THEME_KEY = "webspeak3:design-theme";
 // The user's actual pick - "standard" | "nova" | "greenteaspeak" | "custom:<id>".
@@ -5549,6 +5551,10 @@ interface AudioSettings {
   onVadHangoverChange: (v: number) => void;
   pushToTalk: boolean;
   onPushToTalkChange: (on: boolean) => void;
+  continuous: boolean;
+  onContinuousChange: (on: boolean) => void;
+  typingAttenuation: boolean;
+  onTypingAttenuationChange: (on: boolean) => void;
   pttBinding: PttBinding | null;
   onPttBindingChange: (binding: PttBinding) => void;
   noiseSuppressionEnabled: boolean;
@@ -5785,15 +5791,26 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
               </>
             )}
             <label className="ts-options-radio">
-              <input type="radio" name="activation" disabled readOnly />
+              <input
+                type="radio"
+                name="activation"
+                checked={!audio.pushToTalk && audio.continuous}
+                onChange={() => {
+                  audio.onPushToTalkChange(false);
+                  audio.onContinuousChange(true);
+                }}
+              />
               {t("recording.continuous")}
             </label>
             <label className="ts-options-radio">
               <input
                 type="radio"
                 name="activation"
-                checked={!audio.pushToTalk}
-                onChange={() => audio.onPushToTalkChange(false)}
+                checked={!audio.pushToTalk && !audio.continuous}
+                onChange={() => {
+                  audio.onPushToTalkChange(false);
+                  audio.onContinuousChange(false);
+                }}
               />
               {t("recording.voiceActivation")}
             </label>
@@ -5832,7 +5849,11 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
             <legend>{t("recording.dsp")}</legend>
             <div className="ts-options-dsp-grid">
               <label className="ts-options-checkbox">
-                <input type="checkbox" disabled readOnly />
+                <input
+                  type="checkbox"
+                  checked={audio.typingAttenuation}
+                  onChange={(e) => audio.onTypingAttenuationChange(e.target.checked)}
+                />
                 {t("recording.typingAttenuation")}
               </label>
               <label className="ts-options-checkbox">
@@ -7286,6 +7307,11 @@ function AppInner() {
   const [vadThreshold, setVadThreshold] = useState(0.02);
   const [vadHangover, setVadHangover] = useState(() => loadNumberPref(VAD_HANGOVER_KEY, 0.3));
   const [pushToTalk, setPushToTalk] = useState(() => loadBoolPref(PUSH_TO_TALK_KEY, false));
+  // Only matters while pushToTalk is off: send all the time instead of voice activation.
+  const [continuous, setContinuous] = useState(() => loadBoolPref(CONTINUOUS_KEY, false));
+  const continuousRef = useRef(continuous);
+  const [typingAttenuation, setTypingAttenuation] = useState(() => loadBoolPref(TYPING_ATTENUATION_KEY, false));
+  const typingAttenuationRef = useRef(typingAttenuation);
   const [pttBinding, setPttBinding] = useState<PttBinding | null>(loadPttBinding);
   const [pttPressed, setPttPressed] = useState(false);
   // Read when a new MicCapture is created, which happens outside render.
@@ -7522,6 +7548,25 @@ function AppInner() {
     if (micCaptureRef.current) micCaptureRef.current.pushToTalk = pushToTalk;
     localStorage.setItem(PUSH_TO_TALK_KEY, pushToTalk ? "1" : "0");
   }, [pushToTalk]);
+
+  useEffect(() => {
+    continuousRef.current = continuous;
+    if (micCaptureRef.current) micCaptureRef.current.continuous = continuous;
+    localStorage.setItem(CONTINUOUS_KEY, continuous ? "1" : "0");
+  }, [continuous]);
+
+  useEffect(() => {
+    typingAttenuationRef.current = typingAttenuation;
+    if (micCaptureRef.current) micCaptureRef.current.typingAttenuation = typingAttenuation;
+    localStorage.setItem(TYPING_ATTENUATION_KEY, typingAttenuation ? "1" : "0");
+    if (!typingAttenuation) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      // The push-to-talk key is not typing.
+      if (e.code !== pttBinding?.code) micCaptureRef.current?.noteTyping();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [typingAttenuation, pttBinding]);
 
   useEffect(() => {
     pttPressedRef.current = pttPressed;
@@ -9339,6 +9384,8 @@ function AppInner() {
       micCaptureRef.current?.stop();
       micCaptureRef.current = mic;
       mic.pushToTalk = pushToTalkRef.current;
+      mic.continuous = continuousRef.current;
+      mic.typingAttenuation = typingAttenuationRef.current;
       mic.pttPressed = pttPressedRef.current;
       mic.setExtraAudio(tabAudioRef.current);
       setMicOn(true);
@@ -11206,7 +11253,7 @@ function AppInner() {
             >
               🗣️
             </button>
-          ) : (
+          ) : continuous ? null : (
             <label className="ts-icon-slider" title={t("toolbar.vadSensitivity")}>
               🎚️
               <input
@@ -11677,6 +11724,10 @@ function AppInner() {
             vadHangover,
             onVadHangoverChange: setVadHangover,
             pushToTalk,
+            continuous,
+            onContinuousChange: setContinuous,
+            typingAttenuation,
+            onTypingAttenuationChange: setTypingAttenuation,
             onPushToTalkChange: setPushToTalk,
             pttBinding,
             onPttBindingChange: setPttBinding,
