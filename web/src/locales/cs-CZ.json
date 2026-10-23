@@ -794,5 +794,19 @@
   "chatSettings.notifyChannel": "Kanál",
   "chatSettings.notifyPrivate": "Soukromé",
   "chatSettings.linesUnit": "řádků",
-  "chatSettings.last": "posledních"
+  "chatSettings.last": "posledních",
+  "securitySettings.subtitle": "Nastavení zabezpečení",
+  "securitySettings.passwords": "Hesla",
+  "securitySettings.saveChannelPasswords": "Ukládat hesla kanálů",
+  "securitySettings.clearChannelPasswords": "Smazat hesla kanálů",
+  "securitySettings.channelPasswordsCleared": "Uložená hesla kanálů byla smazána.",
+  "securitySettings.masterPassword": "Použít hlavní heslo",
+  "securitySettings.changeMasterPassword": "Změnit hlavní heslo",
+  "securitySettings.cleanup": "Úklid",
+  "securitySettings.clearCacheOnExit": "Vyprázdnit mezipaměť při ukončení",
+  "securitySettings.clearUrlsOnExit": "Smazat URL při ukončení",
+  "securitySettings.clearCache": "Vyprázdnit mezipaměť",
+  "securitySettings.cacheCleared": "Mezipaměť vyprázdněna.",
+  "securitySettings.identities": "Identity",
+  "securitySettings.manageIdentities": "Spravovat identity"
 }

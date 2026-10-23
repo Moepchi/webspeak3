@@ -794,5 +794,19 @@
   "chatSettings.notifyChannel": "Channel",
   "chatSettings.notifyPrivate": "Private",
   "chatSettings.linesUnit": "lines",
-  "chatSettings.last": "last"
+  "chatSettings.last": "last",
+  "securitySettings.subtitle": "Security settings",
+  "securitySettings.passwords": "Passwords",
+  "securitySettings.saveChannelPasswords": "Save channel passwords",
+  "securitySettings.clearChannelPasswords": "Delete channel passwords",
+  "securitySettings.channelPasswordsCleared": "Saved channel passwords were deleted.",
+  "securitySettings.masterPassword": "Use master password",
+  "securitySettings.changeMasterPassword": "Change master password",
+  "securitySettings.cleanup": "Cleanup",
+  "securitySettings.clearCacheOnExit": "Clear cache on exit",
+  "securitySettings.clearUrlsOnExit": "Delete URLs on exit",
+  "securitySettings.clearCache": "Clear cache",
+  "securitySettings.cacheCleared": "Cache cleared.",
+  "securitySettings.identities": "Identities",
+  "securitySettings.manageIdentities": "Manage identities"
 }

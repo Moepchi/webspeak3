@@ -2,6 +2,11 @@ import { useEffect, useState, type ImgHTMLAttributes } from "react";
 
 const stills = new Map<string, string | null>();
 
+/** Options -> Sicherheit -> "Cache löschen". */
+export function clearStillCache(): void {
+  stills.clear();
+}
+
 /** First frame of an (animated) image as a PNG data URL, or null when the
  *  browser won't let us read it (cross-origin image without CORS). */
 function freeze(src: string): Promise<string | null> {

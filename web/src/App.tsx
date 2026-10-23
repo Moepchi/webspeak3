@@ -150,7 +150,7 @@ import {
   saveSelectedIconPack,
   type IconPack,
 } from "./iconpack";
-import { StillImg } from "./lib/still";
+import { StillImg, clearStillCache } from "./lib/still";
 import {
   DEFAULT_DOWNLOAD_SETTINGS,
   canPickFolder,
@@ -662,6 +662,63 @@ function loadWhisperSettings(): WhisperSettings {
   }
 }
 
+const SECURITY_SETTINGS_KEY = "webspeak3:security-settings";
+const CHANNEL_PASSWORDS_KEY = "webspeak3:channel-passwords";
+
+/** Options -> Sicherheit. */
+interface SecuritySettings {
+  saveChannelPasswords: boolean;
+  clearCacheOnExit: boolean;
+  clearUrlsOnExit: boolean;
+}
+
+const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
+  saveChannelPasswords: false,
+  clearCacheOnExit: false,
+  clearUrlsOnExit: false,
+};
+
+function loadSecuritySettings(): SecuritySettings {
+  try {
+    return { ...DEFAULT_SECURITY_SETTINGS, ...JSON.parse(localStorage.getItem(SECURITY_SETTINGS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULT_SECURITY_SETTINGS;
+  }
+}
+
+/** Saved channel passwords: server host -> channel id -> password. */
+function loadChannelPasswords(): Record<string, Record<string, string>> {
+  try {
+    return JSON.parse(localStorage.getItem(CHANNEL_PASSWORDS_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function storedChannelPassword(host: string, channelId: number): string | undefined {
+  return loadChannelPasswords()[host.trim().toLowerCase()]?.[channelId];
+}
+
+/** null removes the entry. */
+function storeChannelPassword(host: string, channelId: number, password: string | null): void {
+  const all = loadChannelPasswords();
+  const key = host.trim().toLowerCase();
+  const server = { ...all[key] };
+  if (password === null) delete server[channelId];
+  else server[channelId] = password;
+  all[key] = server;
+  localStorage.setItem(CHANNEL_PASSWORDS_KEY, JSON.stringify(all));
+}
+
+/** The service worker's CacheStorage; the app shell comes from the network until the worker refills it. */
+async function clearBrowserCaches(): Promise<void> {
+  try {
+    await Promise.all((await caches.keys()).map((key) => caches.delete(key)));
+  } catch {
+    // No CacheStorage (insecure context): nothing to clear.
+  }
+}
+
 const TREE_OPTIONS_KEY = "webspeak3:tree-options";
 
 /** Design tab -> "Channel Baum" and "GIF Animation" (TS3's options). */
@@ -716,6 +773,8 @@ const DisplayPrefsContext = createContext<{
   setDownloadDir: (dir: FileSystemDirectoryHandle | null) => void;
   chat: ChatSettings;
   setChat: (next: ChatSettings) => void;
+  security: SecuritySettings;
+  setSecurity: (next: SecuritySettings) => void;
 }>({
   tree: DEFAULT_TREE_OPTIONS,
   setTree: () => {},
@@ -731,6 +790,8 @@ const DisplayPrefsContext = createContext<{
   setDownloadDir: () => {},
   chat: DEFAULT_CHAT_SETTINGS,
   setChat: () => {},
+  security: DEFAULT_SECURITY_SETTINGS,
+  setSecurity: () => {},
 });
 const DISCONNECT_MESSAGE_KEY = "webspeak3:disconnect-message";
 const COLLECTED_URLS_KEY = "webspeak3:collected-urls";
@@ -6517,6 +6578,76 @@ function ChatPanel() {
   );
 }
 
+function SecurityPanel({ onOpenIdentities, onClearCache }: { onOpenIdentities: () => void; onClearCache: () => void }) {
+  const t = useT();
+  const { security, setSecurity } = useContext(DisplayPrefsContext);
+  const set = (patch: Partial<SecuritySettings>) => setSecurity({ ...security, ...patch });
+  return (
+    <>
+      <h3>{t("options.section.sicherheit")}</h3>
+      <p className="ts-options-subtitle">{t("securitySettings.subtitle")}</p>
+      <div className="ts-options-fields">
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("securitySettings.passwords")}</legend>
+          <div className="ts-security-row">
+            <label className="ts-options-checkbox">
+              <input
+                type="checkbox"
+                checked={security.saveChannelPasswords}
+                onChange={(e) => set({ saveChannelPasswords: e.target.checked })}
+              />
+              {t("securitySettings.saveChannelPasswords")}
+            </label>
+            <button
+              onClick={() => {
+                localStorage.removeItem(CHANNEL_PASSWORDS_KEY);
+                window.alert(t("securitySettings.channelPasswordsCleared"));
+              }}
+            >
+              {t("securitySettings.clearChannelPasswords")}
+            </button>
+          </div>
+          <div className="ts-security-row">
+            <label className="ts-options-checkbox ts-options-disabled" title={t("design.notAvailable")}>
+              <input type="checkbox" disabled />
+              {t("securitySettings.masterPassword")}
+            </label>
+            <button disabled>{t("securitySettings.changeMasterPassword")}</button>
+          </div>
+        </fieldset>
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("securitySettings.cleanup")}</legend>
+          <label className="ts-options-checkbox">
+            <input
+              type="checkbox"
+              checked={security.clearCacheOnExit}
+              onChange={(e) => set({ clearCacheOnExit: e.target.checked })}
+            />
+            {t("securitySettings.clearCacheOnExit")}
+          </label>
+          <label className="ts-options-checkbox">
+            <input
+              type="checkbox"
+              checked={security.clearUrlsOnExit}
+              onChange={(e) => set({ clearUrlsOnExit: e.target.checked })}
+            />
+            {t("securitySettings.clearUrlsOnExit")}
+          </label>
+          <div>
+            <button onClick={onClearCache}>{t("securitySettings.clearCache")}</button>
+          </div>
+        </fieldset>
+        <fieldset className="ts-options-fieldset">
+          <legend>{t("securitySettings.identities")}</legend>
+          <div>
+            <button onClick={onOpenIdentities}>{t("securitySettings.manageIdentities")}</button>
+          </div>
+        </fieldset>
+      </div>
+    </>
+  );
+}
+
 function DesignPanel({
   designSelection,
   onSelectionChange,
@@ -7473,6 +7604,8 @@ function OptionsDialog({
   chatImages,
   onChatImagesChange,
   onOpenWhisperLists,
+  onOpenIdentities,
+  onClearCache,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -7490,6 +7623,8 @@ function OptionsDialog({
   chatImages: boolean;
   onChatImagesChange: (on: boolean) => void;
   onOpenWhisperLists: () => void;
+  onOpenIdentities: () => void;
+  onClearCache: () => void;
 }) {
   const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
@@ -7550,6 +7685,8 @@ function OptionsDialog({
               <DownloadsPanel />
             ) : active.id === "chat" ? (
               <ChatPanel />
+            ) : active.id === "sicherheit" ? (
+              <SecurityPanel onOpenIdentities={onOpenIdentities} onClearCache={onClearCache} />
             ) : (
               <>
                 <h3>{t(`options.section.${active.id}`)}</h3>
@@ -8036,6 +8173,19 @@ function AppInner() {
   downloadSettingsRef.current = downloadSettings;
   const [downloadDir, setDownloadDir] = useState<FileSystemDirectoryHandle | null>(null);
   const [chatSettings, setChatSettings] = useState(loadChatSettings);
+  const [securitySettings, setSecuritySettings] = useState(loadSecuritySettings);
+  const securitySettingsRef = useRef(securitySettings);
+  securitySettingsRef.current = securitySettings;
+  // "... beim Beenden": pagehide is the last event a closing tab reliably gets.
+  useEffect(() => {
+    const onHide = () => {
+      const settings = securitySettingsRef.current;
+      if (settings.clearUrlsOnExit) localStorage.removeItem(COLLECTED_URLS_KEY);
+      if (settings.clearCacheOnExit) void clearBrowserCaches();
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, []);
   const chatSettingsRef = useRef(chatSettings);
   chatSettingsRef.current = chatSettings;
   // "Hinweis für eingehende Nachrichten" for the two fixed tabs (private chats have their own flag).
@@ -8079,8 +8229,13 @@ function AppInner() {
         setChatSettings(next);
         saveChatSettings(next);
       },
+      security: securitySettings,
+      setSecurity: (next: SecuritySettings) => {
+        setSecuritySettings(next);
+        localStorage.setItem(SECURITY_SETTINGS_KEY, JSON.stringify(next));
+      },
     }),
-    [treeOptions, iconPacks, iconPackId, whisperSettings, downloadSettings, downloadDir, chatSettings]
+    [treeOptions, iconPacks, iconPackId, whisperSettings, downloadSettings, downloadDir, chatSettings, securitySettings]
   );
   const iconPackStyle = iconPackCss(iconPacks.find((p) => p.id === iconPackId));
   const [micOn, setMicOn] = useState(false);
@@ -9231,6 +9386,8 @@ function AppInner() {
           // A cached password just got rejected (channel password changed,
           // or was wrong) - drop it so the next auto-switch doesn't reuse it.
           channelPasswordCacheRef.current.delete(data.channelId);
+          if (storedChannelPassword(connectHost, data.channelId) !== undefined)
+            storeChannelPassword(connectHost, data.channelId, null);
           setChannelPasswordPrompt((prev) => ({
             channelId: data.channelId,
             channelName: channels.find((c) => c.id === data.channelId)?.name ?? "",
@@ -9596,7 +9753,9 @@ function AppInner() {
     const state = isActive ? { clients, ownClientId } : rec.parked;
     const lastChannel = state?.clients.find((c) => c.id === state.ownClientId)?.channel;
     if (lastChannel) {
-      const cachedPassword = isActive ? channelPasswordCacheRef.current.get(lastChannel) : undefined;
+      const cachedPassword = isActive
+        ? (channelPasswordCacheRef.current.get(lastChannel) ?? savedChannelPassword(lastChannel))
+        : undefined;
       params = { ...params, defaultChannel: `/${lastChannel}`, channelPassword: cachedPassword ?? params.channelPassword };
       sessionParamsRef.current.set(sessionId, params);
     }
@@ -10577,13 +10736,27 @@ function AppInner() {
       appendLog({ text: t("tree.joinNotConnected"), kind: "error" });
       return;
     }
-    const password = channelPassword ?? channelPasswordCacheRef.current.get(id);
+    const password = channelPassword ?? channelPasswordCacheRef.current.get(id) ?? savedChannelPassword(id);
     socket.send(JSON.stringify({ type: "switchChannel", channelId: id, channelPassword: password }));
+  };
+
+  const savedChannelPassword = (channelId: number) =>
+    securitySettings.saveChannelPasswords ? storedChannelPassword(host, channelId) : undefined;
+
+  // Options -> Sicherheit -> "Cache löschen": icons/avatars download again right away.
+  const handleClearCache = () => {
+    void clearBrowserCaches();
+    clearStillCache();
+    setServerIconImages({});
+    requestedIconPathsRef.current.clear();
+    requestedAvatarHashesRef.current.clear();
+    appendLog({ text: t("securitySettings.cacheCleared"), kind: "info" });
   };
 
   const handleChannelPasswordSubmit = (password: string) => {
     if (!channelPasswordPrompt) return;
     channelPasswordCacheRef.current.set(channelPasswordPrompt.channelId, password);
+    if (securitySettings.saveChannelPasswords) storeChannelPassword(host, channelPasswordPrompt.channelId, password);
     handleSwitchChannel(channelPasswordPrompt.channelId, password);
     setChannelPasswordPrompt(null);
   };
@@ -12690,6 +12863,8 @@ function AppInner() {
       {optionsDialogOpen && (
         <OptionsDialog
           onOpenWhisperLists={() => setWhisperListsOpen(true)}
+          onOpenIdentities={() => setIdentitiesOpen(true)}
+          onClearCache={handleClearCache}
           section={optionsSection}
           onSectionChange={setOptionsSection}
           onClose={() => setOptionsDialogOpen(false)}

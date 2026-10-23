@@ -794,5 +794,19 @@
   "chatSettings.notifyChannel": "Channel",
   "chatSettings.notifyPrivate": "Privat",
   "chatSettings.linesUnit": "Zeilen",
-  "chatSettings.last": "letzten"
+  "chatSettings.last": "letzten",
+  "securitySettings.subtitle": "Sicherheitseinstellungen",
+  "securitySettings.passwords": "Passwörter",
+  "securitySettings.saveChannelPasswords": "Channel Passwörter speichern",
+  "securitySettings.clearChannelPasswords": "Channel Passwörter löschen",
+  "securitySettings.channelPasswordsCleared": "Gespeicherte Channel Passwörter wurden gelöscht.",
+  "securitySettings.masterPassword": "Master Passwort benutzen",
+  "securitySettings.changeMasterPassword": "Master Passwort ändern",
+  "securitySettings.cleanup": "Aufräumen",
+  "securitySettings.clearCacheOnExit": "Cache beim Beenden leeren",
+  "securitySettings.clearUrlsOnExit": "URLs beim Beenden löschen",
+  "securitySettings.clearCache": "Cache löschen",
+  "securitySettings.cacheCleared": "Cache gelöscht.",
+  "securitySettings.identities": "Identitäten",
+  "securitySettings.manageIdentities": "Identitäten verwalten"
 }

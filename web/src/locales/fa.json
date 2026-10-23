@@ -793,5 +793,19 @@
   "chatSettings.notifyChannel": "کانال",
   "chatSettings.notifyPrivate": "خصوصی",
   "chatSettings.linesUnit": "خط",
-  "chatSettings.last": "آخرین"
+  "chatSettings.last": "آخرین",
+  "securitySettings.subtitle": "تنظیمات امنیتی",
+  "securitySettings.passwords": "رمزها",
+  "securitySettings.saveChannelPasswords": "ذخیره رمز کانال‌ها",
+  "securitySettings.clearChannelPasswords": "حذف رمز کانال‌ها",
+  "securitySettings.channelPasswordsCleared": "رمزهای ذخیره‌شده کانال حذف شدند.",
+  "securitySettings.masterPassword": "استفاده از رمز اصلی",
+  "securitySettings.changeMasterPassword": "تغییر رمز اصلی",
+  "securitySettings.cleanup": "پاک‌سازی",
+  "securitySettings.clearCacheOnExit": "خالی کردن حافظه نهان هنگام خروج",
+  "securitySettings.clearUrlsOnExit": "حذف URLها هنگام خروج",
+  "securitySettings.clearCache": "خالی کردن حافظه نهان",
+  "securitySettings.cacheCleared": "حافظه نهان خالی شد.",
+  "securitySettings.identities": "هویت‌ها",
+  "securitySettings.manageIdentities": "مدیریت هویت‌ها"
 }

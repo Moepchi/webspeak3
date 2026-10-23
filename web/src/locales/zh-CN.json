@@ -793,5 +793,19 @@
   "chatSettings.notifyChannel": "频道",
   "chatSettings.notifyPrivate": "私聊",
   "chatSettings.linesUnit": "行",
-  "chatSettings.last": "最近"
+  "chatSettings.last": "最近",
+  "securitySettings.subtitle": "安全设置",
+  "securitySettings.passwords": "密码",
+  "securitySettings.saveChannelPasswords": "保存频道密码",
+  "securitySettings.clearChannelPasswords": "删除频道密码",
+  "securitySettings.channelPasswordsCleared": "已删除保存的频道密码。",
+  "securitySettings.masterPassword": "使用主密码",
+  "securitySettings.changeMasterPassword": "更改主密码",
+  "securitySettings.cleanup": "清理",
+  "securitySettings.clearCacheOnExit": "退出时清空缓存",
+  "securitySettings.clearUrlsOnExit": "退出时删除 URL",
+  "securitySettings.clearCache": "清空缓存",
+  "securitySettings.cacheCleared": "缓存已清空。",
+  "securitySettings.identities": "身份",
+  "securitySettings.manageIdentities": "管理身份"
 }
