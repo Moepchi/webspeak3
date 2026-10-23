@@ -122,7 +122,7 @@ const WEB_DIST = process.env.WEB_DIST ?? path.resolve(__dirname, "../../web/dist
 const SERVE_STATIC = process.env.WEB_STATIC !== "0";
 
 // Sent to every browser in the "hello" message on socket open; see there.
-const GATEWAY_FEATURES = ["clientVolume", "keepalive", "chunkedUpload"];
+const GATEWAY_FEATURES = ["clientVolume", "keepalive", "chunkedUpload", "whisperPolicy", "transferLimit"];
 
 // Optional TURN relay for screen streams, also handed out in "hello". With
 // TURN_SECRET (coturn's use-auth-secret) every socket gets its own credential,

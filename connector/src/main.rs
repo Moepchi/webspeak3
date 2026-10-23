@@ -334,6 +334,9 @@ enum Event {
 	Reconnected,
 	#[serde(rename = "error")]
 	Error { message: String },
+	/// An "error" that belongs to one file transfer, so the frontend can mark the right one.
+	#[serde(rename = "error")]
+	TransferError { message: String, cid: u64, path: String },
 	/// A "switch" to a password-protected channel was rejected because no (or
 	/// the wrong) password was supplied. The frontend should prompt for a
 	/// password and retry with it rather than showing a generic error.
@@ -2252,7 +2255,11 @@ async fn run(args: Args) -> Result<()> {
 								Ok(handle) => {
 									pending_downloads.insert(handle.0, (cid, path.to_string()));
 								}
-								Err(e) => emit(&Event::Error { message: format!("Download failed: {e}") }),
+								Err(e) => emit(&Event::TransferError {
+									message: format!("Download failed: {e}"),
+									cid,
+									path: path.to_string(),
+								}),
 							},
 							Err(_) => emit(&Event::Error { message: format!("Invalid channel id: {cid_str}") }),
 						}
@@ -2271,7 +2278,11 @@ async fn run(args: Args) -> Result<()> {
 									Ok(handle) => {
 										pending_uploads.insert(handle.0, (cid, path.to_string(), bytes));
 									}
-									Err(e) => emit(&Event::Error { message: format!("Upload failed: {e}") }),
+									Err(e) => emit(&Event::TransferError {
+										message: format!("Upload failed: {e}"),
+										cid,
+										path: path.to_string(),
+									}),
 								}
 							}
 							_ => emit(&Event::Error { message: "Invalid ftupload args".into() }),
@@ -2283,11 +2294,20 @@ async fn run(args: Args) -> Result<()> {
 									Ok(handle) => {
 										pending_uploads.insert(handle.0, (cid, path, bytes));
 									}
-									Err(e) => emit(&Event::Error { message: format!("Upload failed: {e}") }),
+									Err(e) => emit(&Event::TransferError { message: format!("Upload failed: {e}"), cid, path }),
 								}
 							}
 							Ok(None) => {}
-							Err(message) => emit(&Event::Error { message }),
+							Err(message) => {
+								// Same field order as take_upload_chunk: cid, offset, total, path, data.
+								let fields: Vec<&str> = rest.splitn(5, '\t').collect();
+								match (fields[0].trim().parse::<u64>(), fields.get(3)) {
+									(Ok(cid), Some(path)) => {
+										emit(&Event::TransferError { message, cid, path: path.to_string() })
+									}
+									_ => emit(&Event::Error { message }),
+								}
+							}
 						}
 					} else if l == "permissionlist" {
 						if pending_permission_list {
@@ -3105,8 +3125,10 @@ async fn run(args: Args) -> Result<()> {
 						};
 						tokio::spawn(async move {
 							if announced_size > limit {
-								emit(&Event::Error {
+								emit(&Event::TransferError {
 									message: format!("Download refused: {path} is larger than {} KiB", limit >> 10),
+									cid,
+									path,
 								});
 								return;
 							}
@@ -3131,12 +3153,14 @@ async fn run(args: Args) -> Result<()> {
 									}
 								};
 								if let Err(e) = read {
-									emit(&Event::Error { message: format!("Download failed: {e}") });
+									emit(&Event::TransferError { message: format!("Download failed: {e}"), cid, path });
 									return;
 								}
 								if offset + filled as u64 > limit {
-									emit(&Event::Error {
+									emit(&Event::TransferError {
 										message: format!("Download aborted: {path} is larger than {} KiB", limit >> 10),
+										cid,
+										path,
 									});
 									return;
 								}
@@ -3161,7 +3185,7 @@ async fn run(args: Args) -> Result<()> {
 							for piece in slice.chunks(TRANSFER_CHUNK_BYTES) {
 								let started = std::time::Instant::now();
 								if let Err(e) = stream.write_all(piece).await {
-									emit(&Event::Error { message: format!("Upload failed: {e}") });
+									emit(&Event::TransferError { message: format!("Upload failed: {e}"), cid, path });
 									return;
 								}
 								ft_pace(&FT_LIMIT_UP, piece.len(), started).await;
@@ -3171,10 +3195,11 @@ async fn run(args: Args) -> Result<()> {
 					}
 				}
 				Some(Ok(StreamItem::FiletransferFailed(handle, e))) => {
-					let was_pending = pending_downloads.remove(&handle.0).is_some()
-						|| pending_uploads.remove(&handle.0).is_some();
-					if was_pending {
-						emit(&Event::Error { message: format!("File transfer failed: {e}") });
+					let failed = pending_downloads
+						.remove(&handle.0)
+						.or_else(|| pending_uploads.remove(&handle.0).map(|(cid, path, _)| (cid, path)));
+					if let Some((cid, path)) = failed {
+						emit(&Event::TransferError { message: format!("File transfer failed: {e}"), cid, path });
 					}
 				}
 				Some(Ok(StreamItem::DisconnectedTemporarily(reason))) => {

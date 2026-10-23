@@ -9038,13 +9038,13 @@ function AppInner() {
         }
         case "error": {
           logClient("error", "Connection", data.message);
-          // ponytail: connector errors carry no transfer id, so the oldest running
-          // transfer of that kind takes the blame. Add an id when that misfires.
-          const msg = String(data.message);
-          const kind = /^download/i.test(msg) ? "down" : /^upload/i.test(msg) ? "up" : /^file transfer/i.test(msg) ? "any" : null;
-          const failed =
-            kind && transfersRef.current.find((x) => x.status === "running" && (kind === "any" || x.dir === kind));
-          if (failed) finishTransfer(failed, false);
+          // Transfer errors carry the transfer's channel + path.
+          if (typeof data.path === "string") {
+            const failed = transfersRef.current.find(
+              (x) => x.status === "running" && x.cid === data.cid && x.path === data.path
+            );
+            if (failed) finishTransfer(failed, false);
+          }
           if (hasConnectedRef.current) {
             appendLog({ text: data.message, kind: "error" });
           } else {
@@ -9883,7 +9883,8 @@ function AppInner() {
   const sentWhisperPolicyRef = useRef<{ socket: WebSocket | DemoSocket | null; payload: string }>({ socket: null, payload: "" });
   useEffect(() => {
     const socket = socketRef.current;
-    if (!connected || !socket) return;
+    // Older gateways answer unknown messages with an error line.
+    if (!connected || !socket || !gatewayFeatures.has("whisperPolicy")) return;
     const block = whisperSettings.mode !== "allow";
     const exceptionMode = block ? "allow" : "block";
     const exceptions =
@@ -9898,7 +9899,7 @@ function AppInner() {
     if (sent.socket === socket && sent.payload === payload) return;
     socket.send(payload);
     sentWhisperPolicyRef.current = { socket, payload };
-  }, [connected, clients, contacts, whisperSettings.mode]);
+  }, [connected, clients, contacts, whisperSettings.mode, gatewayFeatures]);
 
   // "Clients in Whisper Verlauf löschen nach": drop old incoming entries.
   useEffect(() => {
@@ -11100,7 +11101,7 @@ function AppInner() {
   });
   useEffect(() => {
     const socket = socketRef.current;
-    if (!connected || !socket) return;
+    if (!connected || !socket || !gatewayFeatures.has("transferLimit")) return;
     const payload = JSON.stringify({
       type: "setTransferLimit",
       up: downloadSettings.uploadLimit * 1024,
@@ -11110,7 +11111,7 @@ function AppInner() {
     if (sent.socket === socket && sent.payload === payload) return;
     socket.send(payload);
     sentTransferLimitRef.current = { socket, payload };
-  }, [connected, activeSessionId, downloadSettings.uploadLimit, downloadSettings.downloadLimit]);
+  }, [connected, activeSessionId, gatewayFeatures, downloadSettings.uploadLimit, downloadSettings.downloadLimit]);
 
   const handleFileBrowserDownload = async (entry: FileListEntry) => {
     if (!fileBrowserTarget) return;

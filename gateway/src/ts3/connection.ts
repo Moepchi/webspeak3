@@ -157,7 +157,7 @@ export type Ts3ConnectionEvent =
   | { type: "disconnected"; reason: string }
   | { type: "reconnecting"; reason: string }
   | { type: "reconnected" }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; cid?: number; path?: string }
   | { type: "channelPasswordRequired"; channelId: number }
   | ({ type: "serverLog" } & ServerLogEntry)
   | {
@@ -368,7 +368,7 @@ export class Ts3Connection {
           | { type: "disconnected"; reason: string }
           | { type: "reconnecting"; reason: string }
           | { type: "reconnected" }
-          | { type: "error"; message: string }
+          | { type: "error"; message: string; cid?: number; path?: string }
           | { type: "channelPasswordRequired"; channel_id: number }
           | ({ type: "serverLog" } & ServerLogEntry)
           | {
