@@ -451,12 +451,15 @@ export class AudioPlayer {
     osc.type = "sine";
     osc.frequency.value = 440;
     const toneGain = this.context.createGain();
-    toneGain.gain.value = 0.3;
+    const now = this.context.currentTime;
+    // Soft fade in and decay instead of a flat, hard-edged beep.
+    toneGain.gain.setValueAtTime(0, now);
+    toneGain.gain.linearRampToValueAtTime(0.15, now + 0.03);
+    toneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
     osc.connect(toneGain);
     toneGain.connect(this.gain);
-    const now = this.context.currentTime;
     osc.start(now);
-    osc.stop(now + 0.6);
+    osc.stop(now + 0.85);
     osc.onended = () => {
       osc.disconnect();
       toneGain.disconnect();
