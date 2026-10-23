@@ -1103,6 +1103,17 @@ function ServerIcon() {
   );
 }
 
+/** A group's uploaded icon, or a colored letter badge for TS's built-in icons we don't have. */
+function GroupIcon({ group, images }: { group: GroupEntry; images: Record<string, string> }) {
+  const base64 = group.iconId >= CUSTOM_ICON_ID_THRESHOLD ? images[`/icon_${group.iconId}`] : undefined;
+  if (base64) return <img className="ts-group-icon" src={iconDataUrl(base64)} alt="" title={group.name} />;
+  return (
+    <span className="ts-group-badge" style={{ background: groupBadgeColor(group.iconId) }} title={group.name}>
+      {group.name.trim().charAt(0).toUpperCase() || "?"}
+    </span>
+  );
+}
+
 /** Survives ChannelTree remounts when Select's setState rebuilds the tree.
  *  Keyed per session (multi-join tab) so a click in one tab's tree can never
  *  be paired with a click in another tab's tree as a false double-click. */
@@ -1199,6 +1210,24 @@ function ChannelTree({
   }
   const collapsedByDefault = (channelId: number) =>
     tree.expandMode === "own" ? !ownPath.has(channelId) : tree.expandDepth > 0 && level > tree.expandDepth;
+
+  // "Tooltip Info bei Hover": a plain-text client info card in the native title tooltip.
+  const clientTooltip = (c: ClientInfo) => {
+    const groupNames = serverGroups
+      ? c.serverGroups.map((gid) => serverGroups.find((g) => g.id === gid)?.name).filter(Boolean)
+      : [];
+    return [
+      c.name,
+      groupNames.length > 0 && `${t("info.serverGroups")} ${groupNames.join(", ")}`,
+      c.country && `${t("info.country")} ${c.country}`,
+      c.away && (c.awayMessage ? `${t("tree.away")}: ${c.awayMessage}` : t("tree.away")),
+      (c.inputMuted || !c.inputHardwareEnabled) && t("tree.micMuted"),
+      c.outputMuted && t("tree.soundMuted"),
+      c.id !== ownClientId && `${t("tree.privateChatWith")} ${c.name}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
 
   const toggleCollapsed = (channelId: number, event: React.SyntheticEvent) => {
     event.stopPropagation();
@@ -1399,11 +1428,7 @@ function ChannelTree({
                       else return;
                       e.preventDefault();
                     }}
-                    title={
-                      c.id === ownClientId || !tree.tooltips
-                        ? undefined
-                        : `${t("tree.privateChatWith")} ${c.name}`
-                    }
+                    title={tree.tooltips ? clientTooltip(c) : undefined}
                   >
                     <span className="ts-tree-expander ts-tree-expander-empty" aria-hidden="true">
                       <span />
@@ -1434,32 +1459,9 @@ function ChannelTree({
                       <span className="ts-client-away-message">({c.awayMessage})</span>
                     )}
                     <span className="ts-client-icons">
-                      {clientGroupBadges(c).map((g) => {
-                        if (g.iconId >= CUSTOM_ICON_ID_THRESHOLD) {
-                          const base64 = groupIconImages[`/icon_${g.iconId}`];
-                          if (base64) {
-                            return (
-                              <img
-                                key={g.id}
-                                className="ts-group-icon"
-                                src={iconDataUrl(base64)}
-                                alt=""
-                                title={g.name}
-                              />
-                            );
-                          }
-                        }
-                        return (
-                          <span
-                            key={g.id}
-                            className="ts-group-badge"
-                            style={{ background: groupBadgeColor(g.iconId) }}
-                            title={g.name}
-                          >
-                            {g.name.trim().charAt(0).toUpperCase() || "?"}
-                          </span>
-                        );
-                      })}
+                      {clientGroupBadges(c).map((g) => (
+                        <GroupIcon key={g.id} group={g} images={groupIconImages} />
+                      ))}
                     </span>
                   </div>
                 </li>
@@ -3812,6 +3814,7 @@ function GroupAssignDialog({
   clientName,
   groups,
   currentGroupIds,
+  iconImages,
   onSelect,
   onClose,
 }: {
@@ -3819,6 +3822,7 @@ function GroupAssignDialog({
   clientName: string;
   groups: GroupEntry[] | null;
   currentGroupIds: number[];
+  iconImages: Record<string, string>;
   onSelect: (groupId: number, alreadyAssigned: boolean) => void;
   onClose: () => void;
 }) {
@@ -3861,9 +3865,8 @@ function GroupAssignDialog({
                       className={`ts-menu-item${assigned ? " ts-group-assign-current" : ""}`}
                       onClick={() => onSelect(g.id, assigned)}
                     >
-                      {(assigned || tree.groupIconsInMenus) && (
-                        <span className="ts-menu-item-icon">{assigned ? "✔️" : kind === "channel" ? "🏷️" : "🎖️"}</span>
-                      )}
+                      <span className="ts-menu-item-icon">{assigned ? "✔️" : ""}</span>
+                      {tree.groupIconsInMenus && g.iconId !== 0 && <GroupIcon group={g} images={iconImages} />}
                       <span className="ts-menu-item-label">{g.name}</span>
                       {kind === "server" && assigned && (
                         <span className="ts-group-assign-hint">{t("groupAssign.clickToRemove")}</span>
@@ -9428,9 +9431,14 @@ function AppInner() {
   useEffect(() => {
     if (!serverGroups) return;
     const iconById = new Map(serverGroups.map((g) => [g.id, g.iconId]));
+    // Plus every group listed in an open group menu, so unassigned ones show their icon too.
+    const menuGroups = !groupAssignTarget
+      ? []
+      : ((groupAssignTarget.kind === "channel" ? channelGroups : serverGroups) ?? []);
     const wantedIconIds = new Set(
       clients
         .flatMap((c) => c.serverGroups.map((gid) => iconById.get(gid) ?? 0))
+        .concat(menuGroups.map((g) => g.iconId))
         .filter((id) => id >= CUSTOM_ICON_ID_THRESHOLD)
     );
     for (const iconId of wantedIconIds) {
@@ -9442,7 +9450,7 @@ function AppInner() {
         socketRef.current?.send(JSON.stringify({ type: "downloadFile", channelId: 0, path }));
       }
     }
-  }, [clients, serverGroups, serverIconImages]);
+  }, [clients, serverGroups, serverIconImages, groupAssignTarget, channelGroups]);
 
   // Avatars share that cid-0 cache, keyed by path; the hash makes a changed
   // avatar download again. ponytail: only the own channel and the selected
@@ -11877,6 +11885,7 @@ function AppInner() {
             if (!target) return [];
             return groupAssignTarget.kind === "channel" ? [target.channelGroup] : target.serverGroups;
           })()}
+          iconImages={serverIconImages}
           onSelect={handleSelectGroup}
           onClose={() => setGroupAssignTarget(null)}
         />
