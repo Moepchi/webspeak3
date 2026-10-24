@@ -3007,6 +3007,13 @@
   color: var(--text-muted);
 }
 
+/* The unique ID is 28 base64 characters - don't cut it off. */
+input.ts-identities-uid {
+  width: 36ch;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .ts-identities-status {
   color: var(--text-muted);
   font-size: 11px;

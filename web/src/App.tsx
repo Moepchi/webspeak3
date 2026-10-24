@@ -5662,7 +5662,7 @@ function IdentitiesDialog({
                   <input
                     readOnly
                     value={computedUid || (selected.id === activeId && ownUid) || t("identities.unknown")}
-                    className="ts-identities-readonly"
+                    className="ts-identities-readonly ts-identities-uid"
                   />
                 </label>
                 <div className="ts-identities-status">
