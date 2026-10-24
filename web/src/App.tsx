@@ -3667,19 +3667,30 @@ function CollectedUrlsDialog({
 function InviteFriendDialog({
   host,
   channelId,
+  channelPath,
   onClose,
 }: {
   host: string;
   channelId: number | null;
+  /** "Parent/Child" names, what ?channel= of a WebSpeak3 link expects. */
+  channelPath: string | null;
   onClose: () => void;
 }) {
   const t = useT();
+  const [type, setType] = useState<"webspeak3" | "ts3server">("webspeak3");
   const [includeChannel, setIncludeChannel] = useState(false);
   const [copied, setCopied] = useState(false);
   const linkInputRef = useRef<HTMLInputElement>(null);
   const backdrop = useBackdropDismiss(onClose);
 
-  const link = `ts3server://${host}${includeChannel && channelId !== null ? `?channel=${channelId}` : ""}`;
+  const withChannel = includeChannel && channelId !== null;
+  // Opens this same WebSpeak3 instance and joins right away (see AUTO_CONNECT_FROM_URL).
+  const webspeak3Link = () => {
+    const params = new URLSearchParams({ connect: host });
+    if (withChannel && channelPath) params.set("channel", channelPath);
+    return `${window.location.origin}${window.location.pathname}?${params}`;
+  };
+  const link = type === "webspeak3" ? webspeak3Link() : `ts3server://${host}${withChannel ? `?channel=${channelId}` : ""}`;
 
   return (
     <div className="ts-dialog-backdrop" {...backdrop}>
@@ -3694,7 +3705,8 @@ function InviteFriendDialog({
           <div className="ts-dialog-row">
             <label className="ts-dialog-field ts-dialog-field-grow">
               {t("inviteFriend.type")}
-              <select disabled value="ts3server">
+              <select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+                <option value="webspeak3">{t("inviteFriend.webspeak3Link")}</option>
                 <option value="ts3server">ts3server link</option>
               </select>
             </label>
@@ -6743,8 +6755,6 @@ function ActionIcon({ children }: { children: ReactNode }) {
   );
 }
 
-const WHISPER_CLEAR_OPTIONS = [1, 5, 10, 30, 60, 0];
-
 function WhisperPanel({ onOpenWhisperLists }: { onOpenWhisperLists: () => void }) {
   const t = useT();
   const { whisper, setWhisper } = useContext(DisplayPrefsContext);
@@ -6779,13 +6789,17 @@ function WhisperPanel({ onOpenWhisperLists }: { onOpenWhisperLists: () => void }
           </label>
           <label className="ts-options-field">
             {t("whisperSettings.clearAfter")}
-            <select value={whisper.clearAfterMin} onChange={(e) => set({ clearAfterMin: Number(e.target.value) })}>
-              {WHISPER_CLEAR_OPTIONS.map((min) => (
-                <option key={min} value={min}>
-                  {min === 0 ? t("whisperSettings.never") : t("whisperSettings.minutes", { count: String(min) })}
-                </option>
-              ))}
-            </select>
+            <span>
+              <input
+                type="number"
+                min={1}
+                max={999}
+                className="ts-download-number"
+                value={whisper.clearAfterMin}
+                onChange={(e) => set({ clearAfterMin: Math.min(999, Math.max(1, Number(e.target.value) || 1)) })}
+              />{" "}
+              {t("whisperSettings.minutes")}
+            </span>
           </label>
         </fieldset>
         <div>
@@ -13470,6 +13484,12 @@ function AppInner() {
         <InviteFriendDialog
           host={host}
           channelId={selected?.type === "channel" ? selected.id : null}
+          channelPath={(() => {
+            if (selected?.type !== "channel") return null;
+            const names: string[] = [];
+            for (let ch = channels.find((c) => c.id === selected.id); ch && names.length < 50; ch = channels.find((c) => c.id === ch!.parent)) names.unshift(ch.name);
+            return names.join("/");
+          })()}
           onClose={() => setInviteFriendOpen(false)}
         />
       )}
