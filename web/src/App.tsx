@@ -6472,7 +6472,9 @@ function KontoPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [withPassword, setWithPassword] = useState(true);
-  const [server, setServer] = useState(DEFAULT_SYNC_SERVER);
+  // Empty = the default server, whose address isn't shown.
+  const [serverInput, setServerInput] = useState("");
+  const server = serverInput.trim() || DEFAULT_SYNC_SERVER;
   const [loginNumber, setLoginNumber] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -6517,7 +6519,7 @@ function KontoPanel() {
             <p className="ts-options-hint">{t("sync.create.withPasswordHint")}</p>
             <button
               disabled={busy !== null}
-              onClick={() => void run("create", () => createSyncAccount(withPassword, server.trim(), SYNC_CATEGORIES))}
+              onClick={() => void run("create", () => createSyncAccount(withPassword, server, SYNC_CATEGORIES))}
             >
               {busy === "create" ? t("sync.create.busy") : t("sync.create.button")}
             </button>
@@ -6543,8 +6545,8 @@ function KontoPanel() {
               onClick={() =>
                 void run("login", async () => {
                   const password = loginPassword.trim() ? normalizePassword(loginPassword) : undefined;
-                  if (!password && (await accountInfo(number!, server.trim())).hasPassword) throw new Error("password_required");
-                  await loginSyncAccount(number!, password, server.trim(), SYNC_CATEGORIES);
+                  if (!password && (await accountInfo(number!, server)).hasPassword) throw new Error("password_required");
+                  await loginSyncAccount(number!, password, server, SYNC_CATEGORIES);
                   window.location.reload();
                 })
               }
@@ -6554,7 +6556,11 @@ function KontoPanel() {
           </fieldset>
           <label className="ts-options-field">
             {t("sync.server")}
-            <input value={server} onChange={(e) => setServer(e.target.value)} />
+            <input
+              value={serverInput}
+              placeholder={t("sync.serverDefault")}
+              onChange={(e) => setServerInput(e.target.value)}
+            />
           </label>
           <p className="ts-options-hint">{t("sync.serverHint")}</p>
           {error && <p className="ts-vault-wrong">{error}</p>}
@@ -6684,7 +6690,9 @@ function KontoPanel() {
                 {t("sync.syncNow")}
               </button>
             )}
-            <p className="ts-options-hint">{t("sync.serverInfo", { server: account.server })}</p>
+            <p className="ts-options-hint">{t("sync.serverInfo", {
+                server: account.server === DEFAULT_SYNC_SERVER ? t("sync.serverDefault") : account.server,
+              })}</p>
           </fieldset>
           <div className="ts-sync-buttons">
             <button

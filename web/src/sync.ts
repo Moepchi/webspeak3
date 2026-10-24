@@ -471,7 +471,7 @@ export function recoveryText(account: SyncAccount): string {
     "",
     `Account number: ${formatAccountNumber(account.number)}`,
     ...(account.password ? [`Password: ${account.password}`] : []),
-    `Server: ${account.server}`,
+    ...(account.server !== DEFAULT_SYNC_SERVER ? [`Server: ${account.server}`] : []),
     "",
   ].join("\n");
 }
