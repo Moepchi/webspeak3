@@ -14,6 +14,7 @@
   "dependencies": {
     "@ennuicastr/webrtcaec3.js": "^0.3.0",
     "fflate": "^0.8.3",
+    "qrcode-generator": "^1.4.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

@@ -155,6 +155,8 @@ const RUNTIME_CONFIG_META = Object.entries({
   "webspeak3-default-server": process.env.DEFAULT_SERVER,
   "webspeak3-default-channel": process.env.DEFAULT_CHANNEL,
   "webspeak3-allowed-servers": SERVER_PICKER,
+  // Self-hosted account sync (sync-server.js); unset = the official one.
+  "webspeak3-sync-url": process.env.SYNC_URL,
 })
   .flatMap(([name, value]) =>
     value ? [`<meta name="${name}" content="${value.replace(/[&"<>]/g, (c) => `&#${c.charCodeAt(0)};`)}">`] : [],

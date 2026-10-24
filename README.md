@@ -185,6 +185,25 @@ The UI shows a small **Ko-fi donation button** in the bottom right corner. Build
 
 The **Design Store** (browse/upload community themes) points at the maintainer's shared catalog by default, same as the official client — no setup needed. Want to run your own store instead, backed by your own gateway (`STORE_ENABLED=1`, see below)? `docker compose build --build-arg STORE_URL=https://your-gateway.example.com/api/store/themes`. Outside Docker: `VITE_STORE_URL=https://your-gateway.example.com/api/store/themes npm run build` in `web/`.
 
+#### Account sync
+
+Options → Account lets people carry identities, favorites, settings, designs and whisper lists to their other devices. Like Mullvad, an account is just a random 16-digit number, optionally with a random password: no email, no name. Everything is encrypted in the browser (PBKDF2 → AES-GCM) before upload, so the sync server only ever stores unreadable blobs; it keeps no IP addresses and deletes accounts nobody opened for a year.
+
+By default every client uses the official sync server. To run your own, start the same image with a different command and point your gateway at it:
+
+```yaml
+  webspeak3-sync:
+    image: moepchi/webspeak3:latest
+    command: ["node", "dist/sync-server.js"]
+    environment:
+      - SYNC_DATA_DIR=/app/sync-data
+      - TRUST_PROXY=cloudflare
+    volumes:
+      - ./sync-data:/app/sync-data   # owned by uid 1000 (the image runs as "node")
+```
+
+Route `/api/sync/*` to it in your proxy/tunnel and set `SYNC_URL=https://your-host/api/sync` on the gateway. Accounts only exist on the server they were created on. Optional: `SYNC_POW_BITS` (proof-of-work difficulty for new accounts, default `15`), `SYNC_MAX_ACCOUNTS` (default `100000`), `SYNC_ALLOWED_ORIGIN` (CORS, default `*`).
+
 #### Environment variables
 
 All optional; add them under `environment:` in your compose override next to `PORT`. These are the common ones - the full list (logging, feedback form, Design Store details, build-time variables) is on the wiki's [Configuration & Environment Variables](https://github.com/WebSpeak3/webspeak3/wiki/Configuration-and-Environment-Variables) page.
@@ -213,6 +232,7 @@ All optional; add them under `environment:` in your compose override next to `PO
 | `NEWS_TICKER` | on | Set to `0` to hide the news ticker at the bottom of the client. |
 | `NEWS_TICKER_CENTRAL` | on | Set to `0` to drop the official WebSpeak3 news (releases, new store designs, announcements) and only show your own messages. |
 | `NEWS_TICKER_MESSAGES` | – | Your own ticker messages, separated by `\|`, e.g. `Maintenance tonight at 10pm \| Welcome!` |
+| `SYNC_URL` | official sync server | Account sync server your visitors use (Options → Account), e.g. `https://sync.example.com/api/sync`. Only needed if you run your own (see below). |
 
 > **Anonymous usage ping:** when the gateway starts and then once a day, it sends a random instance ID (made up on first start, stored in `instance-id` in the working directory, used for nothing else) and its version number to `gateway.webspeak3.de`. That's the only way to tell whether anyone self-hosts WebSpeak3 at all, and how many instances still run an old version, e.g. after a security fix. Nothing else is sent: no hostnames, no TeamSpeak servers, no users, no settings. The receiving side doesn't store IP addresses. The startup log says when it's on. Turn it off with `TELEMETRY=0`.
 

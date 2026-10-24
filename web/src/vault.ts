@@ -11,6 +11,7 @@ export const PROTECTED_KEYS = [
   "webspeak3:favorites",
   "webspeak3:channel-passwords",
   "webspeak3:store-admin-token",
+  "webspeak3:sync-account",
 ];
 
 const VAULT_KEY = "webspeak3:vault";

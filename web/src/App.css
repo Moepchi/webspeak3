@@ -4899,3 +4899,33 @@
   margin: 0;
   font-size: 0.9em;
 }
+
+/* Options -> Konto */
+.ts-sync-secret {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ts-sync-secret code {
+  font-size: 1.1em;
+  letter-spacing: 0.05em;
+  user-select: all;
+}
+.ts-sync-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.ts-sync-warning {
+  color: var(--ts-warning, #e0a030);
+}
+.ts-sync-qr-box {
+  margin-top: 8px;
+}
+.ts-sync-qr {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
