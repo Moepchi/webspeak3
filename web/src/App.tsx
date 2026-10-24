@@ -9,6 +9,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { identityUid } from "./identityUid";
 import qrcode from "qrcode-generator";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import "./App.css";
@@ -5596,6 +5597,15 @@ function IdentitiesDialog({
   const importInputRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState(activeId ?? identities[0]?.id ?? null);
   const selected = identities.find((i) => i.id === selectedId) ?? identities[0] ?? null;
+  const [computedUid, setComputedUid] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    setComputedUid(null);
+    if (selected?.blob) void identityUid(selected.blob).then((uid) => current && setComputedUid(uid));
+    return () => {
+      current = false;
+    };
+  }, [selected?.blob]);
 
   return (
     <div className="ts-dialog-backdrop" {...backdrop}>
@@ -5651,7 +5661,7 @@ function IdentitiesDialog({
                   {t("identities.uniqueId")}
                   <input
                     readOnly
-                    value={selected.id === activeId && ownUid ? ownUid : t("identities.unknown")}
+                    value={computedUid || (selected.id === activeId && ownUid) || t("identities.unknown")}
                     className="ts-identities-readonly"
                   />
                 </label>
